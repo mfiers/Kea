@@ -4,7 +4,15 @@ import logging
 import os
 import subprocess as sp
 
+from leip import set_local_config
+
 lg = logging.getLogger(__name__)
+
+
+def get_tool_conf(app, name):
+    tool_data = app.conf['app.{}'.format(name)]
+    default_group = app.conf['group.default']
+   # if tool_data
 
 
 def is_kea(fname):
@@ -61,3 +69,37 @@ def find_executable(name):
                 lg.debug("%s is not a kea file", line)
 
                 yield line
+
+
+def register_executable(app, name, executable, version, is_default=None):
+    """
+    Register an executable
+    """
+
+    is_first_version = True
+
+    if app.conf.has_key('app.{}.version'.format(name)):
+        is_first_version = False
+
+    if is_default is None:
+        if is_first_version:
+            lg.debug("First versrion of %s - setting to default", name)
+            is_default = True
+        else:
+            lg.debug("Other version of %s present - not setting default", name)
+            is_default = False
+
+    version_key = version.replace('.', '_')
+
+    if is_default:
+        set_local_config(app, 'app.{}.default_version'.format(name),
+                         version_key)
+
+    lg.debug("register %s - %s - %s - %s", name, executable,
+             version_key, version)
+
+    basekey = 'app.{}.version.{}'.format(name, version_key)
+    lg.debug("register to: %s", basekey)
+
+    set_local_config(app, '{}.executable'.format(basekey), executable)
+    set_local_config(app, '{}.version'.format(basekey), version)
