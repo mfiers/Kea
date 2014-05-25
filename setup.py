@@ -15,7 +15,7 @@ entry_points = {
         'kea = kea.cli:dispatch'
     ]}
 
-setup(name='Kea',
+setup(name='kea',
       version=version,
       description=description,
       author='Mark Fiers',

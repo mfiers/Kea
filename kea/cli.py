@@ -18,7 +18,7 @@ thisapp = os.path.basename(sys.argv[0])
 
 if thisapp == 'kea':
     #calling the kea tool directly:
-    app = leip.app(name='Kea')
+    app = leip.app(name='kea')
 else:
     #calling a tool that links to kea - Kea wrapper mode:
     app = Kea()

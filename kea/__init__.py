@@ -12,6 +12,9 @@ import fantail
 
 import mad2.util as mad2util
 
+from kea.utils import get_tool_conf
+from kea.plugin.register import print_tool_versions
+
 lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
 
@@ -31,6 +34,9 @@ class Kea(leip.app):
 
         # Call Leip - we do not need the Leip argparser:
         super(Kea, self).__init__('kea', disable_commands=True)
+
+        # replace the config by a stack so we can backfill
+        self.conf = fantail.Fanstack([self.conf, fantail.Fantail()])
 
         # hack - if kea verbose is set - do that early:
         verbose_flag = self.conf['arg_prefix'] + '-v'
@@ -80,10 +86,18 @@ class Kea(leip.app):
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
-    app.kea_arg_harvest_extra['v'] = 0
-    app.kea_arg_harvest_extra['e'] = 0
+    app.kea_arg_harvest_extra['v'] = 0  # not necessary - can be removed
+    app.kea_arg_harvest_extra['e'] = 0  # not necessary - can be removed
+    app.kea_arg_harvest_extra['h'] = 0  # not necessary - can be removed
+    app.kea_arg_harvest_extra['L'] = 0  # not necessary - can be removed
+
+    app.kea_arg_harvest_extra['V'] = 1
     app.kea_arg_harvest_extra['j'] = 1
-    app.kea_arg_harvest_extra['h'] = 0
+
+    app.kea_argparse.add_argument('-V', '--version',
+                                  help='version number to use')
+    app.kea_argparse.add_argument('-L', '--list_versions', action='store_true',
+                                  help='list all versions of this tool & exit')
     app.kea_argparse.add_argument('-v', '--verbose', action='store_true')
     app.kea_argparse.add_argument('-e', '--command_echo', action='store_true',
                                   help='echo Kea commands to stdout')
@@ -132,50 +146,67 @@ def main_arg_process(app):
     """
     if app.kea_args.verbose:
         lg.setLevel(logging.DEBUG)
+
+    if app.kea_args.list_versions:
+        print_tool_versions(app, app.conf['appname'])
+        exit(0)
+
+
     if app.kea_args.command_echo:
         app.conf['command_echo'] = True
     app.conf['threads'] = app.kea_args.threads
 
 
 
-@leip.hook('run')
-def run_kea(app):
-    lg.debug("Start Kea run")
-    cl = [app.conf['executable']] + sys.argv[1:]
-    lg.debug("command line: %s", " ".join(cl))
-
-    if app.conf.get('command_echo'):
-        print " ".join(cl)
-
-    app.conf['cl'] = cl
-    sp.Popen(cl).communicate()
-
-
 @leip.hook('prepare', 10)
 def prepare_config(app):
 
-    lg.debug("prepare tool configuration")
-    data = fantail.Fantail()
+    lg.debug("Prepping tool conf: %s %s",  app.conf['appname'],
+             app.kea_args.version)
 
-    appdata = app.conf['app'].get(app.conf['appname'], {})
+    conf = get_tool_conf(app, app.conf['appname'], app.kea_args.version)
+    app.conf.stack[1] = conf
 
-    defdata = app.conf.get('group.default')
+    lg.debug("Loaded config: %s",  app.conf['appname'])
 
-    group = app.conf.get('group', appdata.get('group'))
-    grpdata = {}
-    if group:
-        grpdata = app.conf['group.{}'.format(group)]
 
-    if defdata:
-        data.update(defdata)
-    if grpdata:
-        data.update(grpdata)
-    if appdata:
-        data.update(appdata)
+def basic_command_line_generator(app):
+    """
+    Most basic command line generator
+    """
+    cl = [app.conf['executable']] + sys.argv[1:]
+    yield cl
 
-    app.conf.backfill(data)
 
-    lg.debug("Found config: %s/%s", group, app.conf['appname'])
+class BasicExecutor(object):
+    def __init__(self, app):
+        self.app = app
+
+    def fire(self, cl):
+        lg.debug("start execution")
+        lg.debug("  cl: %s", cl)
+        sp.Popen(cl).communicate()
+        lg.debug("finish execution")
+
+    def finish(self):
+        pass
+
+
+@leip.hook('run')
+def run_kea(app):
+    lg.debug("Start Kea run")
+
+    executor = BasicExecutor(app)
+
+    for cl in basic_command_line_generator(app):
+        lg.debug("command line: %s", " ".join(cl))
+        if app.conf.get('command_echo'):
+            print " ".join(cl)
+        executor.fire(cl)
+
+    executor.finish()
+
+
 
 
 @leip.hook('prepare')
