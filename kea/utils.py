@@ -12,28 +12,25 @@ from leip import set_local_config
 lg = logging.getLogger(__name__)
 
 
-def get_tool_conf(app, name, version=None):
+def get_tool_conf(app, name, version='default'):
 
     data = copy.copy(app.conf['group.default'])
-
     tool_data = copy.copy(app.conf['app.{}'.format(name)])
     group = tool_data.get('group')
-
-    if group:
+    if not group is None:
         group_data = app.conf['group.{}'.format(group)]
         if group_data:
-            data = data.update(group_data)
+            data.update(group_data)
 
-    if version is None:
-        version = tool_data['default_version']
-
-    data['version']
-    assert version in tool_data['versions']
-
-    version_data = tool_data['version.{}'.format(version)]
     data.update(tool_data)
-    data.update(version_data)
-    data['version_key'] = version
+
+    if version is 'default':
+        version = tool_data.get('default_version', None)
+        assert version in tool_data['versions']
+        version_data = tool_data['version.{}'.format(version)]
+        data.update(version_data)
+        data['version_key'] = version
+
     return data
 
 
