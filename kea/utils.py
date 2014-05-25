@@ -1,18 +1,40 @@
 
 
+import copy
 import logging
 import os
 import subprocess as sp
 
+import fantail
 from leip import set_local_config
+
 
 lg = logging.getLogger(__name__)
 
 
-def get_tool_conf(app, name):
-    tool_data = app.conf['app.{}'.format(name)]
-    default_group = app.conf['group.default']
-   # if tool_data
+def get_tool_conf(app, name, version=None):
+
+    data = copy.copy(app.conf['group.default'])
+
+    tool_data = copy.copy(app.conf['app.{}'.format(name)])
+    group = tool_data.get('group')
+
+    if group:
+        group_data = app.conf['group.{}'.format(group)]
+        if group_data:
+            data = data.update(group_data)
+
+    if version is None:
+        version = tool_data['default_version']
+
+    data['version']
+    assert version in tool_data['versions']
+
+    version_data = tool_data['version.{}'.format(version)]
+    data.update(tool_data)
+    data.update(version_data)
+    data['version_key'] = version
+    return data
 
 
 def is_kea(fname):
@@ -49,7 +71,7 @@ def find_executable(name):
     if os.path.isfile(name) and os.access(name, os.X_OK):
         executable = name
         name = os.path.basename(executable)
-        yield executable
+        yield os.path.abspath(executable)
 
     else:
 
@@ -68,7 +90,7 @@ def find_executable(name):
             if not is_kea(line):
                 lg.debug("%s is not a kea file", line)
 
-                yield line
+                yield os.path.abspath(line)
 
 
 def register_executable(app, name, executable, version, is_default=None):
@@ -76,29 +98,44 @@ def register_executable(app, name, executable, version, is_default=None):
     Register an executable
     """
 
+    allversions = list('abcdefghijklmnopqrstuvwxyz123456789')
+
     is_first_version = True
 
-    if app.conf.has_key('app.{}.version'.format(name)):
-        is_first_version = False
+    version_key = 'a'
 
-    if is_default is None:
+    if app.conf.has_key('app.{}.versions'.format(name)):
+        is_first_version = False
+        for k in app.conf['app.{}.versions'.format(name)]:
+            vinf = app.conf['app.{}.versions.{}'\
+                            .format(name, k)]
+            if vinf['executable'] == executable:
+                lg.warning("Executable is already registered - overwriting")
+                version_key = k
+                break
+
+            #registered - we do not want to use this key
+            allversions.remove(k)
+
+        version_key = allversions[0]
+
+    if is_default == False:
         if is_first_version:
-            lg.debug("First versrion of %s - setting to default", name)
+            lg.debug("First version of %s - setting to default", name)
             is_default = True
         else:
             lg.debug("Other version of %s present - not setting default", name)
             is_default = False
 
-    version_key = version.replace('.', '_')
+    lg.warning("register %s - %s - %s - %s", name, executable,
+             version_key, version)
 
     if is_default:
+        lg.warning("Set version %s as default", version_key)
         set_local_config(app, 'app.{}.default_version'.format(name),
                          version_key)
 
-    lg.debug("register %s - %s - %s - %s", name, executable,
-             version_key, version)
-
-    basekey = 'app.{}.version.{}'.format(name, version_key)
+    basekey = 'app.{}.versions.{}'.format(name, version_key)
     lg.debug("register to: %s", basekey)
 
     set_local_config(app, '{}.executable'.format(basekey), executable)
