@@ -26,6 +26,8 @@ setup(name='kea',
       packages=find_packages(),
       install_requires=[
           'Leip',
+          'lockfile',
+          'arrow'
       ],
       classifiers=[
           'Development Status :: 4 - Beta',
