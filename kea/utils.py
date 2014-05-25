@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import subprocess as sp
+import sys
 
 import fantail
 from leip import set_local_config
@@ -90,6 +91,19 @@ def find_executable(name):
                 yield os.path.abspath(line)
 
 
+def create_kea_link(app, name):
+    """
+    """
+    base = app.conf['bin_path']
+    linkpath = os.path.expanduser(os.path.join(base, name))
+    if os.path.exists(linkpath):
+        return
+
+    keapath = sys.argv[0]
+    lg.info("creating link from %s", linkpath)
+    lg.info(" to: %s", keapath)
+    os.symlink(keapath, linkpath)
+
 def register_executable(app, name, executable, version, is_default=None):
     """
     Register an executable
@@ -137,3 +151,5 @@ def register_executable(app, name, executable, version, is_default=None):
 
     set_local_config(app, '{}.executable'.format(basekey), executable)
     set_local_config(app, '{}.version'.format(basekey), version)
+
+    create_kea_link(app, name)

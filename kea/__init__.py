@@ -2,11 +2,13 @@
 # kea runner
 
 import argparse
+from collections import OrderedDict
 import logging
 import os
 import subprocess as sp
 import sys
 
+import arrow
 import leip
 import fantail
 
@@ -14,6 +16,8 @@ import mad2.util as mad2util
 
 from kea.utils import get_tool_conf
 from kea.plugin.register import print_tool_versions
+from kea.cl_generator import basic_command_line_generator
+from kea.executor import executors
 
 lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
@@ -53,7 +57,6 @@ class Kea(leip.app):
             'prepare',
             'pre_run',
             'run',
-            'post_run',
             'finish']
 
         # for the kea argparse (starting with app.conf.arg_prefix)
@@ -169,44 +172,32 @@ def prepare_config(app):
 
     lg.debug("Loaded config: %s",  app.conf['appname'])
 
-
-def basic_command_line_generator(app):
-    """
-    Most basic command line generator
-    """
-    cl = [app.conf['executable']] + sys.argv[1:]
-    yield cl
-
-
-class BasicExecutor(object):
-    def __init__(self, app):
-        self.app = app
-
-    def fire(self, cl):
-        lg.debug("start execution")
-        lg.debug("  cl: %s", cl)
-        sp.Popen(cl).communicate()
-        lg.debug("finish execution")
-
-    def finish(self):
-        pass
-
-
 @leip.hook('run')
 def run_kea(app):
     lg.debug("Start Kea run")
 
+    BasicExecutor = executors['basic']
     executor = BasicExecutor(app)
 
+    all_info = []
     for cl in basic_command_line_generator(app):
         lg.debug("command line: %s", " ".join(cl))
         if app.conf.get('command_echo'):
             print " ".join(cl)
-        executor.fire(cl)
+
+        info = OrderedDict()
+        info['start'] = arrow.utcnow()
+        info['cwd'] = os.getcwd()
+        info['command_line'] = " ".join(cl)
+        app.run_hook('pre_fire', info)
+        info.update(executor.fire(cl))
+        info['stop'] = arrow.utcnow()
+        info['runtime'] = info['stop'] - info['start']
+        app.run_hook('post_fire', info)
+        all_info.append(info)
 
     executor.finish()
-
-
+    app.run_hook('post_run', all_info)
 
 
 @leip.hook('prepare')

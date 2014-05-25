@@ -12,7 +12,8 @@ import yaml
 import leip
 from leip import set_local_config
 
-from kea.utils import find_executable, register_executable, get_tool_conf
+from kea.utils import find_executable, register_executable
+from kea.utils import get_tool_conf
 
 lg = logging.getLogger(__name__)
 
@@ -69,9 +70,9 @@ def register_set_default(app, args):
 
 
 def print_tool_versions(app, appname):
-    tool_version_data = app.conf['app.{}.version'.format(appname)]
+    tool_version_data = app.conf['app.{}.versions'.format(appname)]
     for tkey in tool_version_data:
-        tdata = app.conf['app.{}.version.{}'.format(appname, tkey)]
+        tdata = app.conf['app.{}.versions.{}'.format(appname, tkey)]
         print '{}: {}'.format(tkey, tdata['executable'])
         tv = tdata['version']
         if len(tv) < 80:
@@ -134,8 +135,19 @@ def register_add(app, args):
             lg.error("  - %s", e)
         exit(-1)
 
-    version_command = app.conf['app.{}.version_command'.format(execname)]
+    toolconf = get_tool_conf(app, execname, version=None)
+
+    if not 'version_command' in toolconf:
+        lg.error("No information on how to retrieve tool version")
+        lg.error("Please specify using:")
+        lg.error("   kea conf set app.%s.version_command '<command>'",
+                 execname)
+        exit(-1)
+
+    version_command = toolconf['version_command']
+    lg.debug("version command: %s", version_command)
     vc_template =  Template(version_command)
+
 
     lg.info("version command: %s", version_command)
 

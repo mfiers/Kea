@@ -25,14 +25,8 @@ def flag_find(lst, flg, app):
     return rv
 
 
-@leip.hook('prepare')
-def prep_filefile(app):
-    app.conf['input_files'] = []
-    app.conf['output_files'] = []
-
-
-@leip.hook('pre_run')
-def find_input_file(app):
+@leip.hook('pre_fire')
+def find_input_file(app, info):
 
     ff_conf = app.conf.get('filefind')
 
@@ -42,5 +36,10 @@ def find_input_file(app):
     iff = ff_conf['input_file_flag']
     off = ff_conf['output_file_flag']
 
-    app.conf['input_files'].extend(flag_find(sys.argv, iff, app))
-    app.conf['output_files'].extend(flag_find(sys.argv, off, app))
+    if not 'input_files' in info:
+        info['input_files'] = []
+    if not 'output_files' in info:
+        info['output_files'] = []
+
+    info['input_files'].extend(flag_find(sys.argv, iff, app))
+    info['output_files'].extend(flag_find(sys.argv, off, app))
