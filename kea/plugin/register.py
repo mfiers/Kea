@@ -1,4 +1,4 @@
-#tools to help register & identify commands
+# tools to help register & identify commands
 
 import logging
 import os
@@ -13,7 +13,8 @@ import leip
 from leip import set_local_config
 
 from kea.utils import find_executable, register_executable
-from kea.utils import get_tool_conf
+from kea.utils import get_tool_conf, create_kea_link
+
 
 lg = logging.getLogger(__name__)
 
@@ -30,13 +31,13 @@ def show(app, args):
 
     yaml.dump(conf, sys.stdout, default_flow_style=False)
 
+
 @leip.subparser
 def register(app, args):
     """
     register tools with kea
     """
     pass
-
 
 
 @leip.arg('version', help='version to set default')
@@ -46,7 +47,6 @@ def register_set_default(app, args):
     """
     List tool versions
     """
-    tool_version_data = app.conf['app.{}.version'.format(args.name)]
     tkey = args.version
     tdata = app.conf['app.{}.version.{}'.format(args.name, args.version)]
     print "set default:"
@@ -71,6 +71,7 @@ def register_set_default(app, args):
 
 def print_tool_versions(app, appname):
     tool_version_data = app.conf['app.{}.versions'.format(appname)]
+    def_version = app.conf['app.{}.default_version'.format(appname)]
     for tkey in tool_version_data:
         tdata = app.conf['app.{}.versions.{}'.format(appname, tkey)]
         print '{}: {}'.format(tkey, tdata['executable'])
@@ -87,15 +88,32 @@ def print_tool_versions(app, appname):
                     print '     {}'.format(tv[:86])
                     tv = tv[86:]
                 i += 1
+        if tkey == def_version:
+            print("  default")
 
 
-@leip.arg('name', help='executable name to list')
+@leip.arg('name', help='executable name to list', nargs='?')
 @leip.subcommand(register, "list")
 def register_list(app, args):
     """
     List tool versions
     """
-    print_tool_versions(app, args.name)
+    if not args.name is None:
+        print_tool_versions(app, args.name)
+    for tool in app.conf['app']:
+        if 'versions' in app.conf['app.{}'.format(tool)]:
+            print(tool)
+
+
+@leip.subcommand(register, "create_execs")
+def register_execs(app, args):
+    """
+    Create Kea executables
+    """
+    for tool in app.conf['app']:
+        if 'versions' in app.conf['app.{}'.format(tool)]:
+            print(tool)
+            create_kea_link(app, tool)
 
 
 @leip.flag('-d', '--set_default', help='set this executable as default')
@@ -113,7 +131,7 @@ def register_add(app, args):
     execs = list(find_executable(args.name))
     no_execs = len(execs)
 
-    #make sure there is a link in the kea bin path
+    # make sure there is a link in the kea bin path
     keabin = os.path.expanduser(app.conf['bin_path'])
     if not os.path.exists(keabin):
         os.makedirs(keabin)
@@ -146,13 +164,12 @@ def register_add(app, args):
 
     version_command = toolconf['version_command']
     lg.debug("version command: %s", version_command)
-    vc_template =  Template(version_command)
-
+    vc_template = Template(version_command)
 
     lg.info("version command: %s", version_command)
 
     for ex in execs:
-        cmd = vc_template.render(executable = ex)
+        cmd = vc_template.render(executable=ex)
         P = sp.Popen(cmd, shell=True, stdout=sp.PIPE)
         o, e = P.communicate()
         version = o.strip()
