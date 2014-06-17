@@ -18,6 +18,7 @@ def get_tool_conf(app, name, version='default'):
     data = copy.copy(app.conf['group.default'])
     tool_data = copy.copy(app.conf['app.{}'.format(name)])
     group = tool_data.get('group')
+
     if not group is None:
         group_data = app.conf['group.{}'.format(group)]
         if group_data:
@@ -27,8 +28,16 @@ def get_tool_conf(app, name, version='default'):
 
     if version is 'default':
         version = tool_data.get('default_version', None)
-        assert version in tool_data['versions']
-        version_data = tool_data['version.{}'.format(version)]
+
+    if (not version is None) and (not version in tool_data['versions']):
+        candidates = []
+        for v in tool_data['versions']:
+            fullv =  tool_data['versions'][v]['version']
+            if v in fullv:
+                candidates.append(v)
+
+    if not version is None:
+        version_data = tool_data['versions.{}'.format(version)]
         data.update(version_data)
         data['version_key'] = version
 
@@ -96,8 +105,11 @@ def create_kea_link(app, name):
     """
     base = app.conf['bin_path']
     linkpath = os.path.expanduser(os.path.join(base, name))
-    if os.path.exists(linkpath):
-        return
+    lg.debug("checking: %s", linkpath)
+    if os.path.lexists(linkpath):
+        lg.debug("path exists: %s", linkpath)
+        os.unlink(linkpath)
+
 
     keapath = sys.argv[0]
     lg.info("creating link from %s", linkpath)

@@ -32,7 +32,7 @@ def very_basic_command_line_generator(app):
     """
     Most basic command line generator possible
     """
-    cl = [app.conf['executable']] + sys.argv[1:]
+    cl = sys.argv[1:]
     yield cl
 
 
@@ -119,7 +119,9 @@ def basic_command_line_generator(app):
     stdout_file = app.kea_args.stdout
     stderr_file = app.kea_args.stderr
 
-    cl = [app.conf['executable']] + sys.argv[1:]
+    #cl = [app.conf['executable']] + sys.argv[1:]
+    cl = sys.argv[1:]
+
     #check if there are map arguments in here
     mapins = []
     mapcount = 0

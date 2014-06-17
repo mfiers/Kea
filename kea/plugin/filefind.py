@@ -25,9 +25,7 @@ def flag_find(lst, flg, app):
     return rv
 
 
-@leip.hook('pre_fire')
 def find_input_file(app, info):
-
     ff_conf = app.conf.get('filefind')
 
     if not ff_conf:
@@ -43,3 +41,16 @@ def find_input_file(app, info):
 
     info['input_files'].extend(flag_find(sys.argv, iff, app))
     info['output_files'].extend(flag_find(sys.argv, off, app))
+
+
+# @leip.hook('pre_run')
+# def hook_pre_run(app):
+#     ff_conf = app.conf.get('filefind')
+#     print ff_conf
+
+
+@leip.hook('pre_fire')
+def hook_find_input_file(app, info):
+    return find_input_file(app, info)
+
+

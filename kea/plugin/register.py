@@ -100,6 +100,7 @@ def register_list(app, args):
     """
     if not args.name is None:
         print_tool_versions(app, args.name)
+        return
     for tool in app.conf['app']:
         if 'versions' in app.conf['app.{}'.format(tool)]:
             print(tool)

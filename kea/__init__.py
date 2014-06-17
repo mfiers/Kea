@@ -2,6 +2,7 @@
 # kea runner
 
 import argparse
+import copy
 from collections import OrderedDict
 import logging
 import os
@@ -47,6 +48,9 @@ class Kea(leip.app):
         if verbose_flag in sys.argv:
             lg.setLevel(logging.DEBUG)
 
+        #default executors
+        self.executors = executors
+
         lg.debug("start kea initialization")
 
         # different hooks!
@@ -73,6 +77,7 @@ class Kea(leip.app):
         self._madapp = None  # hold the Leip Mad Application
 
         self.conf['appname'] = name
+        self.conf['kea_executable'] = sys.argv[0]
         self.discover(globals())
 
     @property
@@ -89,23 +94,23 @@ class Kea(leip.app):
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
-    app.kea_arg_harvest_extra['v'] = 0  # not necessary - can be removed
-    app.kea_arg_harvest_extra['e'] = 0  # not necessary - can be removed
-    app.kea_arg_harvest_extra['h'] = 0  # not necessary - can be removed
-    app.kea_arg_harvest_extra['L'] = 0  # not necessary - can be removed
 
-    app.kea_arg_harvest_extra['V'] = 1
-    app.kea_arg_harvest_extra['j'] = 1
+    for a in ('-V --version -j --threads -x --executor -o --stdout ' +
+              '-e --stderr').split():
+        app.kea_arg_harvest_extra[a] = 1
 
-    app.kea_argparse.add_argument('-V', '--version',
+    app.kea_argparse.add_argument('-V', '--version', default='default',
                                   help='version number to use')
     app.kea_argparse.add_argument('-L', '--list_versions', action='store_true',
                                   help='list all versions of this tool & exit')
     app.kea_argparse.add_argument('-v', '--verbose', action='store_true')
-    app.kea_argparse.add_argument('-e', '--command_echo', action='store_true',
+    app.kea_argparse.add_argument('-E', '--command_echo', action='store_true',
                                   help='echo Kea commands to stdout')
-    app.kea_argparse.add_argument('-j', '--threads', type=int,
+    app.kea_argparse.add_argument('-j', '--threads', type=int, default=-1,
                                   help='kea threads to use (if applicable)')
+    app.kea_argparse.add_argument('-x', '--executor', help='executor to use')
+    app.kea_argparse.add_argument('-o', '--stdout', help='save stdout to')
+    app.kea_argparse.add_argument('-e', '--stderr', help='save stderr to')
 
 
 @leip.hook('argparse')
@@ -114,6 +119,7 @@ def kea_argparse(app):
     Separate Kea arguments from tool arguments & feed the kea arguments
     to argparse
     """
+    app.original_args = copy.copy(sys.argv)
     prefix = app.conf['arg_prefix']
     prelen = len(prefix)
     new_sysargv = []
@@ -123,8 +129,8 @@ def kea_argparse(app):
         a = sys.argv[i]
 
         if a.startswith(prefix + '-'):
-            flag = a[prelen + 1:]
-            kea_argv.append('-' + flag)
+            flag = a[prelen:]
+            kea_argv.append(flag)
             harvest_no = app.kea_arg_harvest_extra.get(flag, 0)
             if harvest_no > 0:
                 harvest = sys.argv[i + 1:i + 1 + harvest_no]
@@ -135,6 +141,7 @@ def kea_argparse(app):
 
         i += 1
 
+    app.kea_clargs = kea_argv
     app.kea_args = app.kea_argparse.parse_args(kea_argv)
     lg.debug("kea args: {}".format(" ".join(kea_argv)))
     lg.debug("com args: {}".format(" ".join(new_sysargv)))
@@ -154,45 +161,58 @@ def main_arg_process(app):
         print_tool_versions(app, app.conf['appname'])
         exit(0)
 
-
     if app.kea_args.command_echo:
         app.conf['command_echo'] = True
     app.conf['threads'] = app.kea_args.threads
 
 
-
 @leip.hook('prepare', 10)
 def prepare_config(app):
 
-    lg.debug("Prepping tool conf: %s %s",  app.conf['appname'],
-             app.kea_args.version)
+    version = app.kea_args.version
+    if version is None:
+        lg.debug("Prepping tool conf: %s (default version)",
+                 app.conf['appname'])
+    else:
+        lg.debug("Prepping tool conf: %s %s",
+                 app.conf['appname'], version)
 
     conf = get_tool_conf(app, app.conf['appname'], app.kea_args.version)
     app.conf.stack[1] = conf
 
     lg.debug("Loaded config: %s",  app.conf['appname'])
 
+
 @leip.hook('run')
 def run_kea(app):
     lg.debug("Start Kea run")
+    executor_name = 'simple'
+    if app.kea_args.executor:
+        executor_name = app.kea_args.executor
 
-    BasicExecutor = executors['basic']
-    executor = BasicExecutor(app)
+    lg.info("loading executor %s", executor_name)
+    executor = app.executors[executor_name](app)
 
     all_info = []
-    for cl in basic_command_line_generator(app):
-        lg.debug("command line: %s", " ".join(cl))
+    for info in basic_command_line_generator(app):
+#        print(list(app.conf.keys()))
+        info['executable'] = app.conf['executable']
+        info['kea_executable'] = app.conf['kea_executable']
+        info['kea_arg_prefix'] = app.conf['arg_prefix']
+        all_info.append(info)
+        info['executor'] = executor_name
+        cl = info['cl']
+
+        lg.debug("command line arguments: %s", " ".join(cl))
         if app.conf.get('command_echo'):
             print " ".join(cl)
 
-        info = OrderedDict()
-        info['start'] = arrow.utcnow()
+        info['kea_args'] = " ".join(app.kea_clargs)
         info['cwd'] = os.getcwd()
-        info['command_line'] = " ".join(cl)
+        info['full_cl'] = " ".join(app.original_args)
+
         app.run_hook('pre_fire', info)
-        info.update(executor.fire(cl))
-        info['stop'] = arrow.utcnow()
-        info['runtime'] = info['stop'] - info['start']
+        executor.fire(info)
         app.run_hook('post_fire', info)
         all_info.append(info)
 

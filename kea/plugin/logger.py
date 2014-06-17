@@ -35,7 +35,8 @@ def log_cl(app, all_info):
                             F.write("\n")
                             for lv in val:
                                 F.write(' - {}\n'.format(to_str(lv)))
-                            else:
-                                F.write(" {}\n".format(to_str(val)))
+                        else:
+                            F.write(" {}\n".format(to_str(val)))
+
     except:
         lg.warning("Cannot write to log file")
