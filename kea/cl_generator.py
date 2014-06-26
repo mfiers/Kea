@@ -16,17 +16,18 @@ input:
 
 """
 
+from collections import OrderedDict
 import copy
 import glob
 import logging
 import itertools
 import re
 import sys
-from collections import OrderedDict
 
 lg = logging.getLogger(__name__)
 
-RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
+RE_FIND_MAPINPUT = re.compile(
+        r'(?<!{){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=])?([^}]+)}(?!})')
 
 def very_basic_command_line_generator(app):
     """
@@ -56,10 +57,10 @@ def map_range_expand(map_info, cl):
                               map_info['pattern'])
     if mappat_range_3:
         start, stop, step = mappat_range_3.groups()
-        map_items = map(str, range(int(start), int(stop), int(step)))
+        map_items = map(str, range(int(start), int(stop)+1, int(step)))
     elif mappat_range_2:
         start, stop = mappat_range_2.groups()
-        map_items = map(str, range(int(start), int(stop)))
+        map_items = map(str, range(int(start), int(stop)+1))
     elif ',' in map_info['pattern']:
         map_items = [x.strip() for x in map_info['pattern'].split(',')]
     else:
@@ -67,20 +68,12 @@ def map_range_expand(map_info, cl):
         exit(-1)
 
     return map_items
-    # items = []
-    # for mi in map_items:
-    #     newitem = ""
-    #     if map_info['start'] > 0:
-    #         newitem += map_info['arg'][:map_info['start']]
-    #     newitem += mi
-    #     if map_info['tail'] > 0:
-    #         newitem += map_info['arg'][-map_info['tail']:]
-    #     items.append(newitem)
-    # return items
+
 
 def map_glob_expand(map_info, cl):
 
-    globpattern = RE_FIND_MAPINPUT.sub(map_info['pattern'], map_info['arg'])
+    globpattern = RE_FIND_MAPINPUT.sub(
+                    map_info['pattern'], map_info['arg'])
     globhits = glob.glob(globpattern)
 
     if len(globhits) == 0:
@@ -88,7 +81,14 @@ def map_glob_expand(map_info, cl):
         exit(-1)
 
     sta, tail = map_info['start'], map_info['tail']
-    return sorted([g[sta:-tail] for g in globhits])
+    print globhits, sta, tail, globhits[0][sta:]
+
+    if sta == tail == 0:
+        return sorted(globhits)
+    elif tail == 0:
+        return sorted([g[sta:] for g in globhits])
+    else:
+        return sorted([g[sta:-tail] for g in globhits])
 
 
 def map_iter(map_info):
@@ -148,11 +148,28 @@ def basic_command_line_generator(app):
         map_info['pos'] = arg_pos
         map_info['arg'] = cl[arg_pos]
         map_info['re_search'] = RE_FIND_MAPINPUT.search(cl[arg_pos])
-        map_info['name'], map_info['operator'], map_info['pattern'] = \
-                map_info['re_search'].groups()
-        map_info['re_from'] = re.compile(r'({' + map_info['name'] +
-                                         r'[\~\=][^}]*})')
-        map_info['re_replace'] = re.compile(r'({' + map_info['name'] + r'})')
+        name, operator, pattern = map_info['re_search'].groups()
+
+        if operator is None:
+            if ':' in pattern:
+                operator = '='
+            else:
+                operator = '~' #default to file type glob
+
+        if name is None:
+            name = ""
+
+        map_info['name'] = name
+        map_info['operator'] = operator
+        map_info['pattern'] = pattern
+
+        re_from_re = r'({' + map_info['name'] + r'[\~\=]?[^}]*})'
+        map_info['re_from'] = \
+            re.compile(re_from_re)
+
+        map_info['re_replace'] = \
+            re.compile(r'({' + map_info['name'] + r'})')
+
         map_info['start'] = map_info['re_search'].start()
         map_info['tail'] = len(cl[arg_pos]) - map_info['re_search'].end()
 
