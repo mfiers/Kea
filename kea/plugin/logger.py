@@ -20,15 +20,19 @@ def to_str(s):
 
 @leip.hook('post_run')
 def log_cl(app, all_info):
-
     try:
         with FileLock('kea.log'):
             for i, info in enumerate(all_info):
                 with open('kea.log', 'a') as F:
                     F.write("-" * 80 + "\n")
                     for i in info:
-                        F.write("{}: ".format(i))
                         val = info[i]
+                        if val is None:
+                            #do not print any key/vals where the value
+                            #is None
+                            continue
+
+                        F.write("{}: ".format(i))
                         if i == 'cl':
                             F.write(" ".join(val) + "\n")
                         elif isinstance(val, list):
@@ -39,4 +43,4 @@ def log_cl(app, all_info):
                             F.write(" {}\n".format(to_str(val)))
 
     except:
-        lg.warning("Cannot write to log file")
+        lg.warning("Cannot write to Kea log file")
