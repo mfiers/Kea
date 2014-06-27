@@ -35,6 +35,18 @@ def log_cl(app, all_info):
                         F.write("{}: ".format(i))
                         if i == 'cl':
                             F.write(" ".join(val) + "\n")
+                        elif i == 'files':
+                            F.write("\n")
+                            for fi in val:
+                                fim = val[fi]['madfile']
+                                fic = val[fi]['category']
+                                F.write(" - %s:\n" % fi)
+                                F.write("     path: %s\n" % fim['fullpath'])
+                                F.write("     sha1sum: %s\n" % fim['sha1sum'])
+                                F.write("     category: %s\n" % fic)
+
+
+
                         elif isinstance(val, list):
                             F.write("\n")
                             for lv in val:

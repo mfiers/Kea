@@ -24,6 +24,8 @@ import itertools
 import re
 import sys
 
+import fantail
+
 lg = logging.getLogger(__name__)
 
 RE_FIND_MAPINPUT = re.compile(
@@ -113,9 +115,9 @@ def apply_map_info_to_cl(newcl, map_info):
 
 def basic_command_line_generator(app):
     """
-    Most basic command line generator possible
+    Command line generator that expands globs & ranges
     """
-    info = OrderedDict()
+    info = fantail.Fantail()
     stdout_file = app.kea_args.stdout
     stderr_file = app.kea_args.stderr
 
@@ -180,7 +182,7 @@ def basic_command_line_generator(app):
 
         mapiters.append(map_iter(map_info))
 
-    for map_info_set in itertools.product(*mapiters):
+    for i, map_info_set in enumerate(itertools.product(*mapiters)):
         newcl = copy.copy(cl)
         newinfo = copy.copy(info)
         newstdout = stdout_file
@@ -194,6 +196,7 @@ def basic_command_line_generator(app):
                 newstderr = apply_map_info_to_cl([newstderr], map_info)[0]
 
         newinfo['cl'] = newcl
+        newinfo['iteration'] = i
         newinfo['stdout_file'] = newstdout
         newinfo['stderr_file'] = newstderr
         yield newinfo

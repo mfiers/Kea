@@ -36,6 +36,8 @@ class Kea(leip.app):
             name = os.path.split(sys.argv[0])[1]
             if name[:3] == 'kea_':
                 name = name[3:]
+        else:
+            name = args[0]
 
         # Call Leip - we do not need the Leip argparser:
         super(Kea, self).__init__('kea', disable_commands=True)
@@ -44,6 +46,7 @@ class Kea(leip.app):
         self.conf = fantail.Fanstack([self.conf, fantail.Fantail()])
 
         # hack - if kea verbose is set - do that early:
+
         verbose_flag = self.conf['arg_prefix'] + '-v'
         if verbose_flag in sys.argv:
             lg.setLevel(logging.DEBUG)
@@ -195,10 +198,12 @@ def run_kea(app):
 
     all_info = []
     for info in basic_command_line_generator(app):
-#        print(list(app.conf.keys()))
         info['executable'] = app.conf['executable']
         info['kea_executable'] = app.conf['kea_executable']
         info['kea_arg_prefix'] = app.conf['arg_prefix']
+        info['app_name'] = app.conf['appname']
+        info['app_version'] = app.conf['version']
+
         all_info.append(info)
         info['executor'] = executor_name
         cl = info['cl']
@@ -214,7 +219,6 @@ def run_kea(app):
         app.run_hook('pre_fire', info)
         executor.fire(info)
         app.run_hook('post_fire', info)
-        all_info.append(info)
 
     executor.finish()
     app.run_hook('post_run', all_info)

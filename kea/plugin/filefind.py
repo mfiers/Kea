@@ -43,14 +43,20 @@ def find_input_file(app, info):
     info['output_files'].extend(flag_find(sys.argv, off, app))
 
 
-# @leip.hook('pre_run')
-# def hook_pre_run(app):
-#     ff_conf = app.conf.get('filefind')
-#     print ff_conf
-
-
 @leip.hook('pre_fire')
-def hook_find_input_file(app, info):
-    return find_input_file(app, info)
+def hook_pre_run(app, info):
+
+    ff_conf = app.conf.get('filefind')
+    #print ff_conf
+
+
+@leip.hook('post_fire', 1)
+def check_sha1sum(app, info):
+    if not 'files' in info:
+        return
+    for f in info['files']:
+        mf = info['files'][f]['madfile']
+        from mad2.hash import get_or_create_sha1sum
+        mf['sha1sum'] = get_or_create_sha1sum(mf['inputfile'])
 
 
