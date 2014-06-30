@@ -27,9 +27,10 @@ import sys
 import fantail
 
 lg = logging.getLogger(__name__)
+lg.setLevel(logging.DEBUG)
 
 RE_FIND_MAPINPUT = re.compile(
-        r'(?<!{){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=])?([^}]+)}(?!})')
+        r'(?<!{){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=]?)([^}]+)?}(?!})')
 
 def very_basic_command_line_generator(app):
     """
@@ -127,11 +128,17 @@ def basic_command_line_generator(app):
     #check if there are map arguments in here
     mapins = []
     mapcount = 0
+    replacements = 0
 
     ## find all map definitions
     for i, arg in enumerate(cl):
-        if not RE_FIND_MAPINPUT.search(arg):
+        fipa = RE_FIND_MAPINPUT.search(arg)
+        if not fipa:
             continue
+        if fipa.groups()[2] is None:
+            replacements += 1
+            continue
+        print fipa.groups()
         mapins.append(i)
 
     # no map definitions found - then simply return the cl & execute
@@ -161,6 +168,11 @@ def basic_command_line_generator(app):
         if name is None:
             name = ""
 
+
+        lg.debug("cl expand 1")
+        lg.debug(" - name     : %s", name)
+        lg.debug(" - operator : %s", operator)
+        lg.debug(" - pattern  : %s", pattern)
         map_info['name'] = name
         map_info['operator'] = operator
         map_info['pattern'] = pattern
