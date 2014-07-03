@@ -27,7 +27,7 @@ import sys
 import fantail
 
 lg = logging.getLogger(__name__)
-lg.setLevel(logging.DEBUG)
+#plg.setLevel(logging.DEBUG)
 
 RE_FIND_MAPINPUT = re.compile(
         r'(?<!{){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=]?)([^}]+)?}(?!})')
@@ -54,12 +54,14 @@ def map_range_expand(map_info, cl):
 
     """
 
+
     mappat_range_3 = re.match(r'([0-9]+):([0-9]+):([0-9]+)',
                               map_info['pattern'])
     mappat_range_2 = re.match(r'([0-9]+):([0-9]+)',
                               map_info['pattern'])
     if mappat_range_3:
         start, stop, step = mappat_range_3.groups()
+        lg.debug("expanding numerical range: %s %s %s", start, stop, step)
         map_items = map(str, range(int(start), int(stop)+1, int(step)))
     elif mappat_range_2:
         start, stop = mappat_range_2.groups()
@@ -84,7 +86,7 @@ def map_glob_expand(map_info, cl):
         exit(-1)
 
     sta, tail = map_info['start'], map_info['tail']
-    print globhits, sta, tail, globhits[0][sta:]
+    #print globhits, sta, tail, globhits[0][sta:]
 
     if sta == tail == 0:
         return sorted(globhits)
@@ -125,6 +127,8 @@ def basic_command_line_generator(app):
     #cl = [app.conf['executable']] + sys.argv[1:]
     cl = sys.argv[1:]
 
+    max_no_jobs = app.kea_args.maxjobs
+
     #check if there are map arguments in here
     mapins = []
     mapcount = 0
@@ -138,12 +142,13 @@ def basic_command_line_generator(app):
         if fipa.groups()[2] is None:
             replacements += 1
             continue
-        print fipa.groups()
+        #print fipa.groups()
         mapins.append(i)
 
     # no map definitions found - then simply return the cl & execute
     if len(mapins) == 0:
         info['cl'] = cl
+        info['iteration'] = 0
         info['stdout_file'] = stdout_file
         info['stderr_file'] = stderr_file
         yield info
@@ -195,6 +200,10 @@ def basic_command_line_generator(app):
         mapiters.append(map_iter(map_info))
 
     for i, map_info_set in enumerate(itertools.product(*mapiters)):
+
+        if i >= max_no_jobs:
+            break
+
         newcl = copy.copy(cl)
         newinfo = copy.copy(info)
         newstdout = stdout_file

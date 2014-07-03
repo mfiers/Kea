@@ -28,10 +28,10 @@ conf = leip.get_config('kea')
 #leiplog = logging.getLogger('leip')
 #leiplog.setLevel(logging.DEBUG)
 
-
 class Kea(leip.app):
 
     def __init__(self, *args, **kwargs):
+
         if len(args) == 0:
             name = os.path.split(sys.argv[0])[1]
             if name[:3] == 'kea_':
@@ -99,7 +99,7 @@ class Kea(leip.app):
 def main_arg_define(app):
 
     for a in ('-V --version -j --threads -x --executor -o --stdout ' +
-              '-e --stderr').split():
+              '-e --stderr -n --maxjobs').split():
         app.kea_arg_harvest_extra[a] = 1
 
     app.kea_argparse.add_argument('-V', '--version', default='default',
@@ -111,9 +111,16 @@ def main_arg_define(app):
                                   help='echo Kea commands to stdout')
     app.kea_argparse.add_argument('-j', '--threads', type=int, default=-1,
                                   help='kea threads to use (if applicable)')
+    app.kea_argparse.add_argument('-n', '--maxjobs', type=int, default=1e12,
+                                  help='max no jobs to execute')
     app.kea_argparse.add_argument('-x', '--executor', help='executor to use')
     app.kea_argparse.add_argument('-o', '--stdout', help='save stdout to')
     app.kea_argparse.add_argument('-e', '--stderr', help='save stderr to')
+
+    #this flag is added to mark a run as being an iteration of another kea
+    #run - we need this to, for example, prevent extensive logging.
+    app.kea_argparse.add_argument('--is_iteration', help=argparse.SUPPRESS,
+                                  action='store_true')
 
 
 @leip.hook('argparse')
@@ -159,10 +166,6 @@ def main_arg_process(app):
     """
     if app.kea_args.verbose:
         lg.setLevel(logging.DEBUG)
-
-    if app.kea_args.list_versions:
-        print_tool_versions(app, app.conf['appname'])
-        exit(0)
 
     if app.kea_args.command_echo:
         app.conf['command_echo'] = True

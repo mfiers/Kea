@@ -13,7 +13,7 @@ from mad2.recrender import recrender
 import kea.mad
 
 lg = logging.getLogger(__name__)
-lg.setLevel(logging.DEBUG)
+#lg.setLevel(logging.DEBUG)
 
 
 def annotate(app, info, fname, fdata):
