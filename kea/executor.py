@@ -48,18 +48,18 @@ def simple_runner(info, defer_run=False):
 
     lg.debug("  cl: %s", cl)
 
-    info['start'] = arrow.utcnow()
+    info['start'] = arrow.now()
 
     if defer_run:
         P = sp.Popen(cl)
         info['pid'] = P.pid
-        info['submitted'] = arrow.utcnow()
+        info['submitted'] = arrow.now()
     else:
         P = sp.Popen(cl, stdout=stdout_handle, stderr=stderr_handle)
         info['pid'] = P.pid
         P.communicate()
-        info['stop'] = arrow.utcnow()
-        info['stop'] = arrow.utcnow()
+        info['stop'] = arrow.now()
+        info['stop'] = arrow.now()
         info['runtime'] = info['stop'] - info['start']
         info['returncode'] = P.returncode
 

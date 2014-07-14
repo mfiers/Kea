@@ -86,7 +86,7 @@ class PbsExecutor(BasicExecutor):
 
             #for logging.
             info['mode'] = 'asynchronous'
-            info['submitted'] = arrow.utcnow()
+            info['submitted'] = arrow.now()
             info['pbs_uuid'] = uuid
             info['pbs_script_file'] = pbs_script
 
