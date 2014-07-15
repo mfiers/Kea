@@ -13,31 +13,6 @@ def main_arg_define(app):
                                   help='Save command line to this folder ' +
                                   'in a file called "kea.sh"')
 
-# @leip.hook('post_argparse')
-# def run_moa_tool_commands(app):
-#     if app.kea_args.remember:
-#         remember(app)
-#         exit(0)
-
-
-# @leip.hook('pre_argparse')
-# def prep_sge_exec(app):
-#     app.executors['pbs'] = PbsExecutor
-#     for a in '--pbs_nodes --pbs_ppn --pbs_account'.split():
-#         app.kea_arg_harvest_extra[a] = 1
-
-#     app.kea_argparse.add_argument('--pbs_nodes',
-#                                   help='No nodes requested (default=jobs '
-#                                   + 'submitted)', type=int)
-#     app.kea_argparse.add_argument('--pbs_ppn',
-#                                   help='No ppn requested (default=cl per '
-#                                   + 'job)', type=int)
-#     app.kea_argparse.add_argument('--pbs_account',
-#                                   help='Account requested (default none)')
-#     app.kea_argparse.add_argument('--pbs_dry_run',
-#                                   action='store_true',
-#                                   help='create script, do not submit)')
-
 
 @leip.hook('post_fire')
 def memory_store_cl(app, info):
