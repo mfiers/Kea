@@ -120,7 +120,8 @@ def create_execs(app, args):
 
 @leip.flag('-d', '--set_default', help='set this executable as default')
 @leip.arg('-V', '--version', help='version number')
-@leip.arg('-a', '--appname', help='application name')
+#@leip.arg('-a', '--appname', help='application name')
+@leip.arg('appname')
 @leip.command
 def add(app, args):
 
@@ -130,7 +131,10 @@ def add(app, args):
 
     lg.debug("register %s", execname)
 
-    execs = list(find_executable(args.appname))
+    execs = []
+    for f in find_executable(args.appname):
+        execs.append(f)
+
     no_execs = len(execs)
 
     # make sure there is a link in the kea bin path
