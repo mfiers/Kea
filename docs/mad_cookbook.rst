@@ -1,5 +1,5 @@
-Cookbook
-========
+Mad Cookbook
+============
 
 Get Help
 --------
@@ -20,5 +20,3 @@ Annotate a file::
 What keywords are allowed?::
 
     mad keywords
-
-    
