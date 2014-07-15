@@ -11,7 +11,7 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   cookbook
+   madcookbook
 
 
 Indices and tables
