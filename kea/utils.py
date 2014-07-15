@@ -13,7 +13,7 @@ from leip import set_local_config
 lg = logging.getLogger(__name__)
 
 
-def get_tool_conf(app, name, version='default'):
+def get_tool_conf(app, name, version='default', subcommand=None):
 
     data = copy.copy(app.conf['group.default'])
     tool_data = copy.copy(app.conf['app.{}'.format(name)])
@@ -40,6 +40,14 @@ def get_tool_conf(app, name, version='default'):
         version_data = tool_data['versions.{}'.format(version)]
         data.update(version_data)
         data['version_key'] = version
+
+    if (not 'subcommand' in data) or \
+            (subcommand is None) or \
+            (not subcommand in data['subcommand']):
+        return data
+
+    subcommand_data = data['subcommand.{}'.format(subcommand)]
+    data.update(subcommand_data)
 
     return data
 
