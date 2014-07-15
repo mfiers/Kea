@@ -9,7 +9,6 @@ import os
 import subprocess as sp
 import sys
 
-import arrow
 import leip
 import fantail
 
@@ -27,6 +26,7 @@ conf = leip.get_config('kea')
 
 #leiplog = logging.getLogger('leip')
 #leiplog.setLevel(logging.DEBUG)
+
 
 class Kea(leip.app):
 
@@ -118,7 +118,7 @@ def main_arg_define(app):
     app.kea_argparse.add_argument('-e', '--stderr', help='save stderr to')
 
     #this flag is added to mark a run as being an iteration of another kea
-    #run - we need this to, for example, prevent extensive logging.
+    #run - we need thils -ls to, for example, prevent extensive logging.
     app.kea_argparse.add_argument('--is_iteration', help=argparse.SUPPRESS,
                                   action='store_true')
 
@@ -175,6 +175,17 @@ def main_arg_process(app):
 @leip.hook('prepare', 10)
 def prepare_config(app):
 
+    # see if there is a candidate subcommand - i.e. the first
+    # argument to the executable not starting with a '-' or with
+    # the arg_prefix
+
+    candidate_subcommand = None
+    for a in sys.argv[1:]:
+        if a[:1] == '-' or a[:1] == app.conf['arg_prefix']:
+            continue
+        candidate_subcommand = a
+        break
+
     version = app.kea_args.version
     if version is None:
         lg.debug("Prepping tool conf: %s (default version)",
@@ -183,7 +194,8 @@ def prepare_config(app):
         lg.debug("Prepping tool conf: %s %s",
                  app.conf['appname'], version)
 
-    conf = get_tool_conf(app, app.conf['appname'], app.kea_args.version)
+    conf = get_tool_conf(app, app.conf['appname'], app.kea_args.version,
+                         candidate_subcommand)
     app.conf.stack[1] = conf
 
     lg.debug("Loaded config: %s",  app.conf['appname'])
@@ -212,7 +224,8 @@ def run_kea(app):
         cl = info['cl']
 
         lg.debug("command line arguments: %s", " ".join(cl))
-        if app.conf.get('command_echo'):
+        if app.conf.get('command_echo') and not \
+                executor.interrupted:
             print " ".join(cl)
 
         info['kea_args'] = " ".join(app.kea_clargs)
