@@ -1,6 +1,14 @@
+import copy
+import logging
+import sys
 
 import leip
-import sys
+from mad2.recrender import recrender
+
+import kea.files
+
+lg = logging.getLogger(__name__)
+
 
 MADAPP = None
 
@@ -39,6 +47,7 @@ def find_input_file(app, info):
     if not 'output_files' in info:
         info['output_files'] = []
 
+
     info['input_files'].extend(flag_find(sys.argv, iff, app))
     info['output_files'].extend(flag_find(sys.argv, off, app))
 
@@ -46,8 +55,50 @@ def find_input_file(app, info):
 @leip.hook('pre_fire')
 def hook_pre_run(app, info):
 
-    ff_conf = app.conf.get('filefind')
-    #print ff_conf
+    ffc = app.conf.get('filefind')
+
+    if not ffc:
+        return
+
+    #determine category
+    def get_category(finf):
+        if 'category' in finf:
+            return finf['category']
+        elif name.startswith('input'):
+            return 'input'
+        elif name.startswith('output'):
+            return 'output'
+        else:
+            return 'used'
+
+    #find all files - except of type render
+    for name in ffc:
+        finf = ffc[name]
+
+        if 'position' in finf:
+            pos = finf['position']
+
+            if len(info['cl']) <= pos:
+                lg.warning("Cannot assign file %s - cl too short", name)
+                continue
+
+            kea.files.register_file(
+                info, name,
+                get_category(finf),
+                info['cl'][pos])
+
+    #find all files to be rendered
+    for name in ffc:
+        finf = ffc[name]
+
+        if 'render' in finf:
+            template = finf['render']
+            filename = recrender(template, info)
+            if '{' in filename:
+                lg.warning("Cannot render file %s - '%s'", name, template)
+                continue
+            kea.files.register_file(
+                info, name, get_category(finf), filename)
 
 
 @leip.hook('post_fire', 1)
@@ -58,5 +109,3 @@ def check_sha1sum(app, info):
         mf = info['files'][f]['madfile']
         from mad2.hash import get_or_create_sha1sum
         mf['sha1sum'] = get_or_create_sha1sum(mf['inputfile'])
-
-
