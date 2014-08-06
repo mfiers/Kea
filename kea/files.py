@@ -7,10 +7,10 @@ import kea.mad
 
 
 lg = logging.getLogger(__name__)
-
+#lg.setLevel(logging.DEBUG)
 
 def register_file(info, name, category, filename):
-    lg.debug("set %s as %s file: '%s'", filename, category, name)
+    lg.info("set %s as %s file: '%s'", filename, category, name)
     madfile = kea.mad.get_madfile(filename)
 
     info['files'][name]['filename'] = filename
@@ -45,3 +45,19 @@ def assign_filename(info, name, category, filename):
     madfile = kea.mad.get_madfile(filename)
     info['files'][name]['madfile'] = madfile
     info['files'][name]['category'] = category
+
+
+
+def flag_find(lst, flg):
+    if not flg or not flg in lst:
+        lg.info("Cannot assign find file with flag %s", flg)
+        return None
+
+    p = lst.index(flg)
+    if p+1 >= len(lst):
+        lg.warning("Cannot assign find file with flag %s (cl too short)", flg)
+        return None
+    return lst[p+1]
+
+
+#
