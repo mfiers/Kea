@@ -14,6 +14,8 @@ import fantail
 
 import mad2.util as mad2util
 
+
+import kea.mad
 from kea.utils import get_tool_conf
 from kea.plugin.register import print_tool_versions
 from kea.cl_generator import basic_command_line_generator
@@ -226,19 +228,28 @@ def run_kea(app):
         lg.debug("command line arguments: %s", " ".join(cl))
         if app.conf.get('command_echo') and not \
                 executor.interrupted:
-            print " ".join(cl)
+            print info['executable'] + " " + \
+                  " ".join(cl)
 
         info['kea_args'] = " ".join(app.kea_clargs)
         info['cwd'] = os.getcwd()
         info['full_cl'] = " ".join(app.original_args)
 
         app.run_hook('pre_fire', info)
+
+        if info.get('skip'):
+            lg.debug("Skipping firing")
+            continue
+
         executor.fire(info)
         app.run_hook('post_fire', info)
 
     executor.finish()
     app.run_hook('post_run', all_info)
 
+@leip.hook('finish')
+def kea_finish(app):
+    kea.mad.finish()
 
 @leip.hook('prepare')
 def find_executable(app):
