@@ -219,7 +219,8 @@ def run_kea(app):
         info['kea_executable'] = app.conf['kea_executable']
         info['kea_arg_prefix'] = app.conf['arg_prefix']
         info['app_name'] = app.conf['appname']
-        info['app_version'] = app.conf['version']
+
+        info['app_version'] = app.conf.get('version', 'unknown')
 
         all_info.append(info)
         info['executor'] = executor_name
