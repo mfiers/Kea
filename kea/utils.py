@@ -5,17 +5,45 @@ import logging
 import os
 import subprocess as sp
 import sys
+import textwrap
 
-import fantail
+from fantail import Fantail
+
+from termcolor import cprint
 from leip import set_local_config
 
 
 lg = logging.getLogger(__name__)
 
 
+def message(cat, message, *args):
+    if len(args) > 0:
+        message = message.format(*args)
+
+    current_loglevel = logging.getLogger(__name__).getEffectiveLevel()
+    if current_loglevel >= logging.WARNING and \
+            cat.lower()[:2] == 'in':
+        return
+
+    message = " ".join(message.split())
+    color = {'er': 'red',
+             'wa': 'yellow',
+             'in': 'green',
+             }.get(cat.lower()[:2], 'blue')
+
+    cprint('Kea', 'cyan', end="/")
+    cprint(cat, color, end=': ')
+    for line in textwrap.wrap(message):
+        print "  " + line
+
+
 def get_tool_conf(app, name, version='default', subcommand=None):
 
     data = copy.copy(app.conf['group.default'])
+
+    if not name in app.conf['app']:
+        return Fantail()
+
     tool_data = copy.copy(app.conf['app.{}'.format(name)])
     group = tool_data.get('group')
 
@@ -32,7 +60,7 @@ def get_tool_conf(app, name, version='default', subcommand=None):
     if (not version is None) and (not version in tool_data['versions']):
         candidates = []
         for v in tool_data['versions']:
-            fullv =  tool_data['versions'][v]['version']
+            fullv = tool_data['versions'][v]['version']
             if v in fullv:
                 candidates.append(v)
 
@@ -118,11 +146,11 @@ def create_kea_link(app, name):
         lg.debug("path exists: %s", linkpath)
         os.unlink(linkpath)
 
-
     keapath = sys.argv[0]
     lg.info("creating link from %s", linkpath)
     lg.info(" to: %s", keapath)
     os.symlink(keapath, linkpath)
+
 
 def register_executable(app, name, executable, version, is_default=None):
     """
@@ -138,14 +166,14 @@ def register_executable(app, name, executable, version, is_default=None):
     if app.conf.has_key('app.{}.versions'.format(name)):
         is_first_version = False
         for k in app.conf['app.{}.versions'.format(name)]:
-            vinf = app.conf['app.{}.versions.{}'\
+            vinf = app.conf['app.{}.versions.{}'
                             .format(name, k)]
             if vinf['executable'] == executable:
                 lg.warning("Executable is already registered - overwriting")
                 version_key = k
                 break
 
-            #registered - we do not want to use this key
+            # registered - we do not want to use this key
             allversions.remove(k)
 
         version_key = allversions[0]
@@ -159,7 +187,7 @@ def register_executable(app, name, executable, version, is_default=None):
             is_default = False
 
     lg.warning("register %s - %s - %s - %s", name, executable,
-             version_key, version)
+               version_key, version)
 
     if is_default:
         lg.warning("Set version %s as default", version_key)
