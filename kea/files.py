@@ -1,18 +1,18 @@
 
 import logging
+import os
 
 from mad2.recrender import recrender
 
 import kea.mad
-
+from kea.utils import message
 
 lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
 
 def register_file(info, name, category, filename):
-    lg.info("set %s as %s file: '%s'", filename, category, name)
     madfile = kea.mad.get_madfile(filename)
-
+    message('info', 'registered {}/{}: {}', category, name, filename)
     info['files'][name]['filename'] = filename
     info['files'][name]['madfile'] = madfile
     info['files'][name]['category'] = category
@@ -47,10 +47,9 @@ def assign_filename(info, name, category, filename):
     info['files'][name]['category'] = category
 
 
-
 def flag_find(lst, flg):
     if not flg or not flg in lst:
-        lg.info("Cannot assign find file with flag %s", flg)
+        lg.debug("Cannot assign find file with flag %s", flg)
         return None
 
     p = lst.index(flg)
@@ -59,5 +58,19 @@ def flag_find(lst, flg):
         return None
     return lst[p+1]
 
+
+def flag_find_list(lst, flg):
+
+    if not flg or not flg in lst:
+        lg.debug("Cannot assign find file with flag %s", flg)
+        return set()
+
+    rv = []
+    for i, f in
+    enumerate(lst[:-1]):
+        lg.debug('%s %s %s', f, f == flg, lst[i+1])
+        if f == flg:
+            rv.append(lst[i+1])
+    return rv
 
 #
