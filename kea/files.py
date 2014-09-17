@@ -66,8 +66,7 @@ def flag_find_list(lst, flg):
         return set()
 
     rv = []
-    for i, f in
-    enumerate(lst[:-1]):
+    for i, f in enumerate(lst[:-1]):
         lg.debug('%s %s %s', f, f == flg, lst[i+1])
         if f == flg:
             rv.append(lst[i+1])
