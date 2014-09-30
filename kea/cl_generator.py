@@ -30,7 +30,7 @@ lg = logging.getLogger(__name__)
 #plg.setLevel(logging.DEBUG)
 
 RE_FIND_MAPINPUT = re.compile(
-        r'(?<!{){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=]?)([^}]+)?}(?!})')
+        r'(?<![{\\]){([a-zA-Z_][a-zA-Z0-9_]*)?([\~\=]?)([^}]+)?}(?![\\}])')
 
 def very_basic_command_line_generator(app):
     """
@@ -75,6 +75,13 @@ def map_range_expand(map_info, cl):
     return map_items
 
 
+def _unescape(x):
+    if r'\{' in x:
+        x = x.replace(r'\{', '{')
+    if r'\}' in x:
+        x = x.replace(r'\}', '}')
+    return x
+
 def map_glob_expand(map_info, cl):
 
     globpattern = RE_FIND_MAPINPUT.sub(
@@ -97,7 +104,7 @@ def map_glob_expand(map_info, cl):
 
 
 def map_iter(map_info):
-    for i in map_info['items']:
+    for i in map_info.get('items', []):
         map_clean = copy.copy(map_info)
         map_clean['item'] = i
         yield map_clean
@@ -121,6 +128,7 @@ def basic_command_line_generator(app):
     Command line generator that expands globs & ranges
     """
     info = fantail.Fantail()
+    stdin_file = app.kea_args.stdin
     stdout_file = app.kea_args.stdout
     stderr_file = app.kea_args.stderr
 
@@ -147,8 +155,12 @@ def basic_command_line_generator(app):
 
     # no map definitions found - then simply return the cl & execute
     if len(mapins) == 0:
-        info['cl'] = cl
+
+        newcl = map(_unescape, cl)
+
+        info['cl'] = newcl
         info['iteration'] = 0
+        info['stdin_file'] = stdin_file
         info['stdout_file'] = stdout_file
         info['stderr_file'] = stderr_file
         yield info
@@ -206,18 +218,27 @@ def basic_command_line_generator(app):
 
         newcl = copy.copy(cl)
         newinfo = copy.copy(info)
+
+        newstdin = stdin_file
         newstdout = stdout_file
         newstderr = stderr_file
 
+
         for map_info in map_info_set:
             newcl = apply_map_info_to_cl(newcl, map_info)
+            if not newstdin is None:
+                newstdin = apply_map_info_to_cl([newstdin], map_info)[0]
             if not newstdout is None:
                 newstdout = apply_map_info_to_cl([newstdout], map_info)[0]
             if not newstderr is None:
                 newstderr = apply_map_info_to_cl([newstderr], map_info)[0]
 
+        newcl = map(_unescape, cl)
+
+
         newinfo['cl'] = newcl
         newinfo['iteration'] = i
+        newinfo['stdin_file'] = newstdin
         newinfo['stdout_file'] = newstdout
         newinfo['stderr_file'] = newstderr
         yield newinfo
