@@ -23,4 +23,10 @@ After installation,
 
 
 Configure Mad
---------------
+-------------
+
+If MongoDb runs on the same server as Mad2, no configuratino is necessary. Otherwise, you will need to run::
+
+    mad conf set plugin.mongo.host: <HOSTNAME>
+    mad conf set store.mongo.host: <HOSTNAME>
+
