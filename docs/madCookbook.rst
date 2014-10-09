@@ -55,4 +55,13 @@ or, when applying dset to the current directory, you can omit the path::
     cd test
     mad dset project test_project
 
+Note that running `mad dset` does not actually annotate a file. You will need to run something along the lines of::
+
+    mad scan | mad save
+
+or::
+
+    mad save ./test/*
+
+to actually store the information into the database
 
