@@ -22,9 +22,6 @@ Contents:
 
    madInstallation
 
-   madIntroduction
-   keaIntroduction
-
    madCookbook
    keaWrapTools
 
