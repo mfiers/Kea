@@ -1,0 +1,33 @@
+start = "samtools" command $;
+command = samtools_view | samtools_merge | samtools_flagstat | samtools_index | samtools_sort ;
+
+(* command defintions *)
+samtools_view = command:"view" { view_option } input:{bamsamfile} ;
+samtools_merge = command:"merge" { merge_option } output:bamsamfile input:{bamsamfile}+;
+samtools_flagstat = command:"flagstat" input:bamsamfile;
+samtools_index = command:"index" input:bamsamfile output:{anyfile};
+samtools_sort = command:"sort"  { sort_option } input:bamsamfile output_prefix:{anyfile};
+
+
+(* samtools view *)
+view_option = { view_argoption | view_noargoption } ;
+view_argoption = view_argoptionflag argoptionvalue ;
+view_argoptionflag = /-[@LtToRfFqlrs]/ ;
+view_noargoption = /-[bhHSu1xXcB]+/ ;
+
+(* samtools view *)
+sort_option = { sort_argoption | sort_noargoption } ;
+sort_argoption = sort_argoptionflag argoptionvalue ;
+sort_argoptionflag = /-[l@m]/ ;
+sort_noargoption = /-[nfo]+/ ;
+
+(* samtools merge *)
+merge_option = { merge_argoption | merge_noargoption } ;
+merge_argoption = merge_argoptionflag argoptionvalue ;
+merge_argoptionflag = /-[l@Rh]/ ;
+merge_noargoption = /-nruf1?/ ;
+
+(* generic defintions *)
+argoptionvalue = /[^ ]+/ ;
+bamsamfile = /[^ ]+\.[bs]am/ ;
+anyfile = /[^ ]+/ ;

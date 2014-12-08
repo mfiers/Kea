@@ -19,11 +19,11 @@ def to_str(s):
         return str(s)
 
 @leip.hook('post_run')
-def log_cl(app, all_info):
-
+def log_cl(app):
+    all_jinf = app.all_jinf
     try:
         with FileLock('kea.log'):
-            for i, info in enumerate(all_info):
+            for i, info in enumerate(all_jinf):
                 with open('kea.log', 'a') as F:
                     F.write("-" * 80 + "\n")
                     for i in info:

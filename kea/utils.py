@@ -16,7 +16,7 @@ lg = logging.getLogger(__name__)
 def get_tool_conf(app, name, version='default'):
 
     data = copy.copy(app.conf['group.default'])
-    tool_data = copy.copy(app.conf['app.{}'.format(name)])
+    tool_data = copy.copy(app.conf.get('app.{}'.format(name), fantail.Fantail()))
     group = tool_data.get('group')
 
     if not group is None:

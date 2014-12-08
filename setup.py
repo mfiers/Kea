@@ -12,7 +12,8 @@ with open('VERSION') as F:
 
 entry_points = {
     'console_scripts': [
-        'kea = kea.cli:dispatch'
+        'kea = kea.cli:dispatch',
+        'mkea = kea.cli_manage:dispatch',
     ]}
 
 setup(name='kea',
@@ -27,7 +28,8 @@ setup(name='kea',
       install_requires=[
           'Leip',
           'lockfile',
-          'arrow'
+          'arrow',
+          'grako>3',
       ],
       classifiers=[
           'Development Status :: 4 - Beta',

@@ -14,4 +14,4 @@ def dispatch():
     app.run()
 
 
-app = Kea()
+app = leip.app('kea')

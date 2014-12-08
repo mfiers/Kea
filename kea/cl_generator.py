@@ -21,6 +21,7 @@ import glob
 import logging
 import itertools
 import re
+import shlex
 import sys
 from collections import OrderedDict
 
@@ -28,15 +29,8 @@ lg = logging.getLogger(__name__)
 
 RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
 
-def very_basic_command_line_generator(app):
-    """
-    Most basic command line generator possible
-    """
-    cl = sys.argv[1:]
-    yield cl
 
-
-def map_range_expand(map_info, cl):
+def map_range_expand(map_info, cl, pipes):
     """
     Convert a map range to a list of items:
 
@@ -54,6 +48,11 @@ def map_range_expand(map_info, cl):
                               map_info['pattern'])
     mappat_range_2 = re.match(r'([0-9]+):([0-9]+)',
                               map_info['pattern'])
+
+    thisarg = map_info['arg']
+    iterstring = map_info['iterstring']
+    argi = cl.index(thisarg)
+
     if mappat_range_3:
         start, stop, step = mappat_range_3.groups()
         map_items = map(str, range(int(start), int(stop), int(step)))
@@ -66,29 +65,60 @@ def map_range_expand(map_info, cl):
         lg.critical("Can not parse range: %s", map_info['pattern'])
         exit(-1)
 
-    return map_items
-    # items = []
-    # for mi in map_items:
-    #     newitem = ""
-    #     if map_info['start'] > 0:
-    #         newitem += map_info['arg'][:map_info['start']]
-    #     newitem += mi
-    #     if map_info['tail'] > 0:
-    #         newitem += map_info['arg'][-map_info['tail']:]
-    #     items.append(newitem)
-    # return items
+        
+    substart = thisarg.index(iterstring)
+    subtail = substart + len(iterstring) 
+    for g in map_items:
+        newcl = copy.copy(cl)
+        argrep = thisarg[:substart] + str(g) +  thisarg[subtail:]
+        newcl[argi] = argrep
+        for j, rarg in enumerate(newcl):
+            newcl[j] = map_info['rep_from'].sub(g, rarg)
 
-def map_glob_expand(map_info, cl):
 
-    globpattern = RE_FIND_MAPINPUT.sub(map_info['pattern'], map_info['arg'])
+        new_pipes = []
+        for p in pipes:
+            if p is None:
+                new_pipes.append(None)
+            else:
+                new_pipes.append(map_info['rep_from'].sub(g, p))
+
+        yield newcl, new_pipes
+
+
+def map_glob_expand(map_info, cl, pipes):
+    thisarg = map_info['arg']
+    argi = cl.index(thisarg)
+    iterpat = map_info['pattern']
+    iterstring = map_info['iterstring']
+
+    globpattern = RE_FIND_MAPINPUT.sub(iterpat, thisarg)
     globhits = glob.glob(globpattern)
 
     if len(globhits) == 0:
-        lg.critical("No hits found for pattern: %s", globpattern)
+        lg.critical("No files matching pattern: '%s' found", globpattern)
         exit(-1)
 
-    sta, tail = map_info['start'], map_info['tail']
-    return sorted([g[sta:-tail] for g in globhits])
+    substart = thisarg.index(iterstring)
+    subtail = len(thisarg) - (substart + len(iterstring))
+    
+    for g in globhits:
+        newcl = copy.copy(cl)
+        newcl[argi] = g
+        subrep = g[substart:]
+        if subtail > 0:
+            subrep = subrep[:-subtail]
+        for j, rarg in enumerate(newcl):
+            newcl[j] = map_info['rep_from'].sub(subrep, rarg)
+
+        new_pipes = []
+        for p in pipes:
+            if p is None:
+                new_pipes.append(None)
+            else:
+                new_pipes.append(map_info['rep_from'].sub(g, p))
+
+        yield newcl, new_pipes
 
 
 def map_iter(map_info):
@@ -115,68 +145,81 @@ def basic_command_line_generator(app):
     """
     Most basic command line generator possible
     """
+    
     info = OrderedDict()
-    stdout_file = app.kea_args.stdout
-    stderr_file = app.kea_args.stderr
 
-    #cl = [app.conf['executable']] + sys.argv[1:]
-    cl = sys.argv[1:]
+    pipes = [app.args.stdout, app.args.stderr]
 
-    #check if there are map arguments in here
-    mapins = []
+    cl = [app.command]
+    if app.cl_args:
+        cl.extend(app.cl_args)
+
+    #special case - probably used quotes on the command line
+    if len(cl) == 1 and ' ' in cl[0]:
+        cl = shlex.split(cl[0])
+
+    cljoin = " ".join(cl)
+
+    #check if there are iterable arguments in here
     mapcount = 0
-
-    ## find all map definitions
-    for i, arg in enumerate(cl):
-        if not RE_FIND_MAPINPUT.search(arg):
-            continue
-        mapins.append(i)
+    mapins = RE_FIND_MAPINPUT.search(cljoin)
 
     # no map definitions found - then simply return the cl & execute
-    if len(mapins) == 0:
+    if mapins is None:
         info['cl'] = cl
-        info['stdout_file'] = stdout_file
-        info['stderr_file'] = stderr_file
+        info['stdout_file'] = pipes[0]
+        info['stderr_file'] = pipes[1]
         yield info
         return
 
     #define iterators for each of the definitions
 
-    mapiters = []
-    for arg_pos in mapins:
+    #lg.setLevel(logging.DEBUG)
+
+    lg.debug("iterables found in: %s", cljoin)
+    
+    def expander(cl, pipes):
+        
+        for i, arg in enumerate(cl):
+            mima = RE_FIND_MAPINPUT.search(arg)
+            if mima:
+                break
+        else:
+            yield cl, pipes
+            return
+
         map_info = {}
-        map_info['pos'] = arg_pos
-        map_info['arg'] = cl[arg_pos]
-        map_info['re_search'] = RE_FIND_MAPINPUT.search(cl[arg_pos])
+        map_info['re_search'] = mima
         map_info['name'], map_info['operator'], map_info['pattern'] = \
-                map_info['re_search'].groups()
-        map_info['re_from'] = re.compile(r'({' + map_info['name'] +
-                                         r'[\~\=][^}]*})')
+                mima.groups()
+
+        map_info['iterstring'] = mima.group(0)
+        map_info['arg'] = arg
+        
+
+        lg.debug("iterable name: {name} operator: {operator} pattern: {pattern}".format(**map_info))
+        
+        map_info['re_from'] = re.compile(r'({' + map_info['name']
+                                         + r'[\~\=][^}]*})')
         map_info['re_replace'] = re.compile(r'({' + map_info['name'] + r'})')
-        map_info['start'] = map_info['re_search'].start()
-        map_info['tail'] = len(cl[arg_pos]) - map_info['re_search'].end()
+        map_info['rep_from'] = re.compile(r'({' + map_info['name'] + '})')
+        
+        map_info['start'] = mima.start()
+        map_info['tail'] = len(arg) - mima.end()
 
         if map_info['operator'] == '~':
-            map_info['items'] = map_glob_expand(map_info, cl)
+            expand_function = map_glob_expand
         elif map_info['operator'] == '=':
-            map_info['items'] = map_range_expand(map_info, cl)
+            expand_function = map_range_expand
+        
+        for ncl, pipes in  expand_function(map_info, cl, pipes):
+            for nncl, pipes in expander(ncl, pipes):
+                    yield nncl, pipes
 
-        mapiters.append(map_iter(map_info))
-
-    for map_info_set in itertools.product(*mapiters):
-        newcl = copy.copy(cl)
+    for newcl, pipes in  expander(cl, pipes):
+        
         newinfo = copy.copy(info)
-        newstdout = stdout_file
-        newstderr = stderr_file
-
-        for map_info in map_info_set:
-            newcl = apply_map_info_to_cl(newcl, map_info)
-            if not newstdout is None:
-                newstdout = apply_map_info_to_cl([newstdout], map_info)[0]
-            if not newstderr is None:
-                newstderr = apply_map_info_to_cl([newstderr], map_info)[0]
-
         newinfo['cl'] = newcl
-        newinfo['stdout_file'] = newstdout
-        newinfo['stderr_file'] = newstderr
+        newinfo['stdout_file'] = pipes[0]
+        newinfo['stderr_file'] = pipes[1]
         yield newinfo

@@ -8,10 +8,18 @@ import sys
 
 import arrow
 
+import leip
+
 lg = logging.getLogger(__name__)
 
 
 
+@leip.hook('pre_argparse')
+def main_arg_define(app):
+    if app.executor == 'simple':
+        app.parser.add_argument('-j', '--threads', help='no threads to use', type=int)
+
+    
 def get_deferred_cl(info):
     kap = info['kea_arg_prefix']
 
@@ -21,7 +29,6 @@ def get_deferred_cl(info):
     if info['stderr_file']:
         cl.extend(['{}-e'.format(kap), info['stderr_file']])
     return cl
-
 
 
 def simple_runner(info, defer_run=False):
@@ -34,28 +41,24 @@ def simple_runner(info, defer_run=False):
     stdout_handle = None  # Unless redefined - do not capture stdout
     stderr_handle = None  # Unless redefined - do not capture stderr
 
-    kap = info['kea_arg_prefix']
 
     if defer_run:
         cl = get_deferred_cl(info)
     else:
-        cl = [info['executable']] + info['cl']
-
+        cl = info['cl']
         if info['stdout_file']:
             stdout_handle = open(info['stdout_file'], 'w')
         if info['stderr_file']:
             stderr_handle = open(info['stderr_file'], 'w')
 
-    lg.debug("  cl: %s", cl)
-
     info['start'] = arrow.utcnow()
 
     if defer_run:
-        P = sp.Popen(cl)
+        P = sp.Popen(cl, shell=True)
         info['pid'] = P.pid
         info['submitted'] = arrow.utcnow()
     else:
-        P = sp.Popen(cl, stdout=stdout_handle, stderr=stderr_handle)
+        P = sp.Popen(" ".join(cl), shell=True, stdout=stdout_handle, stderr=stderr_handle)
         info['pid'] = P.pid
         P.communicate()
         info['stop'] = arrow.utcnow()
@@ -63,13 +66,17 @@ def simple_runner(info, defer_run=False):
         info['runtime'] = info['stop'] - info['start']
         info['returncode'] = P.returncode
 
-
 class BasicExecutor(object):
 
     def __init__(self, app):
         lg.debug("Starting executor")
         self.app = app
-        self.threads =  self.app.kea_args.threads
+
+        try:
+            self.threads =  self.app.args.threads
+        except AttributeError:
+            self.threads = 1
+            
         if self.threads < 2:
             self.simple = True
         else:
@@ -88,17 +95,17 @@ class BasicExecutor(object):
 
     def finish(self):
         if not self.simple:
-            lg.warning('waiting for the threads to finish')
+            lg.info('waiting for the threads to finish')
             self.pool.close()
             self.pool.join()
-            lg.warning('finished waiting for threads to finish')
+            lg.debug('finished waiting for threads to finish')
 
 
 class DummyExecutor(BasicExecutor):
 
     def fire(self, info):
         lg.debug("start dummy execution")
-        cl = [info['executable']] + copy.copy(info['cl'])
+        cl = copy.copy(info['cl'])
 
         if info['stdout_file']:
             cl.extend(['>', info['stdout_file']])
@@ -110,8 +117,7 @@ class DummyExecutor(BasicExecutor):
         info['mode'] = 'synchronous'
 
 
-executors = {
-    'simple': BasicExecutor,
-#    'bg': BgExecutor,
-    'dummy': DummyExecutor,
-}
+conf = leip.get_config('kea')
+conf['executors.simple'] = BasicExecutor
+conf['executors.dummy'] = DummyExecutor
+
