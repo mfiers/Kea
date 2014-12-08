@@ -6,6 +6,7 @@ import copy
 from collections import OrderedDict
 import logging
 import os
+import shlex
 import subprocess as sp
 import sys
 
@@ -97,9 +98,19 @@ def kea_argparse(app):
 
     app.args = app.parser.parse_args()
     app.cl_args = app.args.arg
-    app.command = app.args.command
-    app.name = os.path.basename(app.command)
-    app.conf['executable'] = app.command
+
+    cl = [app.args.command]
+    
+    if app.cl_args:
+        cl.extend(app.cl_args)
+
+    #special case - probably used quotes on the command line
+    if len(cl) == 1 and ' ' in cl[0]:
+        cl = shlex.split(cl[0])
+
+    app.cl = cl
+    app.name = os.path.basename(app.cl[0])
+    app.conf['executable'] = app.cl[0]
     conf = get_tool_conf(app, app.name, app.args.version)
     app.conf.stack[1] = conf
 

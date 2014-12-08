@@ -8,7 +8,6 @@ samtools_flagstat = command:"flagstat" input:bamsamfile;
 samtools_index = command:"index" input:bamsamfile output:{anyfile};
 samtools_sort = command:"sort"  { sort_option } input:bamsamfile output_prefix:{anyfile};
 
-
 (* samtools view *)
 view_option = { view_argoption | view_noargoption } ;
 view_argoption = view_argoptionflag argoptionvalue ;

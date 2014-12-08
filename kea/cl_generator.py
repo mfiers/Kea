@@ -150,13 +150,7 @@ def basic_command_line_generator(app):
 
     pipes = [app.args.stdout, app.args.stderr]
 
-    cl = [app.command]
-    if app.cl_args:
-        cl.extend(app.cl_args)
-
-    #special case - probably used quotes on the command line
-    if len(cl) == 1 and ' ' in cl[0]:
-        cl = shlex.split(cl[0])
+    cl = app.cl
 
     cljoin = " ".join(cl)
 

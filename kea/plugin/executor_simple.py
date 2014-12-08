@@ -1,10 +1,13 @@
 
+from collections import deque
 import copy
+import fcntl
 import logging
 from multiprocessing.dummy import Pool as ThreadPool
 import os
 import subprocess as sp
 import sys
+import time
 
 import arrow
 
@@ -13,21 +16,44 @@ import leip
 lg = logging.getLogger(__name__)
 
 
-
 @leip.hook('pre_argparse')
 def main_arg_define(app):
     if app.executor == 'simple':
         app.parser.add_argument('-j', '--threads', help='no threads to use', type=int)
 
+
+#thanks: https://gist.github.com/sebclaeys/1232088
+def non_block_read(stream, chunk_size=10000):
+    #print('xxx', type(stream))
+    fd = stream.fileno()
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    try:
+        return stream.read()
+    except:
+        return ""
+
+    
+def streamer(src, tar, dq):
+    d = non_block_read(src)
+    if d is None:
+        return 0
+    #print(type(d))
+    # dd = d #d.decode('utf-8')
+
+    dq.append(d.decode('utf-8'))
+    d_len = len(d)
+    tar.write(d) #d.encode('utf-8'))
+    return d_len
+
     
 def get_deferred_cl(info):
-    kap = info['kea_arg_prefix']
-
-    cl = [info['kea_executable']] + info['cl']
+    dcl = ['kea']
     if info['stdout_file']:
-        cl.extend(['{}-o'.format(kap), info['stdout_file']])
+        dcl.extend(['-o', info['stdout_file']])
     if info['stderr_file']:
-        cl.extend(['{}-e'.format(kap), info['stderr_file']])
+        dcl.extend(['-e', info['stderr_file']])
+    dcl.extend(info['cl'])
     return cl
 
 
@@ -38,8 +64,8 @@ def simple_runner(info, defer_run=False):
     executed in the second stage.
     """
 
-    stdout_handle = None  # Unless redefined - do not capture stdout
-    stderr_handle = None  # Unless redefined - do not capture stderr
+    stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
+    stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
 
     if defer_run:
@@ -47,8 +73,10 @@ def simple_runner(info, defer_run=False):
     else:
         cl = info['cl']
         if info['stdout_file']:
+            lg.debug('capturing stdout in %s', info['stdout_file'])
             stdout_handle = open(info['stdout_file'], 'w')
         if info['stderr_file']:
+            lg.debug('capturing stderr in %s', info['stderr_file'])
             stderr_handle = open(info['stderr_file'], 'w')
 
     info['start'] = arrow.utcnow()
@@ -58,14 +86,47 @@ def simple_runner(info, defer_run=False):
         info['pid'] = P.pid
         info['submitted'] = arrow.utcnow()
     else:
-        P = sp.Popen(" ".join(cl), shell=True, stdout=stdout_handle, stderr=stderr_handle)
+        P = sp.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
         info['pid'] = P.pid
-        P.communicate()
-        info['stop'] = arrow.utcnow()
+
+        stdout_dq = deque(maxlen=100)
+        stderr_dq = deque(maxlen=100)
+
+        stdout_len = 0
+        stderr_len = 0
+        
+        while True:
+            pc = P.poll()
+
+            if not pc is None:
+                break
+
+            #read_proc_status(td)
+            time.sleep(0.1)
+
+            try:
+                stdout_len += streamer(P.stdout, stdout_handle, stdout_dq)
+                stderr_len += streamer(P.stderr, stderr_handle, stderr_dq)
+
+                
+            except IOError as e:
+                #it appears as if one of the pipes has failed.
+                if e.errno == 32:
+                    errors.append("Broken Pipe")
+                    #broken pipe - no problem.
+                else:
+                    message('err', str(dir(e)))
+                    errors.append("IOError: " + str(e))
+                break
+
         info['stop'] = arrow.utcnow()
         info['runtime'] = info['stop'] - info['start']
         info['returncode'] = P.returncode
-
+        info['stdout_len'] = stdout_len
+        info['stderr_len'] = stderr_len
+        import pprint
+        pprint.pprint(dict(info))
+    
 class BasicExecutor(object):
 
     def __init__(self, app):
