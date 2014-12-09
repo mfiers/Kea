@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2014, 12, 8, 20, 37, 23, 0)
+__version__ = (2014, 12, 9, 12, 10, 50, 1)
 
 __all__ = [
     'samtoolsParser',
@@ -51,7 +51,13 @@ class samtoolsParser(Parser):
                 self._samtools_index_()
             with self._option():
                 self._samtools_sort_()
+            with self._option():
+                self._samtools_empty_()
             self._error('no available options')
+
+    @graken()
+    def _samtools_empty_(self):
+        pass
 
     @graken()
     def _samtools_view_(self):
@@ -60,15 +66,16 @@ class samtoolsParser(Parser):
 
         def block1():
             self._view_option_()
+            self.ast['options'] = self.last_node
         self._closure(block1)
 
-        def block3():
+        def block4():
             self._bamsamfile_()
-        self._closure(block3)
+        self._closure(block4)
         self.ast['input'] = self.last_node
 
         self.ast._define(
-            ['command', 'input'],
+            ['command', 'options', 'input'],
             []
         )
 
@@ -79,18 +86,19 @@ class samtoolsParser(Parser):
 
         def block1():
             self._merge_option_()
+            self.ast['options'] = self.last_node
         self._closure(block1)
         self._bamsamfile_()
         self.ast['output'] = self.last_node
 
-        def block4():
+        def block5():
             self._bamsamfile_()
-        self._positive_closure(block4)
+        self._positive_closure(block5)
 
         self.ast['input'] = self.last_node
 
         self.ast._define(
-            ['command', 'output', 'input'],
+            ['command', 'options', 'output', 'input'],
             []
         )
 
@@ -130,17 +138,18 @@ class samtoolsParser(Parser):
 
         def block1():
             self._sort_option_()
+            self.ast['options'] = self.last_node
         self._closure(block1)
         self._bamsamfile_()
         self.ast['input'] = self.last_node
 
-        def block4():
+        def block5():
             self._anyfile_()
-        self._closure(block4)
+        self._closure(block5)
         self.ast['output_prefix'] = self.last_node
 
         self.ast._define(
-            ['command', 'input', 'output_prefix'],
+            ['command', 'options', 'input', 'output_prefix'],
             []
         )
 
@@ -213,11 +222,11 @@ class samtoolsParser(Parser):
 
     @graken()
     def _merge_argoptionflag_(self):
-        self._pattern(r'-[l@Rh]')
+        self._pattern(r'-[l@Rh]+')
 
     @graken()
     def _merge_noargoption_(self):
-        self._pattern(r'-nruf1?')
+        self._pattern(r'-[nruf1]+')
 
     @graken()
     def _argoptionvalue_(self):
@@ -237,6 +246,9 @@ class samtoolsSemantics(object):
         return ast
 
     def command(self, ast):
+        return ast
+
+    def samtools_empty(self, ast):
         return ast
 
     def samtools_view(self, ast):

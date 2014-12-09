@@ -124,9 +124,8 @@ def simple_runner(info, defer_run=False):
         info['returncode'] = P.returncode
         info['stdout_len'] = stdout_len
         info['stderr_len'] = stderr_len
-        import pprint
-        pprint.pprint(dict(info))
-    
+
+        
 class BasicExecutor(object):
 
     def __init__(self, app):

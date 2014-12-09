@@ -1,3 +1,5 @@
+samtools 
+
 samtools view input.bam
 
 samtools view -b input.bam

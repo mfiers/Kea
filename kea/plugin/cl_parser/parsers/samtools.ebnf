@@ -1,12 +1,13 @@
 start = "samtools" command $;
-command = samtools_view | samtools_merge | samtools_flagstat | samtools_index | samtools_sort ;
+command =  samtools_view | samtools_merge | samtools_flagstat | samtools_index | samtools_sort | samtools_empty ;
 
 (* command defintions *)
-samtools_view = command:"view" { view_option } input:{bamsamfile} ;
-samtools_merge = command:"merge" { merge_option } output:bamsamfile input:{bamsamfile}+;
+samtools_empty = () ;
+samtools_view = command:"view" { options:view_option } input:{bamsamfile} ;
+samtools_merge = command:"merge" { options:merge_option } output:bamsamfile input:{bamsamfile}+;
 samtools_flagstat = command:"flagstat" input:bamsamfile;
 samtools_index = command:"index" input:bamsamfile output:{anyfile};
-samtools_sort = command:"sort"  { sort_option } input:bamsamfile output_prefix:{anyfile};
+samtools_sort = command:"sort"  { options:sort_option } input:bamsamfile output_prefix:{anyfile};
 
 (* samtools view *)
 view_option = { view_argoption | view_noargoption } ;
@@ -23,8 +24,8 @@ sort_noargoption = /-[nfo]+/ ;
 (* samtools merge *)
 merge_option = { merge_argoption | merge_noargoption } ;
 merge_argoption = merge_argoptionflag argoptionvalue ;
-merge_argoptionflag = /-[l@Rh]/ ;
-merge_noargoption = /-nruf1?/ ;
+merge_argoptionflag = /-[l@Rh]+/ ;
+merge_noargoption = /-[nruf1]+/ ;
 
 (* generic defintions *)
 argoptionvalue = /[^ ]+/ ;
