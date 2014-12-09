@@ -30,6 +30,7 @@ setup(name='kea',
           'lockfile',
           'arrow',
           'grako>3',
+          'psutil',
       ],
       classifiers=[
           'Development Status :: 4 - Beta',

@@ -10,7 +10,7 @@ from grako.exceptions import FailedParse
 import leip
 
 lg = logging.getLogger(__name__)
-lg.setLevel(logging.DEBUG)
+#lg.setLevel(logging.DEBUG)
 
 PMODS = {}
 

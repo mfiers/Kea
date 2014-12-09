@@ -2,6 +2,7 @@
 from collections import deque
 import copy
 import fcntl
+import hashlib
 import logging
 from multiprocessing.dummy import Pool as ThreadPool
 import os
@@ -10,6 +11,7 @@ import sys
 import time
 
 import arrow
+import psutil
 
 import leip
 
@@ -34,13 +36,19 @@ def non_block_read(stream, chunk_size=10000):
         return ""
 
     
-def streamer(src, tar, dq):
+def streamer(src, tar, dq, hsh=None):
+    """
+    :param src: input stream
+    :param tar: target stream
+    :param dq: deque object keeping a tail of chunks for this stream
+    :param hsh: hash object to calculate a checksum 
+    """
     d = non_block_read(src)
     if d is None:
         return 0
-    #print(type(d))
-    # dd = d #d.decode('utf-8')
-
+    if hsh:
+        hsh.update(d)
+    
     dq.append(d.decode('utf-8'))
     d_len = len(d)
     tar.write(d) #d.encode('utf-8'))
@@ -56,7 +64,33 @@ def get_deferred_cl(info):
     dcl.extend(info['cl'])
     return cl
 
-
+def store_process_info(info):
+    psu = info.get('psutil_process')
+    if not psu: return
+    try:
+        info['ps_nice'] = psu.nice()
+        try:
+            ioc = psu.io_counters()
+            info['ps_io_read_count'] = ioc.read_count
+        except AttributeError:
+            #may not have iocounters (osx)
+            pass
+        info['ps_num_fds'] = psu.num_fds()
+        info['ps_threads'] = psu.num_threads()
+        cputime = psu.cpu_times()
+        info['ps_cputime_user'] = cputime.user 
+        info['ps_cputime_system'] = cputime.system
+        meminfo = psu.memory_info()
+        for f in meminfo._fields:
+            info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
+            info['ps_meminfo_max_{}'.format(f)] = \
+                    max(getattr(meminfo, f),
+                        info.get('ps_meminfo_max_{}'.format(f), 0))
+        
+    except psutil.NoSuchProcess:
+        #process went away??
+        return
+            
 def simple_runner(info, defer_run=False):
     """
     Defer run executes the run with the current executor, but with
@@ -87,13 +121,24 @@ def simple_runner(info, defer_run=False):
         info['submitted'] = arrow.utcnow()
     else:
         P = sp.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
-        info['pid'] = P.pid
 
+        info['pid'] = P.pid
+        try:
+            psu = psutil.Process(P.pid)
+            info['psutil_process'] = psu
+            store_process_info(info)
+        except psutil.NoSuchProcess:
+            #job may have already finished - ignore
+            pass
+        
         stdout_dq = deque(maxlen=100)
         stderr_dq = deque(maxlen=100)
 
         stdout_len = 0
         stderr_len = 0
+
+        stdout_sha = hashlib.sha1()
+        stderr_sha = hashlib.sha1()
         
         while True:
             pc = P.poll()
@@ -102,13 +147,11 @@ def simple_runner(info, defer_run=False):
                 break
 
             #read_proc_status(td)
-            time.sleep(0.1)
-
+            time.sleep(0.2)
+            store_process_info(info)
             try:
-                stdout_len += streamer(P.stdout, stdout_handle, stdout_dq)
-                stderr_len += streamer(P.stderr, stderr_handle, stderr_dq)
-
-                
+                stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
+                stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
             except IOError as e:
                 #it appears as if one of the pipes has failed.
                 if e.errno == 32:
@@ -119,13 +162,19 @@ def simple_runner(info, defer_run=False):
                     errors.append("IOError: " + str(e))
                 break
 
+        if stdout_len > 0:
+            info['stdout_sha1'] = stdout_sha.hexdigest()
+        if stderr_len > 0:
+            info['stderr_sha1'] = stderr_sha.hexdigest()
         info['stop'] = arrow.utcnow()
         info['runtime'] = info['stop'] - info['start']
+        if 'psutil_process' in info:
+            del info['psutil_process']
         info['returncode'] = P.returncode
         info['stdout_len'] = stdout_len
         info['stderr_len'] = stderr_len
 
-        
+
 class BasicExecutor(object):
 
     def __init__(self, app):

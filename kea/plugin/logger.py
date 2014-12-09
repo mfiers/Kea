@@ -18,6 +18,34 @@ def to_str(s):
     else:
         return str(s)
 
+
+@leip.hook('pre_argparse')
+def logger_arg_define(app):
+    app.parser.add_argument('-S', '--report_screen', action='store_true')
+
+@leip.hook('post_fire')
+def log_screen(app, jinf):
+    if not app.args.report_screen:
+        return
+
+    def dictprint(d, pref=""):
+        mxkyln = max([len(x) for x in d.keys()])
+        fs = pref + '{:<' + str(mxkyln) + '} : {}'
+        for k in sorted(d.keys()):        
+            v = d[k]
+            if k == 'cl':
+                v = " ".join(v)
+            if v is None: continue
+            if v == "": continue
+            if not isinstance(v, dict):
+                print fs.format(k, v)
+            else:
+                dictprint(v, '{}.'.format(k))
+                
+    print '-' * 80
+    dictprint(jinf)
+    print '-' * 80
+    
 @leip.hook('post_run')
 def log_cl(app):
     all_jinf = app.all_jinf

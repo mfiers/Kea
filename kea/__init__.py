@@ -141,8 +141,6 @@ def run_kea(app):
         jinf['executor'] = executor_name
         cl = jinf['cl']
         lg.debug("command line arguments: %s", " ".join(cl))
-#        if app.conf.get('command_echo'):
-#            print(" ".join(cl))
 
         jinf['args'] = " ".join(app.cl_args)
         jinf['cwd'] = os.getcwd()
@@ -151,26 +149,4 @@ def run_kea(app):
         executor.fire(jinf)
         app.run_hook('post_fire', jinf)
         
-
     executor.finish()
-
-#    app.run_hook('post_run', all_jinf)
-
-
-# @leip.hook('prepare')
-# def find_executable(app):
-
-#     lg.debug("find executable location")
-
-#     if 'executable' in app.conf:
-#         return
-
-#     this = sys.argv[0]
-#     P = sp.Popen(['which', '-a', app.conf['appname']], stdout=sp.PIPE)
-#     out, err = P.communicate()
-#     for line in out.strip().split("\n"):
-#         if os.path.samefile(line, this):
-#             # this is the called executable wrapper - ignore
-#             continue
-#         else:
-#             app.conf['executable'] = line.strip()
