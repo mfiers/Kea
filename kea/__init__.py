@@ -37,6 +37,8 @@ class Kea(leip.app):
         # Call Leip - but we do not want the argparser:
         super(Kea, self).__init__('kea', disable_commands=True)
 
+        self.all_jinf = [] #store job reports
+        
         # replace the config by a stack so we can backfill
         self.conf = fantail.Fanstack([self.conf, fantail.Fantail()])
 
