@@ -147,7 +147,7 @@ def basic_command_line_generator(app):
     """
     
     info = OrderedDict()
-
+    
     pipes = [app.args.stdout, app.args.stderr]
 
     cl = app.cl
@@ -161,6 +161,7 @@ def basic_command_line_generator(app):
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
         info['cl'] = cl
+        info['run_no'] = 1
         info['stdout_file'] = pipes[0]
         info['stderr_file'] = pipes[1]
         yield info
@@ -210,10 +211,13 @@ def basic_command_line_generator(app):
             for nncl, pipes in expander(ncl, pipes):
                     yield nncl, pipes
 
+    no = 0
     for newcl, pipes in  expander(cl, pipes):
+        no += 1
         
         newinfo = copy.copy(info)
         newinfo['cl'] = newcl
+        newinfo['run_no'] = no
         newinfo['stdout_file'] = pipes[0]
         newinfo['stderr_file'] = pipes[1]
         yield newinfo
