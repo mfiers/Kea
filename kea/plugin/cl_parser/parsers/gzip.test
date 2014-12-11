@@ -1,0 +1,9 @@
+gzip
+
+gzip test.file
+
+gzip -9 test.file
+
+gzip --best test.file
+
+gzip -S .tst test.file -9

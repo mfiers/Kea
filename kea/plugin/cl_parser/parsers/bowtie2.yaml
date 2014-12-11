@@ -1,0 +1,5 @@
+bowtie2
+- -x db!!/\S+/
+- -1 fq_input_forward!!/\S+/
+- -2 fq_input_reverse!!/\S+/
+$

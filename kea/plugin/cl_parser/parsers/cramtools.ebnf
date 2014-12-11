@@ -7,7 +7,7 @@ start =
           {
               (
               "--capture-tags"
-              /.[QC]+./
+              /.*/
               )
           |
           "--capture-all-tags"
@@ -16,7 +16,17 @@ start =
           |
               (
               "-I"
-              input:/.*.bam/
+              input_bam:/.*.bam/
+              )
+          |
+              (
+              "-O"
+              output_cram:/.*.cram/
+              )
+          |
+              (
+              "-R"
+              input_reference_genome:/.*/
               )
           }
         )

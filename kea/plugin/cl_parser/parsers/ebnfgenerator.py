@@ -21,10 +21,13 @@ def process_endnode(n):
         return "()"
     if n.startswith("sp#"):
         return n[3:]
+    if re.search(r'^[a-zA-Z_]+!!', n):
+        name, nnode = n.split("!!", 1)
+        return "{}:{}".format(name, process_node(nnode))
     if n.startswith("/") and n.endswith("/"):
-        return n
+        return n + " /\s*/"
     else:
-        return  '"{}"'.format(n)
+        return  '"{}" /\s*/'.format(n)
 
 def process_listnode(n):
     return ["("] + map(process_node, n), [")"]

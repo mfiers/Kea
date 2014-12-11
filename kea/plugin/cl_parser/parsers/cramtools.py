@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2014, 12, 11, 16, 18, 27, 3)
+__version__ = (2014, 12, 11, 18, 8, 46, 3)
 
 __all__ = [
     'cramtoolsParser',
@@ -48,7 +48,7 @@ class cramtoolsParser(Parser):
                                     with self._option():
                                         with self._group():
                                             self._token('--capture-tags')
-                                            self._pattern(r'.[QC]+.')
+                                            self._pattern(r'.*')
                                     with self._option():
                                         self._token('--capture-all-tags')
                                     with self._option():
@@ -57,14 +57,24 @@ class cramtoolsParser(Parser):
                                         with self._group():
                                             self._token('-I')
                                             self._pattern(r'.*.bam')
-                                            self.ast['input'] = self.last_node
-                                    self._error('expecting one of: --capture-all-tags --capture-tags --encrypt -I')
+                                            self.ast['input_bam'] = self.last_node
+                                    with self._option():
+                                        with self._group():
+                                            self._token('-O')
+                                            self._pattern(r'.*.cram')
+                                            self.ast['output_cram'] = self.last_node
+                                    with self._option():
+                                        with self._group():
+                                            self._token('-R')
+                                            self._pattern(r'.*')
+                                            self.ast['input_reference_genome'] = self.last_node
+                                    self._error('expecting one of: --capture-all-tags --capture-tags --encrypt -I -O -R')
                             self._closure(block1)
                     with self._option():
                         with self._group():
                             self._token('bam')
 
-                            def block4():
+                            def block6():
                                 with self._choice():
                                     with self._option():
                                         with self._group():
@@ -85,7 +95,7 @@ class cramtoolsParser(Parser):
                                                     self._error('expecting one of: -f -required-flags')
                                             self._token('re#\\w+')
                                     self._error('expecting one of: --password -f -p -required-flags')
-                            self._closure(block4)
+                            self._closure(block6)
                     with self._option():
                         pass
                     self._error('expecting one of: bam cram')
@@ -93,7 +103,7 @@ class cramtoolsParser(Parser):
             self._check_eof()
 
         self.ast._define(
-            ['input'],
+            ['input_bam', 'output_cram', 'input_reference_genome'],
             []
         )
 

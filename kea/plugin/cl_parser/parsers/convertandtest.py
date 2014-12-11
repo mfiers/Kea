@@ -17,20 +17,33 @@ if len(sys.argv) > 1:
 else:
     select = ""
 
+for ymlf in glob.glob('*.yaml'):
+    ebnffile = ymlf.replace('.yaml', '.ebnf')
+    if os.path.exists(ebnffile):
+        ebnftime = os.stat(ebnffile).st_mtime
+        ymltime = os.stat(ymlf).st_mtime
+        if ebnftime > ymltime:
+            print "Skipping %s (not changed)" % ymlf
+            continue
+
+    print "convert %s -> %s" % (ymlf, ebnffile)
+    cl = './ebnfgenerator.py {} > {}'.format(ymlf, ebnffile)
+    os.system(cl)
+
 for ebnf in glob.glob('*.ebnf'):
     pyfile = ebnf.replace('.ebnf', '.py')
+    testfile = ebnf.replace('.ebnf', '.test')
 
     if os.path.exists(pyfile):
         pyfiletime = os.stat(pyfile).st_mtime
         ebnffiletime = os.stat(ebnf).st_mtime
-        if pyfiletime >= ebnffiletime:
-            #print pyfiletime
-            #print ebnffiletime
-            #print pyfiletime > ebnffiletime
+        testtime =  os.stat(testfile).st_mtime
+        if pyfiletime >= ebnffiletime and \
+           pyfiletime >= testtime:
             print("skipping %s (not changed" % ebnf)
             continue
 
-    cl = "grako {} > {}".format(ebnf, pyfile)
+    cl = "grako -w ' ' {} -o {}".format(ebnf, pyfile)
     P = sp.Popen(cl, shell=True)
     P.communicate()
     if P.returncode != 0:
@@ -38,8 +51,6 @@ for ebnf in glob.glob('*.ebnf'):
         os.unlink(pyfile)
         exit(-1)
 
-    
-    testfile = ebnf.replace('.ebnf', '.test')
     
     testsnippet = ""
     def test(pyfile, snip):
