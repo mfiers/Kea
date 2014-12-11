@@ -6,6 +6,7 @@ import hashlib
 import logging
 from multiprocessing.dummy import Pool as ThreadPool
 import os
+import socket
 import subprocess as sp
 import sys
 import time
@@ -69,6 +70,8 @@ def store_process_info(info):
     if not psu: return
     try:
         info['ps_nice'] = psu.nice()
+        info['username'] = psu.username()
+
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
         cputime = psu.cpu_times()
@@ -88,7 +91,7 @@ def store_process_info(info):
             #may not have iocounters (osx)
             pass
 
-    except psutil.NoSuchProcess, psutil.AccessDenied:
+    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
         #process went away??
         return
             
@@ -102,6 +105,16 @@ def simple_runner(info, defer_run=False):
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
+    psvm = psutil.virtual_memory()
+    info['ps_sys_vmem_total'] = psvm.total
+    info['ps_sys_vmem_perc'] = psvm.percent
+    info['ps_sys_vmem_avail'] = psvm.available
+    info['ps_sys_vmem_free'] = psvm.free
+    pssm = psutil.swap_memory()
+    info['ps_sys_swap_free'] = pssm.free
+    info['ps_sys_swap_perc'] = pssm.percent
+    info['hostname'] = socket.gethostname()
+    info['fqdn'] = socket.getfqdn()
 
     if defer_run:
         cl = get_deferred_cl(info)
@@ -128,7 +141,7 @@ def simple_runner(info, defer_run=False):
             psu = psutil.Process(P.pid)
             info['psutil_process'] = psu
             store_process_info(info)
-        except psutil.NoSuchProcess, psutil.AccessDenied:
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
             #job may have already finished - ignore
             pass
         

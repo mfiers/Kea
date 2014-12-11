@@ -19,11 +19,23 @@ else:
 
 for ebnf in glob.glob('*.ebnf'):
     pyfile = ebnf.replace('.ebnf', '.py')
+
+    if os.path.exists(pyfile):
+        pyfiletime = os.stat(pyfile).st_mtime
+        ebnffiletime = os.stat(ebnf).st_mtime
+        if pyfiletime >= ebnffiletime:
+            #print pyfiletime
+            #print ebnffiletime
+            #print pyfiletime > ebnffiletime
+            print("skipping %s (not changed" % ebnf)
+            continue
+
     cl = "grako {} > {}".format(ebnf, pyfile)
     P = sp.Popen(cl, shell=True)
     P.communicate()
     if P.returncode != 0:
         print "compilation fail", ebnf
+        os.unlink(pyfile)
         exit(-1)
 
     
@@ -32,7 +44,6 @@ for ebnf in glob.glob('*.ebnf'):
     testsnippet = ""
     def test(pyfile, snip):
 
-#        print(select, select in snip)
         if select and (not select in snip):
             return
         
@@ -67,15 +78,13 @@ for ebnf in glob.glob('*.ebnf'):
             return True
         elif shouldfail and rc == 0:
             print "NOT OK (did not fail)", snip
-            if VERBOSE:
-                print out
-                print err
+            print out
+            print err
             exit(-1)
         else:
             print "NOT OK", snip
-            if VERBOSE:
-                print out
-                print err
+            print out
+            print err
             exit(-1)
         
     with open(testfile) as F:

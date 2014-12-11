@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2014, 12, 9, 12, 10, 50, 1)
+__version__ = (2014, 12, 11, 12, 59, 52, 3)
 
 __all__ = [
     'samtoolsParser',

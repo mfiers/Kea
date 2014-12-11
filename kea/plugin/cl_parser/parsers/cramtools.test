@@ -1,0 +1,12 @@
+cramtools
+
+cramtools cram
+
+cramtools cram --capture-tags "AA:VC:QQ"
+
+cramtools cram -I input.bam -O output.cram -R reference_genome.fa 
+
+cramtools cram --capture-tags "AA:VC:QQ" -I input.bam -O output.cram -R reference_genome.fa 
+
+cramtools cram -I input.bam -O output.cram -R reference_genome.fa 
+

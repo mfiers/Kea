@@ -40,14 +40,14 @@ Subject:
 {%- endif %}
 
 {% if all_jinf|length > 1 -%}
-<h4>Template Command Line</h4>
+<h3>Template Command Line</h3>
 <pre>
   {{ clj }}
 </pre>
 
-<h4>Actual command lines</h4>
+<h3>Actual command lines</h3>
 {%- else -%}
-<h4>Command line</h4>{% endif %}
+<h3>Command line</h3>{% endif %}
 
 <pre>{% for jinf in all_jinf -%}
 {{ jinf.run_no }}.  {{ jinf['cl']|join(" ") }}
@@ -55,7 +55,7 @@ Subject:
 {% endfor %}
 </pre>
 {%- if all_jinf|length > 1 %}
-<h4>Run stats</h4>
+<h3>Run stats</h3>
  
 <table>
 <tr>
@@ -86,11 +86,13 @@ Subject:
 {%- endfor %}
 </table>
 {% endif %}
+
 {% for jinf in all_jinf %}
-<h4>Full run report {% if all_jinf|length > 1 %} ({{ jinf.run_no }}) {% endif %}
+<h3>Full run report {% if all_jinf|length > 1 %} ({{ jinf.run_no }}) {% endif %}</h3>
 <table>
 {% for k in jinf %}
-<tr><th style="text-align: left;">{{k}}</th>
+<tr {% if loop.cycle(False, True) -%}style="background-color: #EEEEEE;"
+    {%- endif %}><th style="text-align: left;">{{k}}</th>
     {%- if k == "cl" %}
       <span style="font-family:Lucida Console,Bitstream Vera Sans Mono,Courier New,monospace;">{{ " ".join(jinf.cl) }}</span>
     {%- else %}
@@ -143,7 +145,6 @@ def mail(app):
 
     message = jinja2.Template(HTML_MESSAGE)
     message = message.render(data)
-    print(message)
 
     p = sp.Popen("sendmail %s" % mailto, stdin=sp.PIPE, shell=True)
     p.communicate(message.encode('utf-8'))
