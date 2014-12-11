@@ -69,12 +69,6 @@ def store_process_info(info):
     if not psu: return
     try:
         info['ps_nice'] = psu.nice()
-        try:
-            ioc = psu.io_counters()
-            info['ps_io_read_count'] = ioc.read_count
-        except AttributeError:
-            #may not have iocounters (osx)
-            pass
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
         cputime = psu.cpu_times()
@@ -86,8 +80,15 @@ def store_process_info(info):
             info['ps_meminfo_max_{}'.format(f)] = \
                     max(getattr(meminfo, f),
                         info.get('ps_meminfo_max_{}'.format(f), 0))
-        
-    except psutil.NoSuchProcess:
+
+        try:
+            ioc = psu.io_counters()
+            info['ps_io_read_count'] = ioc.read_count
+        except AttributeError:
+            #may not have iocounters (osx)
+            pass
+
+    except psutil.NoSuchProcess, psutil.AccessDenied:
         #process went away??
         return
             
@@ -127,7 +128,7 @@ def simple_runner(info, defer_run=False):
             psu = psutil.Process(P.pid)
             info['psutil_process'] = psu
             store_process_info(info)
-        except psutil.NoSuchProcess:
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             #job may have already finished - ignore
             pass
         
