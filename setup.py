@@ -30,6 +30,7 @@ setup(name='kea',
           'lockfile',
           'fantail',
           'grako>3',
+          'jinja2',
           'psutil',
       ],
       classifiers=[
