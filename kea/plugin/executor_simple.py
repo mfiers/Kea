@@ -1,17 +1,17 @@
 
 from collections import deque
 import copy
+from datetime import datetime
 import fcntl
 import hashlib
 import logging
 from multiprocessing.dummy import Pool as ThreadPool
 import os
-import socket
 import subprocess as sp
 import sys
 import time
 
-import arrow
+
 import psutil
 
 import leip
@@ -70,8 +70,6 @@ def store_process_info(info):
     if not psu: return
     try:
         info['ps_nice'] = psu.nice()
-        info['username'] = psu.username()
-
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
         cputime = psu.cpu_times()
@@ -79,7 +77,7 @@ def store_process_info(info):
         info['ps_cputime_system'] = cputime.system
         meminfo = psu.memory_info()
         for f in meminfo._fields:
-            info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
+            #info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
             info['ps_meminfo_max_{}'.format(f)] = \
                     max(getattr(meminfo, f),
                         info.get('ps_meminfo_max_{}'.format(f), 0))
@@ -91,7 +89,7 @@ def store_process_info(info):
             #may not have iocounters (osx)
             pass
 
-    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+    except psutil.NoSuchProcess, psutil.AccessDenied:
         #process went away??
         return
             
@@ -105,16 +103,6 @@ def simple_runner(info, defer_run=False):
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
-    psvm = psutil.virtual_memory()
-    info['ps_sys_vmem_total'] = psvm.total
-    info['ps_sys_vmem_perc'] = psvm.percent
-    info['ps_sys_vmem_avail'] = psvm.available
-    info['ps_sys_vmem_free'] = psvm.free
-    pssm = psutil.swap_memory()
-    info['ps_sys_swap_free'] = pssm.free
-    info['ps_sys_swap_perc'] = pssm.percent
-    info['hostname'] = socket.gethostname()
-    info['fqdn'] = socket.getfqdn()
 
     if defer_run:
         cl = get_deferred_cl(info)
@@ -127,12 +115,12 @@ def simple_runner(info, defer_run=False):
             lg.debug('capturing stderr in %s', info['stderr_file'])
             stderr_handle = open(info['stderr_file'], 'w')
 
-    info['start'] = arrow.utcnow()
+    info['start'] = datetime.utcnow()
 
     if defer_run:
         P = sp.Popen(cl, shell=True)
         info['pid'] = P.pid
-        info['submitted'] = arrow.utcnow()
+        info['submitted'] = datetime.utcnow()
     else:
         P = sp.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
@@ -141,7 +129,7 @@ def simple_runner(info, defer_run=False):
             psu = psutil.Process(P.pid)
             info['psutil_process'] = psu
             store_process_info(info)
-        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             #job may have already finished - ignore
             pass
         
@@ -180,8 +168,8 @@ def simple_runner(info, defer_run=False):
             info['stdout_sha1'] = stdout_sha.hexdigest()
         if stderr_len > 0:
             info['stderr_sha1'] = stderr_sha.hexdigest()
-        info['stop'] = arrow.utcnow()
-        info['runtime'] = info['stop'] - info['start']
+        info['stop'] = datetime.utcnow()
+        info['runtime'] = (info['stop'] - info['start']).total_seconds()
         if 'psutil_process' in info:
             del info['psutil_process']
         info['returncode'] = P.returncode
