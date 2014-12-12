@@ -22,9 +22,18 @@ def to_str(s):
 @leip.hook('pre_argparse')
 def logger_arg_define(app):
     app.parser.add_argument('-S', '--report_screen', action='store_true')
+    app.parser.add_argument('-Y', '--report_yaml', action='store_true')
 
 @leip.hook('post_fire')
 def log_screen(app, jinf):
+    
+    if app.args.report_yaml:
+        import yaml
+        fn = '{}.report.yaml'.format(jinf['run_uid'])
+        with open(fn, 'w') as F:
+            yaml.dump(jinf, F, default_flow_style=False)
+        
+    
     if not app.args.report_screen:
         return
 
@@ -33,8 +42,9 @@ def log_screen(app, jinf):
         fs = pref + '{:<' + str(mxkyln) + '} : {}'
         for k in sorted(d.keys()):        
             v = d[k]
-            if k == 'cl':
+            if k in ['cl', 'template_cl']:
                 v = " ".join(v)
+                
             if v is None: continue
             if v == "": continue
             if not isinstance(v, dict):
@@ -42,7 +52,7 @@ def log_screen(app, jinf):
             else:
                 dictprint(v, '{}.'.format(k))
                 
-    print '-' * 80
+    print '--KEA-REPORT' + '-' * 68
     dictprint(jinf)
     print '-' * 80
     
