@@ -89,7 +89,7 @@ def store_process_info(info):
             #may not have iocounters (osx)
             pass
 
-    except psutil.NoSuchProcess, psutil.AccessDenied:
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
         #process went away??
         return
             
@@ -117,6 +117,16 @@ def simple_runner(info, defer_run=False):
 
     info['start'] = datetime.utcnow()
 
+    #system psutil stuff
+    info['ps_sys_cpucount'] = psutil.cpu_count()
+    psu_vm = psutil.virtual_memory()
+    for field in psu_vm._fields:
+        info['ps_sys_vmem_{}'.format(field)] = getattr(psu_vm, field)
+    psu_sw = psutil.swap_memory()
+    for field in psu_sw._fields:
+        info['ps_sys_swap_{}'.format(field)] = getattr(psu_sw, field)
+
+
     if defer_run:
         P = sp.Popen(cl, shell=True)
         info['pid'] = P.pid
@@ -129,7 +139,7 @@ def simple_runner(info, defer_run=False):
             psu = psutil.Process(P.pid)
             info['psutil_process'] = psu
             store_process_info(info)
-        except psutil.NoSuchProcess, psutil.AccessDenied:
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             #job may have already finished - ignore
             pass
         
@@ -151,6 +161,7 @@ def simple_runner(info, defer_run=False):
             #read_proc_status(td)
             time.sleep(0.2)
             store_process_info(info)
+
             try:
                 stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
                 stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
