@@ -75,12 +75,14 @@ def listprint(lst, indent=""):
         elif isinstance(i, list) or isinstance(i, tuple):
             listprint(i, indent+"  ")
 
+def blockparser(F):
+    
+    for line in F:
+    
 with open(sys.argv[1]) as F:
-    data = yaml.load(F.read())
-    print("start = ")
-#    from pprint import pprint
-#    pprint(process_node(data))
+    rv = ["start = "]
+    for block in blockparser(F):
+        print(block)
+    
+#    listprint(process_node(data))
 #    print(" ; ")
-#    print("start = ")
-    listprint(process_node(data))
-    print(" ; ")
