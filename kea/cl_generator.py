@@ -17,6 +17,7 @@ input:
 """
 
 import copy
+from datetime import datetime
 import glob
 import logging
 import itertools
@@ -140,7 +141,21 @@ def apply_map_info_to_cl(newcl, map_info):
 
     return newcl
 
-
+def get_uid(app, runno=None):
+    if runno is None:
+        no = ''
+    else:
+        no = '{}.'.format(runno)
+        
+    if app.args.uid:
+        uid = '{}.{}{}'.format(app.name, no, app.args.uid)
+    else:
+        now = datetime.now()
+        # YYYY-MM-DDThh:mm:ss.sTZD (eg 1997-07-16T19:20:30.45+01:00)
+        uid = '{}.{}{}'.format(app.name, no, now.strftime("%Y-%m-%dT%H:%M:%S"))
+    return(uid)
+    
+    
 def basic_command_line_generator(app):
     """
     Most basic command line generator possible
@@ -161,12 +176,14 @@ def basic_command_line_generator(app):
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
         info['cl'] = cl
-        info['run_no'] = 1
+        info['run_no'] = 0
+        info['run_uid'] = get_uid(app)
         info['stdout_file'] = pipes[0]
         info['stderr_file'] = pipes[1]
         yield info
         return
 
+    info['template_cl'] = cl
     #define iterators for each of the definitions
 
     #lg.setLevel(logging.DEBUG)
@@ -216,6 +233,7 @@ def basic_command_line_generator(app):
         no += 1
         
         newinfo = copy.copy(info)
+        newinfo['run_uid'] = get_uid(app, no)
         newinfo['cl'] = newcl
         newinfo['run_no'] = no
         newinfo['stdout_file'] = pipes[0]
