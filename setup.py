@@ -28,7 +28,7 @@ setup(name='kea',
       install_requires=[
           'Leip',
           'lockfile',
-          'arrow',
+          'fantail',
           'grako>3',
           'psutil',
       ],

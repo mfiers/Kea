@@ -10,11 +10,10 @@ import shlex
 import subprocess as sp
 import sys
 
-import arrow
 import leip
 import fantail
 
-import mad2.util as mad2util
+#import mad2.util as mad2util
 
 from kea.utils import get_tool_conf
 from kea.plugin.register import print_tool_versions

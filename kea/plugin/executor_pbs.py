@@ -15,6 +15,22 @@ from kea.executor import BasicExecutor, get_deferred_cl
 lg = logging.getLogger(__name__)
 
 
+@leip.hook('pre_argparse')
+def prep_sge_exec(app):
+
+
+    app.parser.add_argument('--pbs_nodes',
+                                  help='No nodes requested (default=jobs '
+                                  + 'submitted)', type=int)
+    app.parser.add_argument('--pbs_ppn',
+                                  help='No ppn requested (default=cl per '
+                                  + 'job)', type=int)
+    app.kea_argparse.add_argument('--pbs_account', '--pbs_account',
+                                  help='Account requested (default none)')
+
+
+
+
 PBS_SUBMIT_SCRIPT_HEADER = """#!/bin/bash
 #PBS -N {{appname}}.{{uuid}}
 #PBS -e {{ cwd }}/pbs/{{appname}}.{{uuid}}.$PBS_JOBID.err
@@ -110,23 +126,6 @@ class PbsExecutor(BasicExecutor):
             self.submit_to_pbs()
 
 
-@leip.hook('pre_argparse')
-def prep_sge_exec(app):
-    app.executors['pbs'] = PbsExecutor
-    for a in '--pbs_nodes --pbs_ppn'.split():
-        app.kea_arg_harvest_extra[a] = 1
+conf = leip.get_config('kea')
+conf['executors.pbs'] = PbsExecutor
 
-    app.kea_argparse.add_argument('--pbs_nodes',
-                                  help='No nodes requested (default=jobs '
-                                  + 'submitted)', type=int)
-    app.kea_argparse.add_argument('--pbs_ppn',
-                                  help='No ppn requested (default=cl per '
-                                  + 'job)', type=int)
-    # app.kea_argparse.add_argument('--pA', '--pbs_account',
-    #                               help='Account requested (default none)')
-
-
-
-
-
-#pre_argparse
