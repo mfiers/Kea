@@ -81,6 +81,8 @@ class Kea(leip.app):
 def main_arg_define(app):
 
     app.parser.add_argument('-v', '--verbose', action='count')
+    app.parser.add_argument('-U', '--uid',
+                            help='unique identifier for this run')
     app.parser.add_argument('-x', '--executor', help='executor to use',
                             default=app.conf['default_executor'])
     app.parser.add_argument('-V', '--version', help='tool version')
