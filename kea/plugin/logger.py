@@ -2,21 +2,21 @@
 from collections import OrderedDict
 import logging
 
-import arrow
-from mad2 import madfile
+#from mad2 import madfile
 import leip
 from lockfile import FileLock
 
 lg = logging.getLogger(__name__)
 
 def to_str(s):
-    if isinstance(s, madfile.MadFile):
-        if 'sha1sum' in s:
-            return '{} (sha1: {})'.format(s['inputfile'], s['sha1sum'])
-        else:
-            return '{}'.format(s['inputfile'])
-    else:
-        return str(s)
+    return str(s)
+    # if isinstance(s, madfile.MadFile):
+    #     if 'sha1sum' in s:
+    #         return '{} (sha1: {})'.format(s['inputfile'], s['sha1sum'])
+    #     else:
+    #         return '{}'.format(s['inputfile'])
+    # else:
+    #     return str(s)
 
 
 @leip.hook('pre_argparse')
