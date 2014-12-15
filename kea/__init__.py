@@ -13,12 +13,10 @@ import sys
 import leip
 import fantail
 
-#import mad2.util as mad2util
 
 from kea.utils import get_tool_conf
 from kea.plugin.register import print_tool_versions
 from kea.cl_generator import basic_command_line_generator
-#from kea.executor import executors
 
 lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
