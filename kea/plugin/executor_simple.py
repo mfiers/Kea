@@ -23,6 +23,12 @@ lg = logging.getLogger(__name__)
 def main_arg_define(app):
     if app.executor == 'simple':
         app.parser.add_argument('-j', '--threads', help='no threads to use', type=int)
+        app.parser.add_argument('-E', '--echo', help='echo command line to screen', action='store_true')
+        app.parser.add_argument('-w', '--walltime',
+                                help=('max time that this process can take, '
+                                      'after this time, the process gets killed. Specified in seconds, or with '
+                                      'postfix m for minutes, h for hours, d for days'))
+                
 
 
 #thanks: https://gist.github.com/sebclaeys/1232088
@@ -75,6 +81,9 @@ def store_process_info(info):
         cputime = psu.cpu_times()
         info['ps_cputime_user'] = cputime.user 
         info['ps_cputime_system'] = cputime.system
+        info['ps_cpu_percent_max'] = max(
+            info.get('ps_cpu_percent_max', 0),
+            psu.cpu_percent())
         meminfo = psu.memory_info()
         for f in meminfo._fields:
             #info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
@@ -93,7 +102,7 @@ def store_process_info(info):
         #process went away??
         return
             
-def simple_runner(info, defer_run=False):
+def simple_runner(info, executor, defer_run=False):
     """
     Defer run executes the run with the current executor, but with
     the Kea executable so that all kea related functionality is
@@ -103,7 +112,8 @@ def simple_runner(info, defer_run=False):
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
-
+    walltime = executor.walltime
+    
     if defer_run:
         cl = get_deferred_cl(info)
     else:
@@ -128,7 +138,7 @@ def simple_runner(info, defer_run=False):
 
 
     if defer_run:
-        P = sp.Popen(cl, shell=True)
+        P = psutil.Popen(cl, shell=True)
         info['pid'] = P.pid
         info['submitted'] = datetime.utcnow()
     else:
@@ -151,8 +161,20 @@ def simple_runner(info, defer_run=False):
 
         stdout_sha = hashlib.sha1()
         stderr_sha = hashlib.sha1()
+
+        force_quit = False
         
+        #loop & poll until the process finishes..
         while True:
+
+            if walltime:
+                runtime = (datetime.utcnow() - info['start']).total_seconds()
+                if runtime > walltime:
+                    if not force_quit:
+                        lg.warning("Killing process (walltime)")
+                    force_quit = True
+                    P.kill()
+                    
             pc = P.poll()
 
             if not pc is None:
@@ -175,10 +197,19 @@ def simple_runner(info, defer_run=False):
                     errors.append("IOError: " + str(e))
                 break
 
+        if force_quit:
+            info['status'] = 'killed'
+        elif P.returncode == 0:
+            info['status'] = 'success'
+        else:
+            info['status'] = 'fail'
+                        
+            
         if stdout_len > 0:
             info['stdout_sha1'] = stdout_sha.hexdigest()
         if stderr_len > 0:
             info['stderr_sha1'] = stderr_sha.hexdigest()
+            
         info['stop'] = datetime.utcnow()
         info['runtime'] = (info['stop'] - info['start']).total_seconds()
         if 'psutil_process' in info:
@@ -193,7 +224,7 @@ class BasicExecutor(object):
     def __init__(self, app):
         lg.debug("Starting executor")
         self.app = app
-
+        
         try:
             self.threads =  self.app.args.threads
         except AttributeError:
@@ -206,14 +237,28 @@ class BasicExecutor(object):
             self.pool = ThreadPool(self.threads)
             lg.debug("using a threadpool with %d threads", self.threads)
 
-
+        self.walltime = None
+        if self.app.args.walltime:
+            w = self.app.args.walltime
+            if len(w) > 1 and w[-1] == 'm':
+                self.walltime = float(w[:-1]) * 60
+            elif len(w) > 1 and w[-1] == 'h':
+                self.walltime = float(w[:-1]) * 60 * 60
+            elif len(w) > 1 and w[-1] == 'd':
+                self.walltime = float(w[:-1]) * 60 * 60 * 24
+            else:
+                self.walltime = float(w)
+                
     def fire(self, info):
         lg.debug("start execution")
 
+        if self.app.args.echo:
+            print(" ".join(info['cl']))
+            
         if self.simple:
-            simple_runner(info)
+            simple_runner(info, self)
         else:
-            self.pool.apply_async(simple_runner, [info,], {'defer_run': False})
+            self.pool.apply_async(simple_runner, [info, self], {'defer_run': False})
 
     def finish(self):
         if not self.simple:
