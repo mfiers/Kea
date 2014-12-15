@@ -70,13 +70,15 @@ class Kea(leip.app):
             'post_run',
             'finish']
 
-        self.parser = argparse.ArgumentParser()
+        self.parser = argparse.ArgumentParser(add_help=False)
         self.discover(globals())
 
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
 
+    app.parser.add_argument('-h', '--help', action='store_true',
+                            help='Show this help and exit')
     app.parser.add_argument('-v', '--verbose', action='count')
     app.parser.add_argument('-U', '--uid',
                             help='unique identifier for this run')
@@ -85,7 +87,7 @@ def main_arg_define(app):
     app.parser.add_argument('-V', '--version', help='tool version')
     app.parser.add_argument('-o', '--stdout', help='save stdout to')
     app.parser.add_argument('-e', '--stderr', help='save stderr to')
-
+    
 
 @leip.hook('argparse')
 def kea_argparse(app):
@@ -94,17 +96,33 @@ def kea_argparse(app):
     to argparse
     """
 
-    app.parser.add_argument('command')
+
+    app.parser.add_argument('command', nargs='?')
     app.parser.add_argument('arg', nargs=argparse.REMAINDER)
 
     app.args = app.parser.parse_args()
+
+    if app.args.help:
+        kea_app = leip.app('kea', partial_parse=True)
+        print "# Command mode"
+        app.parser.print_help()
+        print "# Utility mode"
+        kea_app.parser.print_help()
+        exit(0)
+
     app.cl_args = app.args.arg
 
+    if not app.args.command:
+        app.parser.print_usage()
+        kea_app = leip.app('kea', partial_parse=True)
+        kea_app.parser.print_usage()
+        sys.exit(-1)
+        
     cl = [app.args.command]
     
     if app.cl_args:
         cl.extend(app.cl_args)
-
+        
     #special case - probably used quotes on the command line
     if len(cl) == 1 and ' ' in cl[0]:
         cl = shlex.split(cl[0])
@@ -120,6 +138,8 @@ def kea_argparse(app):
     if app.args.verbose > 1 :
         logging.getLogger().setLevel(logging.DEBUG)
 
+
+        
     app.executor = app.args.executor
     lg.debug("Loaded config: %s",  app.name)
 
