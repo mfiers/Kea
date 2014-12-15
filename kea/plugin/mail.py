@@ -5,6 +5,8 @@ import subprocess as sp
 
 import jinja2
 
+import kea.utils
+
 lg = logging.getLogger(__name__)
 
 
@@ -93,11 +95,7 @@ Subject:
 {% for k in jinf %}
 <tr {% if loop.cycle(False, True) -%}style="background-color: #EEEEEE;"
     {%- endif %}><th style="text-align: left;">{{k}}</th>
-    {%- if k == "cl" %}
-      <span style="font-family:Lucida Console,Bitstream Vera Sans Mono,Courier New,monospace;">{{ " ".join(jinf.cl) }}</span>
-    {%- else %}
-    <td>{{ jinf[k] }}</td>
-    {%- endif %}
+    {{ jinf[k]|pretty(k) }}
 </tr>
 {%- endfor %}
 </table>
@@ -141,10 +139,17 @@ def mail(app):
     if not mailto:
         lg.warning("No mail recipient defined - cannot send mail")
         return
-    
 
-    message = jinja2.Template(HTML_MESSAGE)
-    message = message.render(data)
+        
+
+    def keapretty(value, key):
+        return kea.utils.make_pretty_kv_html(key, value)
+
+    env = jinja2.Environment()
+    env.filters['pretty'] = keapretty
+    template = env.from_string(HTML_MESSAGE)
+    
+    message = template.render(data)
 
     p = sp.Popen("sendmail %s" % mailto, stdin=sp.PIPE, shell=True)
     p.communicate(message.encode('utf-8'))

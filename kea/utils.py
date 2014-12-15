@@ -1,17 +1,86 @@
 
 
+import calendar
 import copy
+from datetime import datetime, timedelta
 import logging
 import os
 import subprocess as sp
 import sys
 
 import fantail
+import humanize
 from leip import set_local_config
-
 
 lg = logging.getLogger(__name__)
 
+
+# Nicely format run log stats
+FSIZEKEYS = ["ps_meminfo_max_rss", "ps_meminfo_max_vms",
+             "ps_sys_swap_free", "ps_sys_swap_sin",
+             "ps_sys_swap_sout", "ps_sys_swap_total",
+             "ps_sys_swap_used", "ps_sys_vmem_active",
+             "ps_sys_vmem_available", "ps_sys_vmem_buffers",
+             "ps_sys_vmem_cached", "ps_sys_vmem_free",
+             "ps_sys_vmem_inactive", "ps_sys_vmem_total",
+             "ps_sys_vmem_used"]
+
+
+def nicetime(t):
+    """
+    fomat time, assuming t is in utc
+    """
+
+    timestamp = calendar.timegm(t.timetuple())
+    loct = datetime.fromtimestamp(timestamp)
+    assert t.resolution >= timedelta(microseconds=1)
+    loct.replace(microsecond=t.microsecond)
+    return '{} ({})'.format(humanize.naturaltime(loct), t)
+
+    
+def make_pretty_kv(k, v):
+    if k in ['cl', 'template_cl']:
+        v = " ".join(v)
+            
+    if v is None:
+        return ""
+    elif str(v).strip() == "":
+        return ""
+    if k in FSIZEKEYS:
+        return "{} ({})".format(humanize.naturalsize(v), v)
+    elif k in ['start', 'stop']:
+        return nicetime(v)
+    elif k == 'runtime':
+        return '{}s ({})'.format(humanize.intword(v), v)
+    elif k.endswith('_percent'):
+        return '{}%'.format(v)
+    else:
+        return str(v)
+
+def make_pretty_kv_html(k, v):
+    
+    if k in ['cl', 'template_cl']:
+        return (
+            '<td colspan="2">' +
+            '<span style="font-family:Lucida Console,Bitstream Vera Sans Mono,Courier New,monospace;">' +
+            " ".join(v) +
+            "</span></td>" )
+            
+    if v is None:
+        return '<td colspan="2"></td>'
+    elif str(v).strip() == "":
+        return '<td colspan="2"></td>'
+        
+    if k in FSIZEKEYS:
+        return "<td>{}</td><td>{}</td>".format(humanize.naturalsize(v), v)
+    elif k in ['start', 'stop']:
+        return '<td colspan="2">{}</td>'.format(v)
+    elif k == 'runtime':
+        return "<td>{}</td><td>{}</td>".format(humanize.intword(v), v)
+    elif k.endswith('_percent'):
+        return '<td colspan="2">{}%</td>'.format(v)
+    else:
+        return '<td colspan="2">{}</td>'.format(v)
 
 def get_tool_conf(app, name, version='default'):
 
