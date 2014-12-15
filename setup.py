@@ -13,7 +13,6 @@ with open('VERSION') as F:
 entry_points = {
     'console_scripts': [
         'kea = kea.cli:dispatch',
-        'mkea = kea.cli_manage:dispatch',
     ]}
 
 setup(name='kea',
@@ -30,8 +29,10 @@ setup(name='kea',
           'lockfile',
           'fantail',
           'grako>3',
+          'humanize',
           'jinja2',
           'psutil',
+          'toMaKe'
       ],
       classifiers=[
           'Development Status :: 4 - Beta',
