@@ -24,6 +24,10 @@ def log_screen(app, jinf):
     
     if app.args.report_yaml:
         import yaml
+        
+        if 'psutil_process' in jinf:
+            del jinf['psutil_process']
+
         fn = '{}.report.yaml'.format(jinf['run_uid'])
         with open(fn, 'w') as F:
             yaml.safe_dump(dict(jinf), F)

@@ -166,8 +166,6 @@ def run_kea(app):
         jinf['args'] = " ".join(app.cl_args)
         jinf['cwd'] = os.getcwd()
 
-        app.run_hook('pre_fire', jinf)
         executor.fire(jinf)
-        app.run_hook('post_fire', jinf)
         
     executor.finish()

@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import logging
 from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing.dummy import Lock
 import os
 import subprocess as sp
 import sys
@@ -17,7 +18,8 @@ import psutil
 import leip
 
 lg = logging.getLogger(__name__)
-
+#lg.setLevel(logging.DEBUG)
+MPJOBNO = 0
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
@@ -42,7 +44,10 @@ def non_block_read(stream, chunk_size=10000):
     except:
         return ""
 
-    
+outputlock = Lock()
+
+BINARY_STREAMS = set()
+
 def streamer(src, tar, dq, hsh=None):
     """
     :param src: input stream
@@ -55,10 +60,19 @@ def streamer(src, tar, dq, hsh=None):
         return 0
     if hsh:
         hsh.update(d)
-    
-    dq.append(d.decode('utf-8'))
+        
+    global BINARY_STREAMS
+    stream_id = '{}_{}'.format(src.__repr__(), tar.__repr__())
+
+    if not stream_id in BINARY_STREAMS:
+        try:
+            dq.append(d.decode('utf-8'))
+        except UnicodeDecodeError:
+            BINARY_STREAMS.add(stream_id)
+        
     d_len = len(d)
-    tar.write(d) #d.encode('utf-8'))
+    with outputlock:
+        tar.write(d) #d.encode('utf-8'))
     return d_len
 
     
@@ -109,6 +123,15 @@ def simple_runner(info, executor, defer_run=False):
     executed in the second stage.
     """
 
+    #get a thread run number
+    global MPJOBNO
+    thisjob = MPJOBNO
+    MPJOBNO += 1
+
+    info['job_thread_no'] = MPJOBNO
+    lgx = logging.getLogger("job{}".format(thisjob))
+    #lgx.setLevel(logging.DEBUG)
+    
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
@@ -126,6 +149,7 @@ def simple_runner(info, executor, defer_run=False):
             stderr_handle = open(info['stderr_file'], 'w')
 
     info['start'] = datetime.utcnow()
+    lgx.debug("thread start %s", info['start'])
 
     #system psutil stuff
     info['ps_sys_cpucount'] = psutil.cpu_count()
@@ -142,9 +166,11 @@ def simple_runner(info, executor, defer_run=False):
         info['pid'] = P.pid
         info['submitted'] = datetime.utcnow()
     else:
-        P = sp.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+        lgx.debug("Starting: %s", " ".join(cl))
+        P = psutil.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
         info['pid'] = P.pid
+        lgx.debug("Job has started with pid: %d", info['pid'])
         try:
             psu = psutil.Process(P.pid)
             info['psutil_process'] = psu
@@ -177,7 +203,9 @@ def simple_runner(info, executor, defer_run=False):
                     
             pc = P.poll()
 
-            if not pc is None:
+            if isinstance(pc, int):
+                #integer <- returncode => so exit.
+                lgx.debug("got a return code (%d) - exit", pc)
                 break
 
             #read_proc_status(td)
@@ -197,14 +225,39 @@ def simple_runner(info, executor, defer_run=False):
                     errors.append("IOError: " + str(e))
                 break
 
+
+
+
+        #clean the pipes
+        try:
+            stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
+            stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
+        except IOError as e:
+            #it appears as if one of the pipes has failed.
+            if e.errno == 32:
+                errors.append("Broken Pipe")
+                #broken pipe - no problem.
+            else:
+                message('err', str(dir(e)))
+                errors.append("IOError: " + str(e))
+            
+
         if force_quit:
             info['status'] = 'killed'
         elif P.returncode == 0:
             info['status'] = 'success'
         else:
             info['status'] = 'fail'
-                        
-            
+
+        if info['stdout_file']:
+            lg.debug('closing stdout handle on %s', info['stdout_file'])
+            stdout_handle.close()
+        if info['stderr_file']:
+            lg.debug('closing stderr handle on %s', info['stderr_file'])
+            stderr_handle.close()
+
+        lgx.debug("job has status: %s", info['status'])
+        
         if stdout_len > 0:
             info['stdout_sha1'] = stdout_sha.hexdigest()
         if stderr_len > 0:
@@ -212,13 +265,17 @@ def simple_runner(info, executor, defer_run=False):
             
         info['stop'] = datetime.utcnow()
         info['runtime'] = (info['stop'] - info['start']).total_seconds()
+
         if 'psutil_process' in info:
             del info['psutil_process']
+            
         info['returncode'] = P.returncode
         info['stdout_len'] = stdout_len
         info['stderr_len'] = stderr_len
+        lgx.debug("end thread")
 
-
+        return info
+        
 class BasicExecutor(object):
 
     def __init__(self, app):
@@ -251,14 +308,23 @@ class BasicExecutor(object):
                 
     def fire(self, info):
         lg.debug("start execution")
-
+        
+        self.app.run_hook('pre_fire', info)
+        
         if self.app.args.echo:
             print(" ".join(info['cl']))
+
             
         if self.simple:
             simple_runner(info, self)
+            self.app.run_hook('post_fire', info)
         else:
-            self.pool.apply_async(simple_runner, [info, self], {'defer_run': False})
+            def _callback(info):
+                lg.warningdebug("job finished (%s) - callback!", info['job_thread_no'])
+                self.app.run_hook('post_fire', info)
+
+            self.pool.apply_async(simple_runner, [info, self], {'defer_run': False},
+                                  callback=_callback)
 
     def finish(self):
         if not self.simple:
