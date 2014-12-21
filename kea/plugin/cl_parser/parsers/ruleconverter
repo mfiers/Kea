@@ -1,0 +1,205 @@
+#!/usr/bin/env python
+
+from collections import OrderedDict
+import os
+import re
+import sys
+import jinja2
+
+
+def trim_leading_space(rules):
+    if len(rules) > 0:
+        while not rules[0].strip():
+            rules.pop(0)
+
+
+def extract_candidate_name(inp):
+    strip_nonalpha = re.compile('\W')
+    ls = inp.split()
+    rv = []
+    for i in ls:
+        i = strip_nonalpha.sub("", i)
+        if i.lower() in "the for is of print".split():
+            continue
+        rv.append(i)
+    if len(rv) >= 1:
+        return "_".join(rv[:2]).lower()
+    else:
+        return "_".join(inp[:2]).lower()
+
+
+def ruleparser(filename):
+    with open(filename) as F:
+        rules = F.readlines()
+
+    # trim leading empty lines
+    trim_leading_space(rules)
+
+    # find corerules
+    core = []
+    while rules[0].strip():
+        core.append(rules.pop(0))
+
+    yield(core)
+
+    trim_leading_space(rules)
+
+    while True:
+        block = []
+        while rules[0].strip():
+            block.append(rules.pop(0))
+            if len(rules) == 0:
+                break
+        if len(block) > 0:
+            btype = block[0].split()[0]
+            yield btype, block
+            btype, block = None, []
+            
+        trim_leading_space(rules)
+
+        if len(rules) == 0:
+            break
+
+
+def unique_name(name, exists):
+    if not name in exists:
+        return name
+    i = 0
+    while '{}_{:02d}'.format(name, i) in exists:
+        i += 1
+    return '{}_{:02d}'.format(name, i)
+
+
+def convert_core_element(e, first=False):
+    if e[0] == '<' and e[-1] == '>':
+        if not first:
+            return "/\s+/ {}".format(e[1:-1])
+        else:
+            return e[1:-1]
+    elif e[0] == '[' and e[-4:] == '...]':
+        if first:
+            return "{ " + e[1:-4] + "}"
+        else:
+            return "{ /\s+/ " + e[1:-4] + "}"
+    elif e[0] == '[' and e[-1] == ']':
+        if first:
+            return "[ {}]".format(e[1:-1])
+        else:
+            return "[ /\s+/ {} ]".format(e[1:-1])
+    else:
+        if first:
+            return '"{}"'.format(e)
+        else:
+            return '/\s+/ "{}"'.format(e)
+
+
+def convert_core_rule(rs):
+    return " ".join([convert_core_element(x, i==0) for i, x in enumerate(rs)])
+
+
+def convert_core(rules):
+    out = OrderedDict()
+
+    for r in rules:
+        rs = r.split()
+        name = unique_name(extract_candidate_name(r), out.keys())
+        out[name] = convert_core_rule(rs)
+
+    rv = "start = \n  "
+    rv += " | \n  ".join(out.keys())
+    rv += ' ;\n\n'
+
+    for n, v in out.items():
+        rv += "{} = {} $ ;\n".format(n, v)
+
+    return rv
+
+
+def convert_options(options):
+    obname = options.pop(0).split()[1]
+    rv = "{} = (\n  ".format(obname)
+
+    letterflags = []
+
+    ops = []
+    for o in options:
+        pat, name, desc = [x.strip() for x in o.split('|')]
+        
+        if len(pat) == 2 and pat[0] == '-':
+            if name:
+                letterflags.append('{}+:/{}/'.format(name, re.escape(pat[1])))
+            else:
+                letterflags.append('/{}/'.format(re.escape(pat[1])))
+        else:
+            pats = convert_core_rule(pat.split()).split()
+            if name:
+                if len(pats) == 1:
+                    ops.append("{}+:{}".format(name, pats[0]))
+                elif len(pats) == 2:
+                    ops.append("{} {}+:{}".format(pats[0], name, pats[1]))
+                else:
+                    ops.append(" ".join(pats))
+            else:
+                ops.append(" ".join(pats))
+            
+    ops = ["{}_flag".format(obname)] + ops
+    
+    rv += "\n  | ".join(ops)
+
+    rv += "\n  ) ; \n\n"
+    rv += "{}_flag = ".format(obname)
+    rv += '"-" { ' + "{}".format("\n        | ".join(letterflags)) + " }+"
+    rv += ";\n"
+    return rv
+
+def convert_files(fblock):
+    fblock.pop(0)
+    rv = "\n(* files *)\n"
+    for fitem in fblock:
+        pattern, name, category, description = [x.strip() for x in 
+                                                fitem.strip().split("|")]
+        pattern = "/\w+/" if not pattern else pattern
+
+        rv += "{} = {}+:{} ; \n".format(name, name, pattern)
+    return rv
+
+
+def convert_other(others):
+    others.pop(0)
+    rv = "\n(* other *)\n"
+    for oitem in others:
+        pattern, name, description = [x.strip() for x in 
+                                      oitem.strip().split("|")]
+
+        pattern = "/\S+/" if not pattern else pattern
+
+        rv += "{} = {}+:{} ; \n".format(name, name, pattern)
+    return rv
+
+
+parser = ruleparser(sys.argv[1])
+core = parser.next()
+rv = convert_core(core)
+rv += "\n"
+for btype, block in parser:
+    if btype == 'options':
+        rv += convert_options(block)
+        rv += "\n"
+    if btype == 'files':
+        rv += convert_files(block)
+        rv += "\n"
+
+    if btype == 'other':
+        rv += convert_other(block)
+        rv += "\n"
+
+
+rv +=  """
+(* Misc *)
+file = /\S+/ ;
+int = /[0-9]+/ ;
+float = /[0-9\.]+/ ;
+string = ( /"[^"]*"/ | /'[^']*'/ | /\S+/ ) ;
+"""
+
+print(rv)

@@ -1,0 +1,51 @@
+samtools view [viewoptions...] <inputfile> [regions...]
+samtools flagstat <inputfile> 
+samtools index <inputfile>
+samtools merge <outputfile> <inputfile> [inputfile...]
+samtools sort [sortoptions...] <inputfile> <outprefix>
+samtools view
+samtools
+
+options sortoptions
+  -n          |    | sort by read name
+  -f          |    | use <out.prefix> as full file name instead of prefix
+  -o          |    | final output to stdout
+  -l <int>    |    | compression level
+  -@ <int>    |    | number of sorting and compression threads [1]
+  -m <string> | thread_memory   | max memory per thread
+
+options viewoptions
+  -b              | output_bam | output BAM
+  -h              |       | print header for the SAM output
+  -H              |       | print header only (no alignments)
+  -S              |       | input is SAM
+  -u              |       | uncompressed BAM output (force -b)
+  -1              |       | fast compression (force -b)
+  -x              |       | output FLAG in HEX (samtools-C specific)
+  -X              |       | output FLAG in string (samtools-C specific)
+  -c              |       | print only the count of matching records
+  -B              |       | collapse the backward CIGAR operation
+  -@ <int>        |       | number of BAM compression threads [0]
+  -L <bedoverlap> |       | output alignments overlapping the input BED file [null]
+  -t <file>       |       | list of reference names and lengths (force -S) [null]
+  -T <file>       |       | reference sequence file (force -S) [null]
+  -o <file>       |       | output file name [stdout]
+  -R <file>       |       | list of read groups to be outputted [null]
+  -f <int>        |       | required flag, 0 for unset [0]
+  -F <int>        |       | filtering flag, 0 for unset [0]
+  -q <int>        |       | minimum mapping quality [0]
+  -l <string>     |       | only output reads in library string [null]
+  -r <string>     |       | only output reads in read group string [null]
+  -s <float>      |       | fraction of templates to subsample; integer part as seed [-1]
+  -?              |       | longer help
+
+
+files 
+  /\S+\.bam/    | outputfile  | output  | Bam/Sam output file
+  /\S+\.[bs]am/ | inputfile   | input   | Bam/Sam inputfile
+               | bedoverlap  | input   | output alignments overlapping the input BED file
+
+
+other
+  /\S+/        | regions     | regions to export
+  /\S+/        | outprefix   | sort output prefix
