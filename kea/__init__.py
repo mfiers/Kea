@@ -87,8 +87,10 @@ def main_arg_define(app):
     app.parser.add_argument('-V', '--version', help='tool version')
     app.parser.add_argument('-o', '--stdout', help='save stdout to')
     app.parser.add_argument('-e', '--stderr', help='save stderr to')
-    
+    app.parser.add_argument('-n', '--jobstorun', help='no jobs to start',
+                            type=int)
 
+    
 @leip.hook('argparse')
 def kea_argparse(app):
     """
@@ -104,9 +106,9 @@ def kea_argparse(app):
 
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
-        print "# Command mode"
+        print "# Command mode\n"
         app.parser.print_help()
-        print "# Utility mode"
+        print "\n# Utility mode\n"
         kea_app.parser.print_help()
         exit(0)
 
@@ -130,6 +132,7 @@ def kea_argparse(app):
     app.cl = cl
     app.name = os.path.basename(app.cl[0])
     app.conf['executable'] = app.cl[0]
+
     conf = get_tool_conf(app, app.name, app.args.version)
     app.conf.stack[1] = conf
 
@@ -138,7 +141,14 @@ def kea_argparse(app):
     if app.args.verbose > 1 :
         logging.getLogger().setLevel(logging.DEBUG)
 
-
+    #load args into the config object
+    app.defargs = fantail.Fantail()
+    app.defargs.update(app.conf.get('default'))
+    app.defargs.update(app.conf.get('app.default.{}'.format(app.name)))
+    for k in app.args.__dict__:
+        v = getattr(app.args, k)
+        if v is None: continue
+        app.defargs[k] = v
         
     app.executor = app.args.executor
     lg.debug("Loaded config: %s",  app.name)
