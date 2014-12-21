@@ -3,42 +3,39 @@ import copy
 import logging
 import os
 
-from uuid import uuid4
 from jinja2 import Template
 import arrow
 
 import leip
 
-from kea.executor import BasicExecutor, get_deferred_cl
-
+from kea.plugin.executor_simple import BasicExecutor, get_deferred_cl
+from kea.utils import get_base_uid
 
 lg = logging.getLogger(__name__)
 
 
 @leip.hook('pre_argparse')
 def prep_sge_exec(app):
-
-
-    app.parser.add_argument('--pbs_nodes',
-                                  help='No nodes requested (default=jobs '
-                                  + 'submitted)', type=int)
-    app.parser.add_argument('--pbs_ppn',
-                                  help='No ppn requested (default=cl per '
-                                  + 'job)', type=int)
-    app.kea_argparse.add_argument('--pbs_account', '--pbs_account',
-                                  help='Account requested (default none)')
-
-
+    if app.executor == 'pbs':
+        pbs_group = app.parser.add_argument_group('PBS Executor')
+        pbs_group.add_argument('--pbs_nodes',
+                               help='No nodes requested', type=int)
+        pbs_group.add_argument('-j', '--pbs_ppn', type=int,
+                               help='No ppn requested (default=cl per job)')
+        pbs_group.add_argument('--pbs_account', 
+                               help='Account requested (default none)')
+        pbs_group.add_argument('-w', '--walltime',
+                                help=('max time that this process can take'))
 
 
 PBS_SUBMIT_SCRIPT_HEADER = """#!/bin/bash
-#PBS -N {{appname}}.{{uuid}}
-#PBS -e {{ cwd }}/pbs/{{appname}}.{{uuid}}.$PBS_JOBID.err
-#PBS -o {{ cwd }}/pbs/{{appname}}.{{uuid}}.$PBS_JOBID.out
-#PBS -l nodes={{nodes}}:ppn={{ppn}}
+#PBS -N {{appname}}.{{uid}}
+#PBS -e {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.err
+#PBS -o {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.out
+#PBS -l nodes={{pbs_nodes}}:ppn={{pbs_ppn}}
 
-{% if account -%}
-  #PBS -A {{ account }}{% endif %}
+{% if pbs_account -%}
+  #PBS -A {{ pbs_account }}{% endif %}
 {% if walltime -%}
   #PBS -l walltime={{ walltime }}{% endif %}
 
@@ -52,52 +49,34 @@ class PbsExecutor(BasicExecutor):
     def __init__(self, app):
 
         super(PbsExecutor, self).__init__(app)
-        if not os.path.exists('./pbs'):
-            os.makedirs('./pbs')
 
         self.buffer = []
-        self.cl_per_job =  self.app.kea_args.threads
-        if self.cl_per_job == -1:
-            self.cl_per_job = 1
         self.batch = 0
         self.clno = 0
 
 
     def submit_to_pbs(self):
-        uuid = str(uuid4())[:8]
+        uid = get_base_uid()
+        
         #write pbs script
-        pbs_script = os.path.join(
-                  'pbs',
-                  '{}.{}.pbs'.format(self.app.conf['appname'], uuid))
+        pbs_script = '{}.{}.pbs'.format(self.app.name, uid)
 
         template = Template(PBS_SUBMIT_SCRIPT_HEADER)
 
-        data = copy.copy(self.app.conf['pbs'])
-        data['appname'] = self.app.conf['appname']
+        data = dict(self.app.defargs)
+        data['appname'] = self.app.name
         data['cwd'] = os.getcwd()
-        data['uuid'] = uuid
+        data['uid'] = uid
 
-        lg.debug("submit to pbs with uuid %s", uuid)
+        
+        lg.debug("submit to pbs with uid %s", uid)
         for info in self.buffer:
 
-            #for logging.
-            info['mode'] = 'asynchronous'
             info['submitted'] = arrow.utcnow()
-            info['pbs_uuid'] = uuid
+            info['pbs_uid'] = uid
             info['pbs_script_file'] = pbs_script
 
-            if not self.app.kea_args.pbs_nodes is None:
-                data['nodes'] = self.app.kea_args.pbs_nodes
-            elif not data['nodes']:
-                data['nodes'] = 1
-
-            if self.app.kea_args.pbs_ppn:
-                data['ppn'] = self.app.kea_args.pbs_ppn
-            elif not data['ppn']:
-                data['ppn'] = self.cl_per_job
-
             with open(pbs_script, 'w') as F:
-                data['name']
                 F.write(template.render(**data))
                 for info in self.buffer:
                     F.write("( " + " ".join(get_deferred_cl(info)))
@@ -115,8 +94,12 @@ class PbsExecutor(BasicExecutor):
 
 
     def fire(self, info):
-        self.buffer.append(info)
-        if len(self.buffer) >= self.cl_per_job:
+        self.app.run_hook('pre_fire', info)
+        self.buffer.append(copy.copy(info))
+        info['returncode'] = 0
+        info['status'] = 'queued'
+        self.app.run_hook('post_fire', info)
+        if len(self.buffer) >= self.app.defargs['pbs_ppn']:
             lg.info("submitting pbs job. No commands: %d", len(self.buffer))
             self.submit_to_pbs()
 
