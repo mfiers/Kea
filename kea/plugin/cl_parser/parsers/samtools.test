@@ -1,27 +1,16 @@
 samtools 
-
+samtools view
 samtools view input.bam
-
+samtools view -bS input.bam
 samtools view -b input.bam
-
 samtools view -b -S input.bam
-
 - samtools view -@
-
 samtools merge out.bam in1.bam in2.bam
-
 - samtools merge out.bam
-
 samtools index test.bam
-
-samtools index test.bam test.bam.bai
-
+-samtools index test.bam test.bam.bai
 samtools flagstat test.bam
-
 - samtools flagstat test.bam test2.bam
-
 samtools sort in.bam out
-
 samtools sort -nf -l 9 -@ 4 -m 2G in.bam out
-
 - samtools sort -nf -o 12 -l 9 -@ 4 -m 2G in.bam out

@@ -1,33 +1,74 @@
-start = "samtools" command $;
-command =  samtools_view | samtools_merge | samtools_flagstat | samtools_index | samtools_sort | samtools_empty ;
+start = 
+  samtools_view | 
+  samtools_flagstat | 
+  samtools_index | 
+  samtools_merge | 
+  samtools_sort | 
+  samtools_view_00 | 
+  samtools ;
 
-(* command defintions *)
-samtools_empty = () ;
-samtools_view = command:"view" { options:view_option } input:{bamsamfile} ;
-samtools_merge = command:"merge" { options:merge_option } output:bamsamfile input:{bamsamfile}+;
-samtools_flagstat = command:"flagstat" input:bamsamfile;
-samtools_index = command:"index" input:bamsamfile output:{anyfile};
-samtools_sort = command:"sort"  { options:sort_option } input:bamsamfile output_prefix:{anyfile};
+samtools_view = "samtools" /\s+/ "view" { /\s+/ viewoptions} /\s+/ inputfile { /\s+/ regions} $ ;
+samtools_flagstat = "samtools" /\s+/ "flagstat" /\s+/ inputfile $ ;
+samtools_index = "samtools" /\s+/ "index" /\s+/ inputfile $ ;
+samtools_merge = "samtools" /\s+/ "merge" /\s+/ outputfile /\s+/ inputfile { /\s+/ inputfile} $ ;
+samtools_sort = "samtools" /\s+/ "sort" { /\s+/ sortoptions} /\s+/ inputfile /\s+/ outprefix $ ;
+samtools_view_00 = "samtools" /\s+/ "view" $ ;
+samtools = "samtools" $ ;
 
-(* samtools view *)
-view_option = { view_argoption | view_noargoption } ;
-view_argoption = view_argoptionflag argoptionvalue ;
-view_argoptionflag = /-[@LtToRfFqlrs]/ ;
-view_noargoption = /-[bhHSu1xXcB]+/ ;
+sortoptions = (
+  sortoptions_flag
+  | "-l" /\s+/ int
+  | "-@" /\s+/ int
+  | "-m" /\s+/ string
+  ) ; 
 
-(* samtools view *)
-sort_option = { sort_argoption | sort_noargoption } ;
-sort_argoption = sort_argoptionflag argoptionvalue ;
-sort_argoptionflag = /-[l@m]/ ;
-sort_noargoption = /-[nfo]+/ ;
+sortoptions_flag = "-" { /n/
+        | /f/
+        | /o/ }+;
 
-(* samtools merge *)
-merge_option = { merge_argoption | merge_noargoption } ;
-merge_argoption = merge_argoptionflag argoptionvalue ;
-merge_argoptionflag = /-[l@Rh]+/ ;
-merge_noargoption = /-[nruf1]+/ ;
+viewoptions = (
+  viewoptions_flag
+  | "-@" /\s+/ int
+  | "-L" /\s+/ bedoverlap
+  | "-t" /\s+/ file
+  | "-T" /\s+/ file
+  | "-o" /\s+/ file
+  | "-R" /\s+/ file
+  | "-f" /\s+/ int
+  | "-F" /\s+/ int
+  | "-q" /\s+/ int
+  | "-l" /\s+/ string
+  | "-r" /\s+/ string
+  | "-s" /\s+/ float
+  ) ; 
 
-(* generic defintions *)
-argoptionvalue = /[^ ]+/ ;
-bamsamfile = /[^ ]+\.[bs]am/ ;
-anyfile = /[^ ]+/ ;
+viewoptions_flag = "-" { output_bam+:/b/
+        | /h/
+        | /H/
+        | /S/
+        | /u/
+        | /1/
+        | /x/
+        | /X/
+        | /c/
+        | /B/
+        | /\?/ }+;
+
+
+(* files *)
+outputfile = outputfile+:/\S+\.bam/ ; 
+inputfile = inputfile+:/\S+\.[bs]am/ ; 
+bedoverlap = bedoverlap+:/\w+/ ; 
+
+
+(* other *)
+regions = regions+:/\S+/ ; 
+outprefix = outprefix+:/\S+/ ; 
+
+
+(* Misc *)
+file = /\S+/ ;
+int = /[0-9]+/ ;
+float = /[0-9\.]+/ ;
+string = ( /"[^"]*"/ | /'[^']*'/ | /\S+/ ) ;
+

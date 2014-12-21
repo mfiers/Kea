@@ -1,5 +1,0 @@
-bowtie2
-
-bowtie2 --help
-
-bowtie2 -x indb -1 test_1.fq -2 test_2.fq

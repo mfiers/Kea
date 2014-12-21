@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2014, 12, 11, 12, 59, 52, 3)
+__version__ = (2014, 12, 21, 14, 12, 22, 6)
 
 __all__ = [
     'samtoolsParser',
@@ -25,7 +25,7 @@ __all__ = [
 
 
 class samtoolsParser(Parser):
-    def __init__(self, whitespace=None, nameguard=True, **kwargs):
+    def __init__(self, whitespace='', nameguard=True, **kwargs):
         super(samtoolsParser, self).__init__(
             whitespace=whitespace,
             nameguard=nameguard,
@@ -34,227 +34,312 @@ class samtoolsParser(Parser):
 
     @graken()
     def _start_(self):
-        self._token('samtools')
-        self._command_()
-        self._check_eof()
-
-    @graken()
-    def _command_(self):
         with self._choice():
             with self._option():
                 self._samtools_view_()
-            with self._option():
-                self._samtools_merge_()
             with self._option():
                 self._samtools_flagstat_()
             with self._option():
                 self._samtools_index_()
             with self._option():
+                self._samtools_merge_()
+            with self._option():
                 self._samtools_sort_()
             with self._option():
-                self._samtools_empty_()
+                self._samtools_view_00_()
+            with self._option():
+                self._samtools_()
             self._error('no available options')
 
     @graken()
-    def _samtools_empty_(self):
-        pass
-
-    @graken()
     def _samtools_view_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
         self._token('view')
-        self.ast['command'] = self.last_node
+
+        def block0():
+            self._pattern(r'\s+')
+            self._viewoptions_()
+        self._closure(block0)
+        self._pattern(r'\s+')
+        self._inputfile_()
 
         def block1():
-            self._view_option_()
-            self.ast['options'] = self.last_node
+            self._pattern(r'\s+')
+            self._regions_()
         self._closure(block1)
-
-        def block4():
-            self._bamsamfile_()
-        self._closure(block4)
-        self.ast['input'] = self.last_node
-
-        self.ast._define(
-            ['command', 'options', 'input'],
-            []
-        )
-
-    @graken()
-    def _samtools_merge_(self):
-        self._token('merge')
-        self.ast['command'] = self.last_node
-
-        def block1():
-            self._merge_option_()
-            self.ast['options'] = self.last_node
-        self._closure(block1)
-        self._bamsamfile_()
-        self.ast['output'] = self.last_node
-
-        def block5():
-            self._bamsamfile_()
-        self._positive_closure(block5)
-
-        self.ast['input'] = self.last_node
-
-        self.ast._define(
-            ['command', 'options', 'output', 'input'],
-            []
-        )
+        self._check_eof()
 
     @graken()
     def _samtools_flagstat_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
         self._token('flagstat')
-        self.ast['command'] = self.last_node
-        self._bamsamfile_()
-        self.ast['input'] = self.last_node
-
-        self.ast._define(
-            ['command', 'input'],
-            []
-        )
+        self._pattern(r'\s+')
+        self._inputfile_()
+        self._check_eof()
 
     @graken()
     def _samtools_index_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
         self._token('index')
-        self.ast['command'] = self.last_node
-        self._bamsamfile_()
-        self.ast['input'] = self.last_node
+        self._pattern(r'\s+')
+        self._inputfile_()
+        self._check_eof()
 
-        def block3():
-            self._anyfile_()
-        self._closure(block3)
-        self.ast['output'] = self.last_node
+    @graken()
+    def _samtools_merge_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
+        self._token('merge')
+        self._pattern(r'\s+')
+        self._outputfile_()
+        self._pattern(r'\s+')
+        self._inputfile_()
 
-        self.ast._define(
-            ['command', 'input', 'output'],
-            []
-        )
+        def block0():
+            self._pattern(r'\s+')
+            self._inputfile_()
+        self._closure(block0)
+        self._check_eof()
 
     @graken()
     def _samtools_sort_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
         self._token('sort')
-        self.ast['command'] = self.last_node
 
-        def block1():
-            self._sort_option_()
-            self.ast['options'] = self.last_node
-        self._closure(block1)
-        self._bamsamfile_()
-        self.ast['input'] = self.last_node
+        def block0():
+            self._pattern(r'\s+')
+            self._sortoptions_()
+        self._closure(block0)
+        self._pattern(r'\s+')
+        self._inputfile_()
+        self._pattern(r'\s+')
+        self._outprefix_()
+        self._check_eof()
 
-        def block5():
-            self._anyfile_()
-        self._closure(block5)
-        self.ast['output_prefix'] = self.last_node
+    @graken()
+    def _samtools_view_00_(self):
+        self._token('samtools')
+        self._pattern(r'\s+')
+        self._token('view')
+        self._check_eof()
+
+    @graken()
+    def _samtools_(self):
+        self._token('samtools')
+        self._check_eof()
+
+    @graken()
+    def _sortoptions_(self):
+        with self._group():
+            with self._choice():
+                with self._option():
+                    self._sortoptions_flag_()
+                with self._option():
+                    self._token('-l')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-@')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-m')
+                    self._pattern(r'\s+')
+                    self._string_()
+                self._error('no available options')
+
+    @graken()
+    def _sortoptions_flag_(self):
+        self._token('-')
+
+        def block0():
+            with self._choice():
+                with self._option():
+                    self._pattern(r'n')
+                with self._option():
+                    self._pattern(r'f')
+                with self._option():
+                    self._pattern(r'o')
+                self._error('expecting one of: f n o')
+        self._positive_closure(block0)
+
+    @graken()
+    def _viewoptions_(self):
+        with self._group():
+            with self._choice():
+                with self._option():
+                    self._viewoptions_flag_()
+                with self._option():
+                    self._token('-@')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-L')
+                    self._pattern(r'\s+')
+                    self._bedoverlap_()
+                with self._option():
+                    self._token('-t')
+                    self._pattern(r'\s+')
+                    self._file_()
+                with self._option():
+                    self._token('-T')
+                    self._pattern(r'\s+')
+                    self._file_()
+                with self._option():
+                    self._token('-o')
+                    self._pattern(r'\s+')
+                    self._file_()
+                with self._option():
+                    self._token('-R')
+                    self._pattern(r'\s+')
+                    self._file_()
+                with self._option():
+                    self._token('-f')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-F')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-q')
+                    self._pattern(r'\s+')
+                    self._int_()
+                with self._option():
+                    self._token('-l')
+                    self._pattern(r'\s+')
+                    self._string_()
+                with self._option():
+                    self._token('-r')
+                    self._pattern(r'\s+')
+                    self._string_()
+                with self._option():
+                    self._token('-s')
+                    self._pattern(r'\s+')
+                    self._float_()
+                self._error('no available options')
+
+    @graken()
+    def _viewoptions_flag_(self):
+        self._token('-')
+
+        def block0():
+            with self._choice():
+                with self._option():
+                    self._pattern(r'b')
+                    self.ast.setlist('output_bam', self.last_node)
+                with self._option():
+                    self._pattern(r'h')
+                with self._option():
+                    self._pattern(r'H')
+                with self._option():
+                    self._pattern(r'S')
+                with self._option():
+                    self._pattern(r'u')
+                with self._option():
+                    self._pattern(r'1')
+                with self._option():
+                    self._pattern(r'x')
+                with self._option():
+                    self._pattern(r'X')
+                with self._option():
+                    self._pattern(r'c')
+                with self._option():
+                    self._pattern(r'B')
+                with self._option():
+                    self._pattern(r'\?')
+                self._error('expecting one of: 1 B H S X \\? b c h u x')
+        self._positive_closure(block0)
 
         self.ast._define(
-            ['command', 'options', 'input', 'output_prefix'],
-            []
+            [],
+            ['output_bam']
         )
 
     @graken()
-    def _view_option_(self):
+    def _outputfile_(self):
+        self._pattern(r'\S+\.bam')
+        self.ast.setlist('outputfile', self.last_node)
 
-        def block0():
+        self.ast._define(
+            [],
+            ['outputfile']
+        )
+
+    @graken()
+    def _inputfile_(self):
+        self._pattern(r'\S+\.[bs]am')
+        self.ast.setlist('inputfile', self.last_node)
+
+        self.ast._define(
+            [],
+            ['inputfile']
+        )
+
+    @graken()
+    def _bedoverlap_(self):
+        self._pattern(r'\w+')
+        self.ast.setlist('bedoverlap', self.last_node)
+
+        self.ast._define(
+            [],
+            ['bedoverlap']
+        )
+
+    @graken()
+    def _regions_(self):
+        self._pattern(r'\S+')
+        self.ast.setlist('regions', self.last_node)
+
+        self.ast._define(
+            [],
+            ['regions']
+        )
+
+    @graken()
+    def _outprefix_(self):
+        self._pattern(r'\S+')
+        self.ast.setlist('outprefix', self.last_node)
+
+        self.ast._define(
+            [],
+            ['outprefix']
+        )
+
+    @graken()
+    def _file_(self):
+        self._pattern(r'\S+')
+
+    @graken()
+    def _int_(self):
+        self._pattern(r'[0-9]+')
+
+    @graken()
+    def _float_(self):
+        self._pattern(r'[0-9\.]+')
+
+    @graken()
+    def _string_(self):
+        with self._group():
             with self._choice():
                 with self._option():
-                    self._view_argoption_()
+                    self._pattern(r'"[^"]*"')
                 with self._option():
-                    self._view_noargoption_()
-                self._error('no available options')
-        self._closure(block0)
-
-    @graken()
-    def _view_argoption_(self):
-        self._view_argoptionflag_()
-        self._argoptionvalue_()
-
-    @graken()
-    def _view_argoptionflag_(self):
-        self._pattern(r'-[@LtToRfFqlrs]')
-
-    @graken()
-    def _view_noargoption_(self):
-        self._pattern(r'-[bhHSu1xXcB]+')
-
-    @graken()
-    def _sort_option_(self):
-
-        def block0():
-            with self._choice():
+                    self._pattern(r"'[^']*'")
                 with self._option():
-                    self._sort_argoption_()
-                with self._option():
-                    self._sort_noargoption_()
-                self._error('no available options')
-        self._closure(block0)
-
-    @graken()
-    def _sort_argoption_(self):
-        self._sort_argoptionflag_()
-        self._argoptionvalue_()
-
-    @graken()
-    def _sort_argoptionflag_(self):
-        self._pattern(r'-[l@m]')
-
-    @graken()
-    def _sort_noargoption_(self):
-        self._pattern(r'-[nfo]+')
-
-    @graken()
-    def _merge_option_(self):
-
-        def block0():
-            with self._choice():
-                with self._option():
-                    self._merge_argoption_()
-                with self._option():
-                    self._merge_noargoption_()
-                self._error('no available options')
-        self._closure(block0)
-
-    @graken()
-    def _merge_argoption_(self):
-        self._merge_argoptionflag_()
-        self._argoptionvalue_()
-
-    @graken()
-    def _merge_argoptionflag_(self):
-        self._pattern(r'-[l@Rh]+')
-
-    @graken()
-    def _merge_noargoption_(self):
-        self._pattern(r'-[nruf1]+')
-
-    @graken()
-    def _argoptionvalue_(self):
-        self._pattern(r'[^ ]+')
-
-    @graken()
-    def _bamsamfile_(self):
-        self._pattern(r'[^ ]+\.[bs]am')
-
-    @graken()
-    def _anyfile_(self):
-        self._pattern(r'[^ ]+')
+                    self._pattern(r'\S+')
+                self._error('expecting one of: "[^"]*" \'[^\']*\' \\S+')
 
 
 class samtoolsSemantics(object):
     def start(self, ast):
         return ast
 
-    def command(self, ast):
-        return ast
-
-    def samtools_empty(self, ast):
-        return ast
-
     def samtools_view(self, ast):
-        return ast
-
-    def samtools_merge(self, ast):
         return ast
 
     def samtools_flagstat(self, ast):
@@ -263,52 +348,55 @@ class samtoolsSemantics(object):
     def samtools_index(self, ast):
         return ast
 
+    def samtools_merge(self, ast):
+        return ast
+
     def samtools_sort(self, ast):
         return ast
 
-    def view_option(self, ast):
+    def samtools_view_00(self, ast):
         return ast
 
-    def view_argoption(self, ast):
+    def samtools(self, ast):
         return ast
 
-    def view_argoptionflag(self, ast):
+    def sortoptions(self, ast):
         return ast
 
-    def view_noargoption(self, ast):
+    def sortoptions_flag(self, ast):
         return ast
 
-    def sort_option(self, ast):
+    def viewoptions(self, ast):
         return ast
 
-    def sort_argoption(self, ast):
+    def viewoptions_flag(self, ast):
         return ast
 
-    def sort_argoptionflag(self, ast):
+    def outputfile(self, ast):
         return ast
 
-    def sort_noargoption(self, ast):
+    def inputfile(self, ast):
         return ast
 
-    def merge_option(self, ast):
+    def bedoverlap(self, ast):
         return ast
 
-    def merge_argoption(self, ast):
+    def regions(self, ast):
         return ast
 
-    def merge_argoptionflag(self, ast):
+    def outprefix(self, ast):
         return ast
 
-    def merge_noargoption(self, ast):
+    def file(self, ast):
         return ast
 
-    def argoptionvalue(self, ast):
+    def int(self, ast):
         return ast
 
-    def bamsamfile(self, ast):
+    def float(self, ast):
         return ast
 
-    def anyfile(self, ast):
+    def string(self, ast):
         return ast
 
 
