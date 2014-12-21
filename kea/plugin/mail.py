@@ -1,3 +1,8 @@
+"""
+Send mail plugin
+
+
+"""
 
 import leip
 import logging
@@ -12,19 +17,19 @@ lg = logging.getLogger(__name__)
 
 @leip.hook('pre_argparse')
 def define_args(app):
-    maildef = app.conf['plugin.mail.default']
-    if maildef:
-        app.parser.add_argument('-M', '--no_mail', help='do NOT send an email report', action='store_true')
-    else:
-        app.parser.add_argument('-m', '--mail', help='send an email report', action='store_true')
-    mailsuc = app.conf['plugin.mail.on_success']
-    if mailsuc:
-        app.parser.add_argument('-U', '--no_mail_on_success', dest='mail_on_success',
-                                help='do NOT send an email report on successful execution',
-                                action='store_false')
-    else:
-        app.parser.add_argument('-u', '--mail_on_success', help='send an email report on ' +
-                                'successful execution', action='store_true')
+    mail_group = app.parser.add_argument_group('Mail plugin')
+
+    mail_group.add_argument('--mail_send', help='Send an email report',
+                            action='store_true', default=None)
+    
+    mail_group.add_argument('--mail_on_success', 
+                            help='Also send an email when a job finishes succesfully',
+                            action='store_true', default=None)
+
+    mail_group.add_argument('--mail_recipient', 
+                            help='email address to send report to (comma ' +
+                            'separate multiple addresses)',
+                            action='store_true', default=None)
 
         
 HTML_MESSAGE = """MIME-Version: 1.0
@@ -107,11 +112,19 @@ Subject:
 @leip.hook('finish')
 def mail(app):
 
+    #lg.setLevel(logging.DEBUG)
     if not hasattr(app, 'all_jinf'):
         return
-    
-    maildef = app.conf['plugin.mail.default']
-    mailsuc = app.conf['plugin.mail.on_success']
+
+    maildef = app.defargs.get('send_mail')
+    mailsuc = app.defargs.get('mail_on_success')
+    mailrecip = app.defargs.get('mail_recipient')
+
+
+    if not maildef:
+        lg.debug("no mail to be send")
+        #sending mail is not required
+        return
 
     #did all jobs finish successfully?
     success = True
@@ -121,6 +134,10 @@ def mail(app):
             success = False
             break
 
+    if not mailsuc and success:
+        lg.debug("job finished successfully - not sending mail")
+        return
+        
     data = {}
     data['success'] = success
     data['all_jinf'] = app.all_jinf
@@ -129,18 +146,9 @@ def mail(app):
     data['clj'] = " ".join(app.cl)
 
     
-    if success and not app.args.mail_on_success:
-        #all is well - do not send an email
+    if not mailrecip:
+        lg.debug("No mail recipient(s) defined - cannot send mail")
         return
-
-    # mkea conf set plugin.mail.recipient 'mark.fiers@cme.vib-kuleuven.be'
-    mailto = app.conf['plugin.mail.recipient']
-    
-    if not mailto:
-        lg.warning("No mail recipient defined - cannot send mail")
-        return
-
-        
 
     def keapretty(value, key):
         return kea.utils.make_pretty_kv_html(key, value)
@@ -151,7 +159,12 @@ def mail(app):
     
     message = template.render(data)
 
-    p = sp.Popen("sendmail %s" % mailto, stdin=sp.PIPE, shell=True)
+    if ',' in mailrecip:
+        mailrecip = " ".join(mailrecip.split(','))
+
+    lg.debug("Sending report mail to: %s", mailrecip)
+                             
+    p = sp.Popen("sendmail %s" % mailrecip, stdin=sp.PIPE, shell=True)
     p.communicate(message.encode('utf-8'))
 
 

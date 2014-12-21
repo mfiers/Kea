@@ -35,18 +35,29 @@ def log_screen(app, jinf):
     if not app.args.report_screen:
         return
         
-    def dictprint(d, pref=""):
+    def dictprint(d, firstpre="", nextpre=""):
         mxkyln = max([len(x) for x in d.keys()])
-        fs = pref + '{:<' + str(mxkyln) + '} : {}'
-        for k in sorted(d.keys()):        
+        fs = '{:<' + str(mxkyln) + '} : {}'
+        fp = '{:<' + str(mxkyln) + '} > '
+        i = 0
+        for k in sorted(d.keys()):
+            if k in ['args']:
+                continue
+                
             v = d[k]
-
             v = kea.utils.make_pretty_kv(k, v)
             
+            if isinstance(v, str) and not v.strip():
+                continue
+
+            i = i + 1
+            pre = firstpre if i == 1 else nextpre
             if not isinstance(v, dict):
-                print fs.format(k, v)
-            else:
-                dictprint(v, '{}.'.format(k))
+                print pre + fs.format(k, v)
+            else:                
+                bfp = pre + fp.format(k)
+                bnp = nextpre + fp.format(' ')
+                dictprint(v, bfp, bnp)
                 
     print '--KEA-REPORT' + '-' * 68
     dictprint(jinf)
