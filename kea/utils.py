@@ -3,8 +3,10 @@
 import calendar
 import copy
 from datetime import datetime, timedelta
+import hashlib
 import logging
 import os
+import socket
 import subprocess as sp
 import sys
 
@@ -15,6 +17,28 @@ from leip import set_local_config
 lg = logging.getLogger(__name__)
 
 
+BASEUID = None
+def get_base_uid():
+    global BASEUID
+    if BASEUID is None:
+        sha1 = hashlib.sha1()
+        sha1.update(str(datetime.now()))
+        sha1.update(socket.getfqdn())
+        BASEUID = sha1.hexdigest()[:8]
+    return BASEUID
+    
+def get_uid(app, runno=None):
+    if app.args.uid:
+        base = app.args.uid
+    else:
+        base = get_base_uid()
+        
+    if runno:
+        return '{}.{}'.format(base, runno)
+    else:
+        return base
+
+        
 # Nicely format run log stats
 FSIZEKEYS = ["ps_meminfo_max_rss", "ps_meminfo_max_vms",
              "ps_sys_swap_free", "ps_sys_swap_sin",
@@ -44,6 +68,8 @@ def make_pretty_kv(k, v):
             
     if v is None:
         return ""
+    elif isinstance(v, dict):
+        return v
     elif str(v).strip() == "":
         return ""
     if k in FSIZEKEYS:
