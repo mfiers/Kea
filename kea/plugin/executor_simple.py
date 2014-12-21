@@ -24,12 +24,19 @@ MPJOBNO = 0
 @leip.hook('pre_argparse')
 def main_arg_define(app):
     if app.executor == 'simple':
-        app.parser.add_argument('-j', '--threads', help='no threads to use', type=int)
-        app.parser.add_argument('-E', '--echo', help='echo command line to screen', action='store_true')
-        app.parser.add_argument('-w', '--walltime',
-                                help=('max time that this process can take, '
-                                      'after this time, the process gets killed. Specified in seconds, or with '
-                                      'postfix m for minutes, h for hours, d for days'))
+        simple_group = app.parser.add_argument_group('Simple Executor')
+        simple_group.add_argument('-T', '--track_sys', help='track system status',
+                                action='store_true', default=None)
+        simple_group.add_argument('-j', '--threads', help='no threads to use',
+                                type=int)
+        simple_group.add_argument('-E', '--echo', help='echo command line to screen',
+                                action='store_true', default=None)
+        simple_group.add_argument('-w', '--walltime',
+                                help=('max time that this process can take, ' +
+                                      'after this time, the process gets killed. ' +
+                                      'Specified in seconds, or with ' +
+                                      'postfix m for minutes, h for hours, ' +
+                                      'd for days'))
                 
 
 
@@ -83,8 +90,9 @@ def get_deferred_cl(info):
     if info['stderr_file']:
         dcl.extend(['-e', info['stderr_file']])
     dcl.extend(info['cl'])
-    return cl
+    return dcl
 
+    
 def store_process_info(info):
     psu = info.get('psutil_process')
     if not psu: return
@@ -128,6 +136,9 @@ def simple_runner(info, executor, defer_run=False):
     thisjob = MPJOBNO
     MPJOBNO += 1
 
+    #track system status (memory, etc)
+    sysstatus = executor.app.defargs['track_sys']
+    
     info['job_thread_no'] = MPJOBNO
     lgx = logging.getLogger("job{}".format(thisjob))
     #lgx.setLevel(logging.DEBUG)
@@ -152,13 +163,14 @@ def simple_runner(info, executor, defer_run=False):
     lgx.debug("thread start %s", info['start'])
 
     #system psutil stuff
-    info['ps_sys_cpucount'] = psutil.cpu_count()
-    psu_vm = psutil.virtual_memory()
-    for field in psu_vm._fields:
-        info['ps_sys_vmem_{}'.format(field)] = getattr(psu_vm, field)
-    psu_sw = psutil.swap_memory()
-    for field in psu_sw._fields:
-        info['ps_sys_swap_{}'.format(field)] = getattr(psu_sw, field)
+    if sysstatus:
+        info['ps_sys_cpucount'] = psutil.cpu_count()
+        psu_vm = psutil.virtual_memory()
+        for field in psu_vm._fields:
+            info['ps_sys_vmem_{}'.format(field)] = getattr(psu_vm, field)
+        psu_sw = psutil.swap_memory()
+        for field in psu_sw._fields:
+            info['ps_sys_swap_{}'.format(field)] = getattr(psu_sw, field)
 
 
     if defer_run:
@@ -171,13 +183,15 @@ def simple_runner(info, executor, defer_run=False):
 
         info['pid'] = P.pid
         lgx.debug("Job has started with pid: %d", info['pid'])
-        try:
-            psu = psutil.Process(P.pid)
-            info['psutil_process'] = psu
-            store_process_info(info)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            #job may have already finished - ignore
-            pass
+
+        if sysstatus:
+            try:
+                psu = psutil.Process(P.pid)
+                info['psutil_process'] = psu
+                store_process_info(info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                #job may have already finished - ignore
+                pass
         
         stdout_dq = deque(maxlen=100)
         stderr_dq = deque(maxlen=100)
@@ -210,7 +224,8 @@ def simple_runner(info, executor, defer_run=False):
 
             #read_proc_status(td)
             time.sleep(0.2)
-            store_process_info(info)
+            if sysstatus:
+                store_process_info(info)
 
             try:
                 stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
@@ -294,17 +309,19 @@ class BasicExecutor(object):
             self.pool = ThreadPool(self.threads)
             lg.debug("using a threadpool with %d threads", self.threads)
 
+
         self.walltime = None
-        if self.app.args.walltime:
+        if hasattr(self.app.args, 'walltime'):
             w = self.app.args.walltime
-            if len(w) > 1 and w[-1] == 'm':
-                self.walltime = float(w[:-1]) * 60
-            elif len(w) > 1 and w[-1] == 'h':
-                self.walltime = float(w[:-1]) * 60 * 60
-            elif len(w) > 1 and w[-1] == 'd':
-                self.walltime = float(w[:-1]) * 60 * 60 * 24
-            else:
-                self.walltime = float(w)
+            if not w is None:
+                if len(w) > 1 and w[-1] == 'm':
+                    self.walltime = float(w[:-1]) * 60
+                elif len(w) > 1 and w[-1] == 'h':
+                    self.walltime = float(w[:-1]) * 60 * 60
+                elif len(w) > 1 and w[-1] == 'd':
+                    self.walltime = float(w[:-1]) * 60 * 60 * 24
+                else:
+                    self.walltime = float(w)
                 
     def fire(self, info):
         lg.debug("start execution")
@@ -337,6 +354,8 @@ class BasicExecutor(object):
 class DummyExecutor(BasicExecutor):
 
     def fire(self, info):
+        
+        self.app.run_hook('pre_fire', info)
         lg.debug("start dummy execution")
         cl = copy.copy(info['cl'])
 
@@ -348,7 +367,10 @@ class DummyExecutor(BasicExecutor):
         lg.debug("  cl: %s", cl)
         print " ".join(cl)
         info['mode'] = 'synchronous'
-
+        info['returncode'] = 0
+        info['status'] = 'success'
+        self.app.run_hook('post_fire', info)
+        
 
 conf = leip.get_config('kea')
 conf['executors.simple'] = BasicExecutor
