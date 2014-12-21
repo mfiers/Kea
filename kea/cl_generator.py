@@ -18,15 +18,22 @@ input:
 
 import copy
 from datetime import datetime
+import hashlib
 import glob
 import logging
 import itertools
 import re
 import shlex
+import socket
 import sys
 from collections import OrderedDict
 
+import leip
+from kea.utils import get_uid
+
 lg = logging.getLogger(__name__)
+
+
 
 RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
 
@@ -141,19 +148,6 @@ def apply_map_info_to_cl(newcl, map_info):
 
     return newcl
 
-def get_uid(app, runno=None):
-    if runno is None:
-        no = ''
-    else:
-        no = '{}.'.format(runno)
-        
-    if app.args.uid:
-        uid = '{}.{}{}'.format(app.name, no, app.args.uid)
-    else:
-        now = datetime.now()
-        # YYYY-MM-DDThh:mm:ss.sTZD (eg 1997-07-16T19:20:30.45+01:00)
-        uid = '{}.{}{}'.format(app.name, no, now.strftime("%Y-%m-%dT%H:%M:%S"))
-    return(uid)
     
     
 def basic_command_line_generator(app):
@@ -172,7 +166,9 @@ def basic_command_line_generator(app):
     #check if there are iterable arguments in here
     mapcount = 0
     mapins = RE_FIND_MAPINPUT.search(cljoin)
+    nojobstorun = app.defargs['jobstorun']
 
+    
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
         info['cl'] = cl
@@ -231,7 +227,8 @@ def basic_command_line_generator(app):
     no = 0
     for newcl, pipes in  expander(cl, pipes):
         no += 1
-        
+        if nojobstorun and no > nojobstorun:
+            break
         newinfo = copy.copy(info)
         newinfo['run_uid'] = get_uid(app, no)
         newinfo['cl'] = newcl
