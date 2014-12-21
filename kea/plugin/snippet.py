@@ -29,7 +29,23 @@ def run(app, args):
     sys.argv = sys.argv[:sys.argv.index('run')] + snippet + args.arg
     kea_app = Kea()
     kea_app.run()
+
+@leip.command
+def jobrun(app, args):
+
+    if not os.path.exists('run.sh'):
+        lg.error("no run.sh found")
+        exit(-1)
+    with open ('./run.sh') as F:
+        code = F.read()
+
+    os.system(code)
+    exit()
     
+@leip.command
+def jr(app, args):
+    return jobrun(app, args)
+
     
 @leip.arg('args', nargs=argparse.REMAINDER)
 @leip.arg('name')
@@ -56,27 +72,20 @@ def jobset(app, args):
     if no command line is provided a prompt is provided
     """
     
-    ukargs = app.trans.get('unknown_args', [])
-    
     if len(args.command_line) == 0:
         import toMaKe.ui
         default = ""
         if os.path.exists('run.sh'):
             with open('run.sh') as F:
                 default = F.read().strip()
-            defsplit = shlex.split(default)
-            if 'kea' in defsplit[0]:
-                default = " ".join(defsplit[1:])
-        jcl = shlex.split(toMaKe.ui.askUser("cl ", appname='kea', default=default,
-                                            prompt='cl: kea '))
+        jcl = toMaKe.ui.askUser("cl", appname='kea', default=default,
+                                prompt='cl: ')
     else:
         jcl = args.command_line
-    
-    cl = ['kea'] + ukargs + jcl
-    
-    lg.info('saving as job: %s', " ".join(cl))
+
+    lg.info('saving as job: %s', " ".join(jcl))
     with open('./run.sh', 'w') as F:
-        F.write(" ".join(cl) + "\n")
+        F.write(jcl.rstrip() +  "\n")
 
 @leip.arg('command_line', nargs=argparse.REMAINDER)
 @leip.command
