@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2014, 12, 21, 14, 12, 22, 6)
+__version__ = (2015, 1, 2, 20, 53, 46, 4)
 
 __all__ = [
     'samtoolsParser',
@@ -36,23 +36,19 @@ class samtoolsParser(Parser):
     def _start_(self):
         with self._choice():
             with self._option():
-                self._samtools_view_()
-            with self._option():
-                self._samtools_flagstat_()
-            with self._option():
-                self._samtools_index_()
-            with self._option():
-                self._samtools_merge_()
-            with self._option():
-                self._samtools_sort_()
-            with self._option():
-                self._samtools_view_00_()
-            with self._option():
                 self._samtools_()
+            with self._option():
+                self._samtools_00_()
+            with self._option():
+                self._samtools_01_()
+            with self._option():
+                self._samtools_02_()
+            with self._option():
+                self._samtools_03_()
             self._error('no available options')
 
     @graken()
-    def _samtools_view_(self):
+    def _samtools_(self):
         self._token('samtools')
         self._pattern(r'\s+')
         self._token('view')
@@ -71,7 +67,7 @@ class samtoolsParser(Parser):
         self._check_eof()
 
     @graken()
-    def _samtools_flagstat_(self):
+    def _samtools_00_(self):
         self._token('samtools')
         self._pattern(r'\s+')
         self._token('flagstat')
@@ -80,7 +76,7 @@ class samtoolsParser(Parser):
         self._check_eof()
 
     @graken()
-    def _samtools_index_(self):
+    def _samtools_01_(self):
         self._token('samtools')
         self._pattern(r'\s+')
         self._token('index')
@@ -89,7 +85,7 @@ class samtoolsParser(Parser):
         self._check_eof()
 
     @graken()
-    def _samtools_merge_(self):
+    def _samtools_02_(self):
         self._token('samtools')
         self._pattern(r'\s+')
         self._token('merge')
@@ -105,7 +101,7 @@ class samtoolsParser(Parser):
         self._check_eof()
 
     @graken()
-    def _samtools_sort_(self):
+    def _samtools_03_(self):
         self._token('samtools')
         self._pattern(r'\s+')
         self._token('sort')
@@ -121,18 +117,6 @@ class samtoolsParser(Parser):
         self._check_eof()
 
     @graken()
-    def _samtools_view_00_(self):
-        self._token('samtools')
-        self._pattern(r'\s+')
-        self._token('view')
-        self._check_eof()
-
-    @graken()
-    def _samtools_(self):
-        self._token('samtools')
-        self._check_eof()
-
-    @graken()
     def _sortoptions_(self):
         with self._group():
             with self._choice():
@@ -142,15 +126,23 @@ class samtoolsParser(Parser):
                     self._token('-l')
                     self._pattern(r'\s+')
                     self._int_()
+                    self.ast.setlist('compression_level', self.last_node)
                 with self._option():
                     self._token('-@')
                     self._pattern(r'\s+')
                     self._int_()
+                    self.ast.setlist('no_threads', self.last_node)
                 with self._option():
                     self._token('-m')
                     self._pattern(r'\s+')
                     self._string_()
+                    self.ast.setlist('thread_memory', self.last_node)
                 self._error('no available options')
+
+        self.ast._define(
+            [],
+            ['compression_level', 'no_threads', 'thread_memory']
+        )
 
     @graken()
     def _sortoptions_flag_(self):
@@ -159,13 +151,21 @@ class samtoolsParser(Parser):
         def block0():
             with self._choice():
                 with self._option():
-                    self._pattern(r'n')
+                    self._token('n')
+                    self.ast.setlist('sort_by_reada', self.last_node)
                 with self._option():
-                    self._pattern(r'f')
+                    self._token('f')
+                    self.ast.setlist('prefix_is_fullname', self.last_node)
                 with self._option():
-                    self._pattern(r'o')
+                    self._token('o')
+                    self.ast.setlist('output_to_stdout', self.last_node)
                 self._error('expecting one of: f n o')
         self._positive_closure(block0)
+
+        self.ast._define(
+            [],
+            ['sort_by_reada', 'prefix_is_fullname', 'output_to_stdout']
+        )
 
     @graken()
     def _viewoptions_(self):
@@ -221,7 +221,13 @@ class samtoolsParser(Parser):
                     self._token('-s')
                     self._pattern(r'\s+')
                     self._float_()
+                    self.ast.setlist('frac_subsample', self.last_node)
                 self._error('no available options')
+
+        self.ast._define(
+            [],
+            ['frac_subsample']
+        )
 
     @graken()
     def _viewoptions_flag_(self):
@@ -230,34 +236,36 @@ class samtoolsParser(Parser):
         def block0():
             with self._choice():
                 with self._option():
-                    self._pattern(r'b')
-                    self.ast.setlist('output_bam', self.last_node)
+                    self._token('b')
+                    self.ast.setlist('output_is_bam', self.last_node)
                 with self._option():
-                    self._pattern(r'h')
+                    self._token('h')
+                    self.ast.setlist('output_header', self.last_node)
                 with self._option():
-                    self._pattern(r'H')
+                    self._token('H')
                 with self._option():
-                    self._pattern(r'S')
+                    self._token('S')
+                    self.ast.setlist('input_is_sam', self.last_node)
                 with self._option():
-                    self._pattern(r'u')
+                    self._token('u')
                 with self._option():
-                    self._pattern(r'1')
+                    self._token('1')
                 with self._option():
-                    self._pattern(r'x')
+                    self._token('x')
                 with self._option():
-                    self._pattern(r'X')
+                    self._token('X')
                 with self._option():
-                    self._pattern(r'c')
+                    self._token('c')
                 with self._option():
-                    self._pattern(r'B')
+                    self._token('B')
                 with self._option():
-                    self._pattern(r'\?')
-                self._error('expecting one of: 1 B H S X \\? b c h u x')
+                    self._token('?')
+                self._error('expecting one of: 1 ? B H S X b c h u x')
         self._positive_closure(block0)
 
         self.ast._define(
             [],
-            ['output_bam']
+            ['output_is_bam', 'output_header', 'input_is_sam']
         )
 
     @graken()
@@ -282,7 +290,7 @@ class samtoolsParser(Parser):
 
     @graken()
     def _bedoverlap_(self):
-        self._pattern(r'\w+')
+        self._file_()
         self.ast.setlist('bedoverlap', self.last_node)
 
         self.ast._define(
@@ -311,12 +319,30 @@ class samtoolsParser(Parser):
         )
 
     @graken()
+    def _sort_dasho_(self):
+        self._token('-o')
+        self.ast.setlist('sort_dasho', self.last_node)
+
+        self.ast._define(
+            [],
+            ['sort_dasho']
+        )
+
+    @graken()
     def _file_(self):
         self._pattern(r'\S+')
 
     @graken()
+    def _path_(self):
+        self._file_()
+
+    @graken()
     def _int_(self):
         self._pattern(r'[0-9]+')
+
+    @graken()
+    def _integer_(self):
+        self._int_()
 
     @graken()
     def _float_(self):
@@ -334,30 +360,28 @@ class samtoolsParser(Parser):
                     self._pattern(r'\S+')
                 self._error('expecting one of: "[^"]*" \'[^\']*\' \\S+')
 
+    @graken()
+    def _str_(self):
+        self._string_()
+
 
 class samtoolsSemantics(object):
     def start(self, ast):
         return ast
 
-    def samtools_view(self, ast):
-        return ast
-
-    def samtools_flagstat(self, ast):
-        return ast
-
-    def samtools_index(self, ast):
-        return ast
-
-    def samtools_merge(self, ast):
-        return ast
-
-    def samtools_sort(self, ast):
-        return ast
-
-    def samtools_view_00(self, ast):
-        return ast
-
     def samtools(self, ast):
+        return ast
+
+    def samtools_00(self, ast):
+        return ast
+
+    def samtools_01(self, ast):
+        return ast
+
+    def samtools_02(self, ast):
+        return ast
+
+    def samtools_03(self, ast):
         return ast
 
     def sortoptions(self, ast):
@@ -387,16 +411,28 @@ class samtoolsSemantics(object):
     def outprefix(self, ast):
         return ast
 
+    def sort_dasho(self, ast):
+        return ast
+
     def file(self, ast):
         return ast
 
+    def path(self, ast):
+        return ast
+
     def int(self, ast):
+        return ast
+
+    def integer(self, ast):
         return ast
 
     def float(self, ast):
         return ast
 
     def string(self, ast):
+        return ast
+
+    def str(self, ast):
         return ast
 
 

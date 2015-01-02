@@ -1,31 +1,36 @@
 start = 
-  samtools_view | 
-  samtools_flagstat | 
-  samtools_index | 
-  samtools_merge | 
-  samtools_sort | 
-  samtools_view_00 | 
-  samtools ;
+  samtools | 
+  samtools_00 | 
+  samtools_01 | 
+  samtools_02 | 
+  samtools_03 ;
 
-samtools_view = "samtools" /\s+/ "view" { /\s+/ viewoptions} /\s+/ inputfile { /\s+/ regions} $ ;
-samtools_flagstat = "samtools" /\s+/ "flagstat" /\s+/ inputfile $ ;
-samtools_index = "samtools" /\s+/ "index" /\s+/ inputfile $ ;
-samtools_merge = "samtools" /\s+/ "merge" /\s+/ outputfile /\s+/ inputfile { /\s+/ inputfile} $ ;
-samtools_sort = "samtools" /\s+/ "sort" { /\s+/ sortoptions} /\s+/ inputfile /\s+/ outprefix $ ;
-samtools_view_00 = "samtools" /\s+/ "view" $ ;
-samtools = "samtools" $ ;
+samtools = "samtools" /\s+/ "view" { /\s+/ viewoptions} /\s+/ inputfile { /\s+/
+    regions} $ ;
 
+samtools_00 = "samtools" /\s+/ "flagstat" /\s+/ inputfile $ ;
+
+samtools_01 = "samtools" /\s+/ "index" /\s+/ inputfile $ ;
+
+samtools_02 = "samtools" /\s+/ "merge" /\s+/ outputfile /\s+/ inputfile { /\s+/
+    inputfile} $ ;
+
+samtools_03 = "samtools" /\s+/ "sort" { /\s+/ sortoptions} /\s+/ inputfile /\s+/
+    outprefix $ ;
+
+(* options *)
 sortoptions = (
   sortoptions_flag
-  | "-l" /\s+/ int
-  | "-@" /\s+/ int
-  | "-m" /\s+/ string
+  | "-l" /\s+/ compression_level+:int
+  | "-@" /\s+/ no_threads+:int
+  | "-m" /\s+/ thread_memory+:string
   ) ; 
 
-sortoptions_flag = "-" { /n/
-        | /f/
-        | /o/ }+;
+sortoptions_flag = "-" { sort_by_reada+:"n"
+        | prefix_is_fullname+:"f"
+        | output_to_stdout+:"o" }+;
 
+(* options *)
 viewoptions = (
   viewoptions_flag
   | "-@" /\s+/ int
@@ -39,36 +44,40 @@ viewoptions = (
   | "-q" /\s+/ int
   | "-l" /\s+/ string
   | "-r" /\s+/ string
-  | "-s" /\s+/ float
+  | "-s" /\s+/ frac_subsample+:float
   ) ; 
 
-viewoptions_flag = "-" { output_bam+:/b/
-        | /h/
-        | /H/
-        | /S/
-        | /u/
-        | /1/
-        | /x/
-        | /X/
-        | /c/
-        | /B/
-        | /\?/ }+;
+viewoptions_flag = "-" { output_is_bam+:"b"
+        | output_header+:"h"
+        | "H"
+        | input_is_sam+:"S"
+        | "u"
+        | "1"
+        | "x"
+        | "X"
+        | "c"
+        | "B"
+        | "?" }+;
 
 
 (* files *)
 outputfile = outputfile+:/\S+\.bam/ ; 
 inputfile = inputfile+:/\S+\.[bs]am/ ; 
-bedoverlap = bedoverlap+:/\w+/ ; 
+bedoverlap = bedoverlap+:file ; 
+
 
 
 (* other *)
 regions = regions+:/\S+/ ; 
 outprefix = outprefix+:/\S+/ ; 
+sort_dasho = sort_dasho+:"-o" ; 
 
 
 (* Misc *)
 file = /\S+/ ;
+path = file ; 
 int = /[0-9]+/ ;
+integer = int ;
 float = /[0-9\.]+/ ;
 string = ( /"[^"]*"/ | /'[^']*'/ | /\S+/ ) ;
-
+str = string ;
