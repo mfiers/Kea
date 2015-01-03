@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2015, 1, 2, 20, 53, 46, 4)
+__version__ = (2015, 1, 2, 21, 49, 30, 4)
 
 __all__ = [
     'bowtie2Parser',

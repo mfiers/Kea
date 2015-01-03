@@ -177,6 +177,8 @@ def convert_options(options):
             pats = pat.split()
             if len(pat) == 2 and pat[0] == '-':
                 if name:
+                    #change type to 'flag'
+                    meta[name]['type'] = 'flag'
                     letterflags.append('{}+:"{}"'.format(name, pat[1]))
                 else:
                     letterflags.append('"{}"'.format(pat[1]))

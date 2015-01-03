@@ -40,10 +40,52 @@ def astparse(ast, data={}):
 
 
 class KeaSemantics:
+
     def __init__(self, meta):
         self.meta = meta
-        self.options = {}
-        self.files = {}
+        self.options = collections.defaultdict(list)
+        self.files = collections.defaultdict(dict)
+
+        for k, m in meta.iteritems():
+            if 'default' in m:
+                if m['type'] == 'flag':
+                    self.set_value(k, True)
+                else:
+                    self.set_value(k, m['default'])
+
+    def set_value(self, k, v):
+
+        if isinstance(v, collections.Mapping):
+            v = map(str, v)
+        elif isinstance(v, unicode):
+            v = str(v)
+
+        kmeta = self.meta[k]
+        ktype = kmeta['type']
+        kcard = kmeta.get('cardinality', None)
+        if kcard is None:
+            kcard = '1' if ktype == 'flag' else '+'
+
+        if kcard == '+' and not isinstance(v, list):
+            v = [v]
+        if kcard == '1' and isinstance(v, list):
+            v = v[0]
+
+        if ktype in ['option', 'other', 'flag']:
+            if kcard == '1': 
+                self.options[k] = v
+            else:
+                self.options[k].extend(v)
+
+        if ktype == 'file':
+            print k, v, kcard, kmeta
+            self.files[k]['category'] = kmeta['category']
+            if kcard == '1':
+                self.files[k]['path'] = v
+            else:
+                self.files[k]['path'] = self.files[k].get('path', []) + v
+
+        
 
     def _default(self, ast):
         if not isinstance(ast, grako.ast.AST):
@@ -57,19 +99,8 @@ class KeaSemantics:
             if not k in self.meta:
                 continue
 
-            v = map(str, v)
-
-            kmeta = self.meta[k]
-            ktype = kmeta['type']
-            if ktype in ['option', 'other']:
-                if not k in self.options:
-                    self.options[k] = []
-                self.options[k].extend(v)
-            elif ktype in ['file']:
-                if not k in self.files:
-                    self.files[k] = dict(category=kmeta['category'],
-                                         path = [])
-                self.files[k]['path'].extend(v)
+        
+            self.set_value(k, v)
 
 PARSERS = {}
 

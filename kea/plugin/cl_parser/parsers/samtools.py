@@ -15,7 +15,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 from grako.parsing import graken, Parser
 
 
-__version__ = (2015, 1, 2, 20, 53, 46, 4)
+__version__ = (2015, 1, 2, 21, 49, 31, 4)
 
 __all__ = [
     'samtoolsParser',
@@ -152,7 +152,7 @@ class samtoolsParser(Parser):
             with self._choice():
                 with self._option():
                     self._token('n')
-                    self.ast.setlist('sort_by_reada', self.last_node)
+                    self.ast.setlist('sort_by_read', self.last_node)
                 with self._option():
                     self._token('f')
                     self.ast.setlist('prefix_is_fullname', self.last_node)
@@ -164,7 +164,7 @@ class samtoolsParser(Parser):
 
         self.ast._define(
             [],
-            ['sort_by_reada', 'prefix_is_fullname', 'output_to_stdout']
+            ['sort_by_read', 'prefix_is_fullname', 'output_to_stdout']
         )
 
     @graken()

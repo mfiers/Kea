@@ -6,7 +6,7 @@ samtools sort [sortoptions...] <inputfile> <outprefix>
 
 
 options sortoptions
-  -n           || name=sort_by_reada
+  -n           || name=sort_by_read
   -f           || name=prefix_is_fullname
   -o           || name=output_to_stdout
   -l <int>     || name=compression_level
@@ -41,12 +41,12 @@ options viewoptions
 
 
 files 
-  outputfile  = /\S+\.bam/     || category=output
+  outputfile  = /\S+\.bam/     || category=output default=__stdout__ cardinality=1
   inputfile   = /\S+\.[bs]am/  || category=input
   bedoverlap  = file           || category=input
  
 
 other
   regions = /\S+/       
-  outprefix = /\S+/
+  outprefix = /\S+/ || cardinality=1
   sort_dasho = "-o"
