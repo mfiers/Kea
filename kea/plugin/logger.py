@@ -36,7 +36,9 @@ def log_screen(app, jinf):
         return
         
     def dictprint(d, firstpre="", nextpre=""):
-        mxkyln = max([len(x) for x in d.keys()])
+        if len(d) == 0:
+            return
+        mxkyln = max([len(x) for x in d.keys()] + [5])
         fs = '{:<' + str(mxkyln) + '} : {}'
         fp = '{:<' + str(mxkyln) + '} > '
         i = 0

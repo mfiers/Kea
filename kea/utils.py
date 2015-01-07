@@ -97,6 +97,18 @@ def make_pretty_kv_html(k, v):
     elif str(v).strip() == "":
         return '<td colspan="2"></td>'
         
+    if k == 'files':
+        rv = ['<td colspan="2"><table>']
+        for fn in v:
+            fd = " ".join(['/'.join(x) for x in v[fn]])
+            rv.append('<tr><td><b>{}</b></td>'.format(fn))
+            
+            rv.append('<td>: a<i>{}</i></td>'.format(fd))
+            rv.append('</tr>')
+            
+        rv.append('</table></td>')
+        return "".join(rv)
+        
     if k in FSIZEKEYS:
         return "<td>{}</td><td>{}</td>".format(humanize.naturalsize(v), v)
     elif k in ['start', 'stop']:

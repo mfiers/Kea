@@ -99,7 +99,7 @@ Subject:
 <table>
 {% for k in jinf %}
 <tr {% if loop.cycle(False, True) -%}style="background-color: #EEEEEE;"
-    {%- endif %}><th style="text-align: left;">{{k}}</th>
+    {%- endif %}><th style="text-align: left; vertical-align: text-top;">{{k}}</th>
     {{ jinf[k]|pretty(k) }}
 </tr>
 {%- endfor %}
