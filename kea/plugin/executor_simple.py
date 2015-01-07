@@ -44,7 +44,6 @@ def main_arg_define(app):
 
 #thanks: https://gist.github.com/sebclaeys/1232088
 def non_block_read(stream, chunk_size=10000):
-    #print('xxx', type(stream))
     fd = stream.fileno()
     fl = fcntl.fcntl(fd, fcntl.F_GETFL)
     fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
@@ -103,11 +102,6 @@ def store_process_info(info):
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
 
-#        if not 'allpids' in info:
-#            info['allpids'] = []
-#        for p in psu.children(recursive=True):
-#            print('xxx', psu.pid, p.pid)
-
         cputime = psu.cpu_times()
 
         info['ps_cputime_user'] = cputime.user 
@@ -119,7 +113,6 @@ def store_process_info(info):
         meminfo = psu.memory_info()
 
         for f in meminfo._fields:
-            #info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
             info['ps_meminfo_max_{}'.format(f)] = \
                     max(getattr(meminfo, f),
                         info.get('ps_meminfo_max_{}'.format(f), 0))
@@ -327,7 +320,6 @@ def simple_runner(info, executor, defer_run=False):
             rest = shlex.split(rest.rsplit(')',1)[0])
             filename = rest[0].rstrip(',')
             if 'stat' in typ: continue
-            print(typ, filename, rest)
             if 'SIGCHLD' in typ and filename == 'Child': 
                 continue
             if 'exec' in typ:
