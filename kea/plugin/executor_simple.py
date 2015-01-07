@@ -8,8 +8,10 @@ import logging
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing.dummy import Lock
 import os
+import shlex
 import subprocess as sp
 import sys
+import tempfile
 import time
 
 
@@ -25,7 +27,7 @@ MPJOBNO = 0
 def main_arg_define(app):
     if app.executor == 'simple':
         simple_group = app.parser.add_argument_group('Simple Executor')
-        simple_group.add_argument('-T', '--track_sys', help='track system status',
+        simple_group.add_argument('-T', '--no_track_stat', help='do not track process status',
                                 action='store_true', default=None)
         simple_group.add_argument('-j', '--threads', help='no threads to use',
                                 type=int)
@@ -100,13 +102,22 @@ def store_process_info(info):
         info['ps_nice'] = psu.nice()
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
+
+#        if not 'allpids' in info:
+#            info['allpids'] = []
+#        for p in psu.children(recursive=True):
+#            print('xxx', psu.pid, p.pid)
+
         cputime = psu.cpu_times()
+
         info['ps_cputime_user'] = cputime.user 
         info['ps_cputime_system'] = cputime.system
         info['ps_cpu_percent_max'] = max(
             info.get('ps_cpu_percent_max', 0),
             psu.cpu_percent())
+
         meminfo = psu.memory_info()
+
         for f in meminfo._fields:
             #info['ps_meminfo_{}'.format(f)] = getattr(meminfo, f)
             info['ps_meminfo_max_{}'.format(f)] = \
@@ -123,7 +134,7 @@ def store_process_info(info):
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         #process went away??
         return
-            
+
 def simple_runner(info, executor, defer_run=False):
     """
     Defer run executes the run with the current executor, but with
@@ -137,7 +148,7 @@ def simple_runner(info, executor, defer_run=False):
     MPJOBNO += 1
 
     #track system status (memory, etc)
-    sysstatus = executor.app.defargs['track_sys']
+    sysstatus = not executor.app.defargs['no_track_stat']
     
     info['job_thread_no'] = MPJOBNO
     lgx = logging.getLogger("job{}".format(thisjob))
@@ -177,73 +188,65 @@ def simple_runner(info, executor, defer_run=False):
         P = psutil.Popen(cl, shell=True)
         info['pid'] = P.pid
         info['submitted'] = datetime.utcnow()
-    else:
-        lgx.debug("Starting: %s", " ".join(cl))
-        P = psutil.Popen(" ".join(cl), shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+        return info
 
-        info['pid'] = P.pid
-        lgx.debug("Job has started with pid: %d", info['pid'])
+    #execute!
+    lgx.debug("Starting: %s", " ".join(cl))
+    strace_file = tempfile.NamedTemporaryFile(delete=False)
+    strace_file.close()
+    mcl = "strace -D -e trace=file -tt -r -f -o {} ".format(strace_file.name)
+    lg.debug("strace to: %s", strace_file.name)
+    mcl += " ".join(cl) 
+    lg.debug("executing: %s", mcl)
+    P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
+    info['pid'] = P.pid
+    lgx.debug("Job has started with pid: %d", info['pid'])
+    
+    if sysstatus:
+        try:
+            psu = psutil.Process(P.pid)
+            info['psutil_process'] = psu
+            store_process_info(info)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            #job may have already finished - ignore
+            lg.warning('job finished??')
+            pass
+
+    stdout_dq = deque(maxlen=100)
+    stderr_dq = deque(maxlen=100)
+
+    stdout_len = 0
+    stderr_len = 0
+
+    stdout_sha = hashlib.sha1()
+    stderr_sha = hashlib.sha1()
+
+    force_quit = False
+
+    #loop & poll until the process finishes..
+    while True:
+
+        if walltime:
+            runtime = (datetime.utcnow() - info['start']).total_seconds()
+            if runtime > walltime:
+                if not force_quit:
+                    lg.warning("Killing process (walltime)")
+                force_quit = True
+                P.kill()
+
+        pc = P.poll()
+
+        if isinstance(pc, int):
+            #integer <- returncode => so exit.
+            lgx.debug("got a return code (%d) - exit", pc)
+            break
+
+        #read_proc_status(td)
+        time.sleep(0.2)
         if sysstatus:
-            try:
-                psu = psutil.Process(P.pid)
-                info['psutil_process'] = psu
-                store_process_info(info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                #job may have already finished - ignore
-                pass
-        
-        stdout_dq = deque(maxlen=100)
-        stderr_dq = deque(maxlen=100)
+            store_process_info(info)
 
-        stdout_len = 0
-        stderr_len = 0
-
-        stdout_sha = hashlib.sha1()
-        stderr_sha = hashlib.sha1()
-
-        force_quit = False
-        
-        #loop & poll until the process finishes..
-        while True:
-
-            if walltime:
-                runtime = (datetime.utcnow() - info['start']).total_seconds()
-                if runtime > walltime:
-                    if not force_quit:
-                        lg.warning("Killing process (walltime)")
-                    force_quit = True
-                    P.kill()
-                    
-            pc = P.poll()
-
-            if isinstance(pc, int):
-                #integer <- returncode => so exit.
-                lgx.debug("got a return code (%d) - exit", pc)
-                break
-
-            #read_proc_status(td)
-            time.sleep(0.2)
-            if sysstatus:
-                store_process_info(info)
-
-            try:
-                stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
-                stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
-            except IOError as e:
-                #it appears as if one of the pipes has failed.
-                if e.errno == 32:
-                    errors.append("Broken Pipe")
-                    #broken pipe - no problem.
-                else:
-                    message('err', str(dir(e)))
-                    errors.append("IOError: " + str(e))
-                break
-
-
-
-
-        #clean the pipes
         try:
             stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
             stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
@@ -255,41 +258,88 @@ def simple_runner(info, executor, defer_run=False):
             else:
                 message('err', str(dir(e)))
                 errors.append("IOError: " + str(e))
-            
+            break
 
-        if force_quit:
-            info['status'] = 'killed'
-        elif P.returncode == 0:
-            info['status'] = 'success'
+    #clean the pipes
+    try:
+        stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
+        stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
+    except IOError as e:
+        #it appears as if one of the pipes has failed.
+        if e.errno == 32:
+            errors.append("Broken Pipe")
+            #broken pipe - no problem.
         else:
-            info['status'] = 'fail'
+            message('err', str(dir(e)))
+            errors.append("IOError: " + str(e))
 
-        if info['stdout_file']:
-            lg.debug('closing stdout handle on %s', info['stdout_file'])
-            stdout_handle.close()
-        if info['stderr_file']:
-            lg.debug('closing stderr handle on %s', info['stderr_file'])
-            stderr_handle.close()
 
-        lgx.debug("job has status: %s", info['status'])
-        
-        if stdout_len > 0:
-            info['stdout_sha1'] = stdout_sha.hexdigest()
-        if stderr_len > 0:
-            info['stderr_sha1'] = stderr_sha.hexdigest()
-            
-        info['stop'] = datetime.utcnow()
-        info['runtime'] = (info['stop'] - info['start']).total_seconds()
+    if force_quit:
+        info['status'] = 'killed'
+    elif P.returncode == 0:
+        info['status'] = 'success'
+    else:
+        info['status'] = 'fail'
 
-        if 'psutil_process' in info:
-            del info['psutil_process']
-            
-        info['returncode'] = P.returncode
-        info['stdout_len'] = stdout_len
-        info['stderr_len'] = stderr_len
-        lgx.debug("end thread")
+    if info['stdout_file']:
+        lg.debug('closing stdout handle on %s', info['stdout_file'])
+        stdout_handle.close()
+    if info['stderr_file']:
+        lg.debug('closing stderr handle on %s', info['stderr_file'])
+        stderr_handle.close()
 
-        return info
+    lgx.debug("job has status: %s", info['status'])
+
+    if stdout_len > 0:
+        info['stdout_sha1'] = stdout_sha.hexdigest()
+    if stderr_len > 0:
+        info['stderr_sha1'] = stderr_sha.hexdigest()
+
+    info['stop'] = datetime.utcnow()
+    info['runtime'] = (info['stop'] - info['start']).total_seconds()
+
+    if 'psutil_process' in info:
+        del info['psutil_process']
+
+    info['returncode'] = P.returncode
+    info['stdout_len'] = stdout_len
+    info['stderr_len'] = stderr_len
+    lgx.debug("end thread")
+
+
+    #parse strace output & store data
+    if not 'files' in info:
+        info['files'] = {}
+
+    def _fileupdate(d, k, v):
+        if not k in d:
+            d[k] = []
+        if not v in d[k]:
+            d[k].append(v)
+
+    with open(strace_file.name) as F:
+        for line in F:
+            line = line.strip()
+            ls = line.split(None, 2)
+            if '(No such file or directory)' in line:
+                continue
+            typ, rest = ls[2].split('(',1)
+            rest = shlex.split(rest.rsplit(')',1)[0])
+            filename = rest[0].rstrip(',')
+            if 'stat' in typ: continue
+            print(typ, filename, rest)
+            if 'SIGCHLD' in typ and filename == 'Child': 
+                continue
+            if 'exec' in typ:
+                _fileupdate(info['files'], filename,
+                            [typ])
+            else:
+                _fileupdate(info['files'], filename, 
+                            [typ] + rest[1:])
+    os.unlink(strace_file.name)
+
+
+    return info
         
 class BasicExecutor(object):
 
