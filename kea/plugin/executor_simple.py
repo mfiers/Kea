@@ -97,7 +97,9 @@ def get_deferred_cl(info):
 def store_process_info(info):
     psu = info.get('psutil_process')
     if not psu: return
+
     try:
+        info['pid'] = psu.pid
         info['ps_nice'] = psu.nice()
         info['ps_num_fds'] = psu.num_fds()
         info['ps_threads'] = psu.num_threads()
@@ -187,23 +189,32 @@ def simple_runner(info, executor, defer_run=False):
     lgx.debug("Starting: %s", " ".join(cl))
     strace_file = tempfile.NamedTemporaryFile(delete=False)
     strace_file.close()
-    mcl = "strace -D -e trace=file -tt -r -f -o {} ".format(strace_file.name)
+    mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
     lg.debug("strace to: %s", strace_file.name)
     mcl += " ".join(cl) 
     lg.debug("executing: %s", mcl)
     P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
-    info['pid'] = P.pid
-    lgx.debug("Job has started with pid: %d", info['pid'])
-    
+    info['strace_pid'] = P.pid
+    lgx.debug("Job has started with (strace) pid: %d", info['strace_pid'])
+
+    def _get_psu(pid):
+        ppsu = psutil.Process(pid)
+        child = ppsu.children()
+        if len(child) == 0:
+            return False
+        assert len(child) == 1
+        return child[0]
+
     if sysstatus:
         try:
-            psu = psutil.Process(P.pid)
-            info['psutil_process'] = psu
-            store_process_info(info)
+            psu = _get_psu(P.pid)
+            if isinstance(psu, psutil.Process):
+                info['psutil_process'] = psu
+                store_process_info(info)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             #job may have already finished - ignore
-            lg.warning('job finished??')
+            lg.info('has the job finished already??')
             pass
 
     stdout_dq = deque(maxlen=100)
@@ -238,7 +249,15 @@ def simple_runner(info, executor, defer_run=False):
         #read_proc_status(td)
         time.sleep(0.2)
         if sysstatus:
-            store_process_info(info)
+            if 'psutil_process' in info:
+                store_process_info(info)
+            else:
+                psu = _get_psu(P.pid)
+                if isinstance(psu, psutil.Process):
+                    info['psutil_process'] = psu
+                    store_process_info(info)
+            
+
 
         try:
             stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
