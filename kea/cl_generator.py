@@ -168,7 +168,8 @@ def basic_command_line_generator(app):
     mapins = RE_FIND_MAPINPUT.search(cljoin)
     nojobstorun = app.defargs['jobstorun']
 
-    
+    info['create'] = datetime.utcnow()
+
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
         info['cl'] = cl
