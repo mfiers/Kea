@@ -50,7 +50,7 @@ FSIZEKEYS = ["ps_meminfo_max_rss", "ps_meminfo_max_vms",
              "ps_sys_vmem_used"]
 
 
-def nicetime(t):
+def nicetime(t, short=False):
     """
     fomat time, assuming t is in utc
     """
@@ -59,7 +59,19 @@ def nicetime(t):
     loct = datetime.fromtimestamp(timestamp)
     assert t.resolution >= timedelta(microseconds=1)
     loct.replace(microsecond=t.microsecond)
-    return '{} ({})'.format(humanize.naturaltime(loct), t)
+    if short:
+        now = datetime.now()
+        sepa = (now - loct).total_seconds()
+        if sepa < 60:
+            return '{:.2f}s'.format(sepa)
+        elif sepa < 60 * 60 * 2:
+            return '{:.2f}m'.format(sepa / 60.0)
+        elif sepa < 60 * 60 * 24 * 2 :
+            return '{:.1f}h'.format(sepa / 3600.0)
+        else:
+            return '{:.1f}h'.format(sepa / (24 * 3600.0))
+    else:
+        return '{} ({})'.format(humanize.naturaltime(loct), t)
 
     
 def make_pretty_kv(k, v):
