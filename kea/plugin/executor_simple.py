@@ -338,6 +338,9 @@ def simple_runner(info, executor, defer_run=False):
         re.compile(r'/project/Fantail/'),
         re.compile(r'^/dev/'),
         re.compile(r'^/proc/'),
+        re.compile(r'^/lib/'),
+        re.compile(r'^/usr/lib/'),
+        re.compile(r'^/usr/local/lib/'),
     ]
             
     with open(strace_file.name) as F:
