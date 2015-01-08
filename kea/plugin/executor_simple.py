@@ -11,6 +11,7 @@ import os
 import pwd
 import re
 import shlex
+import signal
 import socket
 import subprocess as sp
 import sys
@@ -188,19 +189,6 @@ def simple_runner(info, executor, defer_run=False):
         info['submitted'] = datetime.utcnow()
         return info
 
-    #execute!
-    lgx.debug("Starting: %s", " ".join(cl))
-    strace_file = tempfile.NamedTemporaryFile(delete=False)
-    strace_file.close()
-    mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
-    lg.debug("strace to: %s", strace_file.name)
-    mcl += " ".join(cl) 
-    lg.debug("executing: %s", mcl)
-    P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
-
-    info['strace_pid'] = P.pid
-    lgx.debug("Job has started with (strace) pid: %d", info['strace_pid'])
-
     def _get_psu(pid):
         ppsu = psutil.Process(pid)
         child = ppsu.children()
@@ -209,59 +197,96 @@ def simple_runner(info, executor, defer_run=False):
         assert len(child) == 1
         return child[0]
 
-    if sysstatus:
-        try:
-            psu = _get_psu(P.pid)
-            if isinstance(psu, psutil.Process):
-                info['psutil_process'] = psu
-                store_process_info(info)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            #job may have already finished - ignore
-            lg.info('has the job finished already??')
-            pass
+    #execute!
 
+    lgx.debug("Starting: %s", " ".join(cl))
+    strace_file = tempfile.NamedTemporaryFile(delete=False)
+    strace_file.close()
+    mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
+    lg.debug("strace to: %s", strace_file.name)
+    mcl += " ".join(cl) 
+
+    #capture output
     stdout_dq = deque(maxlen=100)
     stderr_dq = deque(maxlen=100)
-
     stdout_len = 0
     stderr_len = 0
-
     stdout_sha = hashlib.sha1()
     stderr_sha = hashlib.sha1()
 
-    force_quit = False
 
-    #loop & poll until the process finishes..
-    while True:
+    # in a try except to make sure that kea get's a chance to cleanly finish upon
+    # an error
+    try:
+        lg.debug("executing: %s", mcl)
+        P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
-        if walltime:
-            runtime = (datetime.utcnow() - info['start']).total_seconds()
-            if runtime > walltime:
-                if not force_quit:
-                    lg.warning("Killing process (walltime)")
-                force_quit = True
-                P.kill()
+        info['strace_pid'] = P.pid
+        lgx.debug("Job has started with (strace) pid: %d", info['strace_pid'])
 
-        pc = P.poll()
-
-        if isinstance(pc, int):
-            #integer <- returncode => so exit.
-            lgx.debug("got a return code (%d) - exit", pc)
-            break
-
-        #read_proc_status(td)
-        time.sleep(0.2)
         if sysstatus:
-            if 'psutil_process' in info:
-                store_process_info(info)
-            else:
+            try:
                 psu = _get_psu(P.pid)
                 if isinstance(psu, psutil.Process):
                     info['psutil_process'] = psu
                     store_process_info(info)
-            
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                #job may have already finished - ignore
+                lg.info('has the job finished already??')
+                pass
+
+        force_quit = False
+
+        #loop & poll until the process finishes..
+        while True:
+
+            if walltime:
+                runtime = (datetime.utcnow() - info['start']).total_seconds()
+                if runtime > walltime:
+                    if not force_quit:
+                        lg.warning("Killing process (walltime)")
+                    force_quit = True
+                    P.kill()
+
+            pc = P.poll()
+
+            if isinstance(pc, int):
+                #integer <- returncode => so exit.
+                lgx.debug("got a return code (%d) - exit", pc)
+                break
+
+            #read_proc_status(td)
+            time.sleep(0.2)
+            if sysstatus:
+                if 'psutil_process' in info:
+                    store_process_info(info)
+                else:
+                    psu = _get_psu(P.pid)
+                    if isinstance(psu, psutil.Process):
+                        info['psutil_process'] = psu
+                        store_process_info(info)
 
 
+
+            try:
+                stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
+                stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
+            except IOError as e:
+                #it appears as if one of the pipes has failed.
+                if e.errno == 32:
+                    errors.append("Broken Pipe")
+                    #broken pipe - no problem.
+                else:
+                    message('err', str(dir(e)))
+                    errors.append("IOError: " + str(e))
+                break
+
+    except KeyboardInterrupt as e:
+        lg.warning("Interrupt!")
+        info['status'] = 'interrupt'
+        P.send_signal(signal.SIGINT)
+    finally:
+        #clean the pipes
         try:
             stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
             stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
@@ -273,28 +298,13 @@ def simple_runner(info, executor, defer_run=False):
             else:
                 message('err', str(dir(e)))
                 errors.append("IOError: " + str(e))
-            break
 
-    #clean the pipes
-    try:
-        stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
-        stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
-    except IOError as e:
-        #it appears as if one of the pipes has failed.
-        if e.errno == 32:
-            errors.append("Broken Pipe")
-            #broken pipe - no problem.
+        if force_quit:
+            info['status'] = 'kill'
+        elif P.returncode == 0:
+            info['status'] = 'success'
         else:
-            message('err', str(dir(e)))
-            errors.append("IOError: " + str(e))
-
-
-    if force_quit:
-        info['status'] = 'kill'
-    elif P.returncode == 0:
-        info['status'] = 'success'
-    else:
-        info['status'] = 'fail'
+            info['status'] = 'fail'
 
     if info['stdout_file']:
         lg.debug('closing stdout handle on %s', info['stdout_file'])
@@ -358,6 +368,11 @@ def simple_runner(info, executor, defer_run=False):
             ls = line.split(None, 2)
             if '(No such file or directory)' in line:
                 continue
+
+            if '+++ killed by SIGINT' in line:
+                info['status'] = 'interrupt'
+                continue
+                
             typ, rest = ls[2].split('(',1)
             rest = shlex.split(rest.rsplit(')',1)[0])
             filename = rest[0].rstrip(',')
