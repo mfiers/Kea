@@ -22,7 +22,7 @@ def define_args(app):
     mail_group.add_argument('--mail_send', help='Send an email report',
                             action='store_true', default=None)
     
-    mail_group.add_argument('--mail_on_success', 
+    mail_group.add_argument('-m', '--mail_on_success', 
                             help='Also send an email when a job finishes succesfully',
                             action='store_true', default=None)
 
