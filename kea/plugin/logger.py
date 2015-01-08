@@ -2,6 +2,7 @@
 from collections import OrderedDict
 import logging
 
+import humanize
 import leip
 from lockfile import FileLock
 
@@ -47,7 +48,32 @@ def get_mongo_client(conf):
     
     return MONGOCOLLECTION
 
+@leip.subparser
+def mng(app, args):
+    pass
 
+
+@leip.subcommand(mng, 'flush')
+def mng_flush(app, args):
+    coll = get_mongo_client(app.conf)
+    coll.update(dict(status='start'), 
+                {"$set": dict(status= 'flush')},
+                multi=True)
+
+
+@leip.subcommand(mng, 'ls')
+def mng_ls(app, args):
+    coll = get_mongo_client(app.conf)
+    fmt = '{} {:7s} {}@{}: {}'
+    for rec in coll.find({'status': 'start'}):
+        frec = fmt.format(
+            "sta", 
+            kea.utils.nicetime(rec['create'], short=True),
+            rec.get('user'), rec.get('host'),
+            (" ".join(rec.get('cl')))[:40]
+        )
+        print(frec)
+    
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_client(app.conf)

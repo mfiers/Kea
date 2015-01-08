@@ -8,8 +8,10 @@ import logging
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing.dummy import Lock
 import os
+import pwd
 import re
 import shlex
+import socket
 import subprocess as sp
 import sys
 import tempfile
@@ -419,7 +421,10 @@ class BasicExecutor(object):
         lg.warning("start execution")
 
         info['status'] = 'start'
-        
+        info['host'] = socket.gethostname()
+        info['fqdn'] = socket.getfqdn()
+        info['user'] = pwd.getpwuid(os.getuid())[0]
+
         self.app.run_hook('pre_fire', info)
         
         if self.app.args.echo:
