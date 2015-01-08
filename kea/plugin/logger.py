@@ -20,6 +20,52 @@ def logger_arg_define(app):
     logger_group.add_argument('-S', '--report_screen', action='store_true')
     logger_group.add_argument('-Y', '--report_yaml', action='store_true')
     logger_group.add_argument('-L', '--report_file', action='store_true')
+    logger_group.add_argument('-M', '--report_mongo', action='store_true')
+
+
+MONGOCOLLECTION = None
+
+def get_mongo_client(conf):
+
+    from pymongo import MongoClient
+    global MONGOCOLLECTION
+
+    if not MONGOCOLLECTION is None:
+        return MONGOCOLLECTION
+
+
+    mconf = conf['plugin.logger.mongo']
+    host = mconf.get('host', 'localhost')
+    port = int(mconf.get('port', 27017))
+    db = mconf.get('db', 'kea')
+    
+    collection = mconf.get('collection', 'log')
+
+    MONGOCOLLECTION = MongoClient(mconf['host'], port)[db][collection]
+    MONGOCOLLECTION.ensure_index('created')
+    MONGOCOLLECTION.ensure_index('status')
+    
+    return MONGOCOLLECTION
+
+
+@leip.hook('pre_fire')
+def prefire_mongo_mongo(app, jinf):
+    coll = get_mongo_client(app.conf)
+    try:
+        jinf['mongo_id'] = coll.insert(jinf)
+    except:
+        import pprint
+        pprint.pprint(jinf)
+        exit()
+    
+
+@leip.hook('post_fire')
+def postfire_mongo(app, jinf):
+    coll = get_mongo_client(app.conf)
+    mongo_id = jinf['mongo_id']
+    coll.update({'_id' : mongo_id},
+                jinf)
+
 
     
 @leip.hook('post_fire')
