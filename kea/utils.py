@@ -99,13 +99,14 @@ def make_pretty_kv_html(k, v):
         
     if k == 'files':
         rv = ['<td colspan="2"><table>']
-        for fn in v:
+        for i, fn in enumerate(v):
             fd = " ".join(['/'.join(x) for x in v[fn]])
             rv.append('<tr><td><b>{}</b></td>'.format(fn))
-            
             rv.append('<td>: <i>{}</i></td>'.format(fd))
             rv.append('</tr>')
-            
+            if i >=  10 and len(v) > 10:
+                rv.append('<tr><td colspan="2"><b>And {} more...</b></td></tr>'.format(len(v)-10))
+                break
         rv.append('</table></td>')
         return "".join(rv)
         
