@@ -15,8 +15,11 @@ def to_str(s):
 
 @leip.hook('pre_argparse')
 def logger_arg_define(app):
-    app.parser.add_argument('-S', '--report_screen', action='store_true')
-    app.parser.add_argument('-Y', '--report_yaml', action='store_true')
+    logger_group = app.parser.add_argument_group('Report plugin')
+
+    logger_group.add_argument('-S', '--report_screen', action='store_true')
+    logger_group.add_argument('-Y', '--report_yaml', action='store_true')
+    logger_group.add_argument('-L', '--report_file', action='store_true')
 
     
 @leip.hook('post_fire')
@@ -67,6 +70,9 @@ def log_screen(app, jinf):
     
 @leip.hook('post_run')
 def log_cl(app):
+    if not app.args.report_file:
+        return
+
     all_jinf = app.all_jinf
     try:
         with FileLock('kea.log'):
