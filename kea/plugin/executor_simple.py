@@ -288,7 +288,7 @@ def simple_runner(info, executor, defer_run=False):
 
 
     if force_quit:
-        info['status'] = 'killed'
+        info['status'] = 'kill'
     elif P.returncode == 0:
         info['status'] = 'success'
     else:
@@ -324,11 +324,17 @@ def simple_runner(info, executor, defer_run=False):
     if not 'files' in info:
         info['files'] = {}
 
+    filekeys = []
+
     def _fileupdate(d, k, v):
-        if not k in d:
-            d[k] = []
-        if not v in d[k]:
-            d[k].append(v)
+        if not k in filekeys:
+            filekeys.append(k)
+            kid = str(filekeys.index(k) + 1)
+
+        if not kid in d:
+            d[kid] = dict(path=k, mode=[])
+        if not v in d[kid]['mode']:
+            d[kid]['mode'].append(v)
 
     to_ignore = [
         re.compile(r'/site-packages/'),
@@ -352,6 +358,8 @@ def simple_runner(info, executor, defer_run=False):
             typ, rest = ls[2].split('(',1)
             rest = shlex.split(rest.rsplit(')',1)[0])
             filename = rest[0].rstrip(',')
+            if filename.strip() in ['AT_FDCWD']:
+                continue
             if os.path.isdir(filename):
                 continue #no directories
             ignore = False
@@ -408,7 +416,9 @@ class BasicExecutor(object):
                     self.walltime = float(w)
                 
     def fire(self, info):
-        lg.debug("start execution")
+        lg.warning("start execution")
+
+        info['status'] = 'start'
         
         self.app.run_hook('pre_fire', info)
         
