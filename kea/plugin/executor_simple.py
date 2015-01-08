@@ -331,7 +331,8 @@ def simple_runner(info, executor, defer_run=False):
     def _fileupdate(d, k, v):
         if not k in filekeys:
             filekeys.append(k)
-            kid = str(filekeys.index(k) + 1)
+
+        kid = str(filekeys.index(k) + 1)
 
         if not kid in d:
             d[kid] = dict(path=k, mode=[])
@@ -418,7 +419,7 @@ class BasicExecutor(object):
                     self.walltime = float(w)
                 
     def fire(self, info):
-        lg.warning("start execution")
+        lg.debug("start execution")
 
         info['status'] = 'start'
         info['host'] = socket.gethostname()
