@@ -198,13 +198,15 @@ def simple_runner(info, executor, defer_run=False):
         return child[0]
 
     #execute!
-
     lgx.debug("Starting: %s", " ".join(cl))
-    strace_file = tempfile.NamedTemporaryFile(delete=False)
-    strace_file.close()
-    mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
-    lg.debug("strace to: %s", strace_file.name)
-    mcl += " ".join(cl) 
+    if sysstatus:
+        strace_file = tempfile.NamedTemporaryFile(delete=False)
+        strace_file.close()
+        mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
+        lg.debug("strace to: %s", strace_file.name)
+        mcl += " ".join(cl) 
+    else:
+        mcl = " ".join(cl)
 
     #capture output
     stdout_dq = deque(maxlen=100)
@@ -361,7 +363,13 @@ def simple_runner(info, executor, defer_run=False):
         re.compile(r'^/usr/lib/'),
         re.compile(r'^/usr/local/lib/'),
     ]
-            
+
+
+    if not sysstatus:
+        #nothing to be done anymore - we can return
+        return info
+
+    #parse the strace output & add to info
     with open(strace_file.name) as F:
         for line in F:
             line = line.strip()
@@ -396,9 +404,11 @@ def simple_runner(info, executor, defer_run=False):
             else:
                 _fileupdate(info['files'], filename, 
                             [typ] + rest[1:])
+
+    #remove strace output file
     os.unlink(strace_file.name)
 
-
+    #done
     return info
         
 class BasicExecutor(object):
