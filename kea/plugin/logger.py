@@ -85,16 +85,17 @@ def prefire_mongo_mongo(app, jinf):
         exit()
     
 
-@leip.hook('post_fire')
+@leip.hook('post_fire', 10)
 def postfire_mongo(app, jinf):
     coll = get_mongo_client(app.conf)
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)
-
+    del jinf['_id']
+    jinf['mongo_id'] = str(jinf['mongo_id'])
 
     
-@leip.hook('post_fire')
+@leip.hook('post_fire', 100)
 def log_screen(app, jinf):
     
     if app.args.report_yaml:
@@ -103,7 +104,8 @@ def log_screen(app, jinf):
         if 'psutil_process' in jinf:
             del jinf['psutil_process']
 
-        fn = '{}.report.yaml'.format(jinf['run_uid'])
+        fn = '{}.{}.report.yaml'.format(jinf['executable'], jinf['run_uid'])
+
         with open(fn, 'w') as F:
             yaml.safe_dump(dict(jinf), F)
     
