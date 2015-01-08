@@ -100,8 +100,8 @@ def make_pretty_kv_html(k, v):
     if k == 'files':
         rv = ['<td colspan="2"><table>']
         for i, fn in enumerate(v):
-            fd = " ".join(['/'.join(x) for x in v[fn]])
-            rv.append('<tr><td><b>{}</b></td>'.format(fn))
+            fd = " ".join(['/'.join(x) for x in v[fn]['mode']])
+            rv.append('<tr><td><b>{}: {}</b></td>'.format(fn, v[fn]['path']))
             rv.append('<td>: <i>{}</i></td>'.format(fd))
             rv.append('</tr>')
             if i >=  10 and len(v) > 10:
