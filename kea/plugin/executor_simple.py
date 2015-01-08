@@ -8,6 +8,7 @@ import logging
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing.dummy import Lock
 import os
+import re
 import shlex
 import subprocess as sp
 import sys
@@ -329,6 +330,16 @@ def simple_runner(info, executor, defer_run=False):
         if not v in d[k]:
             d[k].append(v)
 
+    to_ignore = [
+        re.compile(r'/site-packages/'),
+        re.compile(r'/project/Mad2/'),
+        re.compile(r'/project/Leip/'),
+        re.compile(r'/lib/python'),
+        re.compile(r'/project/Fantail/'),
+        re.compile(r'^/dev/'),
+        re.compile(r'^/proc/'),
+    ]
+            
     with open(strace_file.name) as F:
         for line in F:
             line = line.strip()
@@ -338,6 +349,15 @@ def simple_runner(info, executor, defer_run=False):
             typ, rest = ls[2].split('(',1)
             rest = shlex.split(rest.rsplit(')',1)[0])
             filename = rest[0].rstrip(',')
+            if os.path.isdir(filename):
+                continue #no directories
+            ignore = False
+            for toi in to_ignore:
+                if toi.search(filename):
+                    ignore=True
+                    break
+            if ignore:
+                continue
             if 'stat' in typ: continue
             if 'SIGCHLD' in typ and filename == 'Child': 
                 continue
