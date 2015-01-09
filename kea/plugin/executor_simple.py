@@ -216,6 +216,8 @@ def simple_runner(info, executor, defer_run=False):
     stdout_sha = hashlib.sha1()
     stderr_sha = hashlib.sha1()
 
+    
+    joberrors = []
 
     # in a try except to make sure that kea get's a chance to cleanly finish upon
     # an error
@@ -248,6 +250,7 @@ def simple_runner(info, executor, defer_run=False):
                     if not force_quit:
                         lg.warning("Killing process (walltime)")
                     force_quit = True
+                    joberrors.append("Hit Walltime")
                     P.kill()
 
             pc = P.poll()
@@ -268,25 +271,36 @@ def simple_runner(info, executor, defer_run=False):
                         info['psutil_process'] = psu
                         store_process_info(info)
 
-
-
             try:
                 stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
                 stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
             except IOError as e:
                 #it appears as if one of the pipes has failed.
                 if e.errno == 32:
-                    errors.append("Broken Pipe")
+                    joberrors.append("Broken Pipe")
                     #broken pipe - no problem.
                 else:
                     message('err', str(dir(e)))
-                    errors.append("IOError: " + str(e))
+                    joberrors.append("IOError: " + str(e))
                 break
 
     except KeyboardInterrupt as e:
-        lg.warning("Interrupt!")
-        info['status'] = 'interrupt'
+        lg.warning("Interrupt!, press ctrl-C again to kill")
+        info['status'] = 'interrupted'
+        force_quit = True
+        joberrors.append("Keyboard interrupt")
         P.send_signal(signal.SIGINT)
+        try:
+            while not isinstance(P.poll(), int):
+                time.sleep(0.25)
+                P.terminate()
+        except KeyboardInterrupt as e:
+            lg.warning("Kill!")
+            joberrors.append("Repeat Keyboard Interrupt, killing")
+            info['status'] = 'killed'
+            
+            P.kill()
+
     finally:
         #clean the pipes
         try:
@@ -295,18 +309,20 @@ def simple_runner(info, executor, defer_run=False):
         except IOError as e:
             #it appears as if one of the pipes has failed.
             if e.errno == 32:
-                errors.append("Broken Pipe")
+                joberrors.append("Broken pipe")
                 #broken pipe - no problem.
             else:
                 message('err', str(dir(e)))
-                errors.append("IOError: " + str(e))
+                joberrors.append("IOError: " + str(e))
 
-        if force_quit:
-            info['status'] = 'kill'
-        elif P.returncode == 0:
-            info['status'] = 'success'
-        else:
-            info['status'] = 'fail'
+        if info['status'] == 'started':
+            if P.returncode == 0:
+                info['status'] = 'success'
+            else:
+                info['status'] = 'failed'
+                
+    if joberrors:
+        info['errors'] = joberrors
 
     if info['stdout_file']:
         lg.debug('closing stdout handle on %s', info['stdout_file'])
