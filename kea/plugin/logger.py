@@ -1,8 +1,13 @@
 
 from collections import OrderedDict
+import datetime
 import logging
+import time
+import signal
+import sys
 
 import humanize
+import termcolor
 import leip
 from lockfile import FileLock
 
@@ -45,6 +50,7 @@ def get_mongo_client(conf):
     MONGOCOLLECTION = MongoClient(mconf['host'], port)[db][collection]
     MONGOCOLLECTION.ensure_index('created')
     MONGOCOLLECTION.ensure_index('status')
+    MONGOCOLLECTION.ensure_index('logflush')
     
     return MONGOCOLLECTION
 
@@ -56,23 +62,52 @@ def mng(app, args):
 @leip.subcommand(mng, 'flush')
 def mng_flush(app, args):
     coll = get_mongo_client(app.conf)
-    coll.update(dict(status='start'), 
-                {"$set": dict(status= 'flush')},
+    coll.update({ 'status': 'start', 
+                  'logflush': {"$exists": False}},
+                {"$set": {'logflush': True}},
                 multi=True)
 
 
+@leip.arg('-s', '--status', action='append')
+@leip.flag('-f', '--follow')
 @leip.subcommand(mng, 'ls')
 def mng_ls(app, args):
+    
+    if not args.status:
+        states = ['start', 'failed']
+    states = list(set(states))
+
     coll = get_mongo_client(app.conf)
-    fmt = '{} {:7s} {}@{}: {}'
-    for rec in coll.find({'status': 'start'}):
-        frec = fmt.format(
-            "sta", 
-            kea.utils.nicetime(rec['create'], short=True),
-            rec.get('user'), rec.get('host'),
-            (" ".join(rec.get('cl')))[:40]
-        )
-        print(frec)
+    fmt = '{} {} {:7s} {}@{}: {}'
+    query = {'status': {"$in": states},
+             'logflush': {"$exists": False}}
+
+    status_colors = dict( fai='red', sta='blue',
+                          int='red', kil='red', suc='green')
+
+    def _exit(signal, frame):
+        sys.exit()
+    signal.signal(signal.SIGINT, _exit)
+    while True:
+        if args.follow:
+            sys.stdout.write(chr(27) + "[2J" + chr(27) + "[1;1f")
+            print datetime.datetime.now()
+            print
+        for rec in coll.find(query):
+            frec = fmt.format(
+                rec['run_uid'],
+                termcolor.colored(rec['status'][:3],
+                                  status_colors[rec['status'][:3]]),
+                termcolor.colored(
+                    kea.utils.nicetime(rec['create'], short=True),
+                    'cyan'),
+                rec.get('user'), rec.get('host'),
+                (" ".join(rec.get('cl')))[:40]
+            )
+            print(frec)
+        if not args.follow: 
+            break
+        time.sleep(2)
     
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
