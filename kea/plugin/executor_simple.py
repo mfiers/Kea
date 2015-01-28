@@ -26,6 +26,7 @@ import leip
 lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
 MPJOBNO = 0
+INTERRUPTED = False
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
@@ -43,7 +44,7 @@ def main_arg_define(app):
                                       'Specified in seconds, or with ' +
                                       'postfix m for minutes, h for hours, ' +
                                       'd for days'))
-                
+
 
 
 #thanks: https://gist.github.com/sebclaeys/1232088
@@ -65,14 +66,14 @@ def streamer(src, tar, dq, hsh=None):
     :param src: input stream
     :param tar: target stream
     :param dq: deque object keeping a tail of chunks for this stream
-    :param hsh: hash object to calculate a checksum 
+    :param hsh: hash object to calculate a checksum
     """
     d = non_block_read(src)
     if d is None:
         return 0
     if hsh:
         hsh.update(d)
-        
+
     global BINARY_STREAMS
     stream_id = '{}_{}'.format(src.__repr__(), tar.__repr__())
 
@@ -81,13 +82,13 @@ def streamer(src, tar, dq, hsh=None):
             dq.append(d.decode('utf-8'))
         except UnicodeDecodeError:
             BINARY_STREAMS.add(stream_id)
-        
+
     d_len = len(d)
     with outputlock:
         tar.write(d) #d.encode('utf-8'))
     return d_len
 
-    
+
 def get_deferred_cl(info):
     dcl = ['kea']
     if info['stdout_file']:
@@ -97,35 +98,35 @@ def get_deferred_cl(info):
     dcl.extend(info['cl'])
     return dcl
 
-    
-def store_process_info(info):
-    psu = info.get('psutil_process')
+
+def store_process_info(rundata):
+    psu = rundata.get('psutil_process')
     if not psu: return
 
     try:
-        info['pid'] = psu.pid
-        info['ps_nice'] = psu.nice()
-        info['ps_num_fds'] = psu.num_fds()
-        info['ps_threads'] = psu.num_threads()
+        rundata['pid'] = psu.pid
+        rundata['ps_nice'] = psu.nice()
+        rundata['ps_num_fds'] = psu.num_fds()
+        rundata['ps_threads'] = psu.num_threads()
 
         cputime = psu.cpu_times()
 
-        info['ps_cputime_user'] = cputime.user 
-        info['ps_cputime_system'] = cputime.system
-        info['ps_cpu_percent_max'] = max(
+        rundata['ps_cputime_user'] = cputime.user
+        rundata['ps_cputime_system'] = cputime.system
+        rundata['ps_cpu_percent_max'] = max(
             info.get('ps_cpu_percent_max', 0),
             psu.cpu_percent())
 
         meminfo = psu.memory_info()
 
         for f in meminfo._fields:
-            info['ps_meminfo_max_{}'.format(f)] = \
+            rundata['ps_meminfo_max_{}'.format(f)] = \
                     max(getattr(meminfo, f),
                         info.get('ps_meminfo_max_{}'.format(f), 0))
 
         try:
             ioc = psu.io_counters()
-            info['ps_io_read_count'] = ioc.read_count
+            rundata['ps_io_read_count'] = ioc.read_count
         except AttributeError:
             #may not have iocounters (osx)
             pass
@@ -134,6 +135,28 @@ def store_process_info(info):
         #process went away??
         return
 
+def run_interrupt(P, info):
+    global INTERRUPTED
+    INTERRUPTED = True
+    rv = []
+    lg.warning("Interrupt!, press ctrl-C again to kill")
+    info['status'] = 'interrupted'
+    rv.append("Keyboard interrupt")
+    P.send_signal(signal.SIGINT)
+
+    try:
+        while not isinstance(P.poll(), int):
+            time.sleep(0.25)
+            P.terminate()
+    except KeyboardInterrupt as e:
+        lg.warning("Kill!")
+        rv.append("Repeat Keyboard Interrupt, killing")
+        info['status'] = 'killed'
+
+        P.kill()
+
+    return rv
+
 def simple_runner(info, executor, defer_run=False):
     """
     Defer run executes the run with the current executor, but with
@@ -141,23 +164,32 @@ def simple_runner(info, executor, defer_run=False):
     executed in the second stage.
     """
 
+    if INTERRUPTED:
+        info['status'] = 'interrupted'
+        return
+
     #get a thread run number
     global MPJOBNO
+
     thisjob = MPJOBNO
+
     MPJOBNO += 1
 
     #track system status (memory, etc)
     sysstatus = not executor.app.defargs['no_track_stat']
-    
-    info['job_thread_no'] = MPJOBNO
+
+    run_stats = info['run']
+    sys_stats = info['sys']
+
+    run_stats['job_thread_no'] = MPJOBNO
     lgx = logging.getLogger("job{}".format(thisjob))
     #lgx.setLevel(logging.DEBUG)
-    
+
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
 
     walltime = executor.walltime
-    
+
     if defer_run:
         cl = get_deferred_cl(info)
     else:
@@ -169,24 +201,24 @@ def simple_runner(info, executor, defer_run=False):
             lg.debug('capturing stderr in %s', info['stderr_file'])
             stderr_handle = open(info['stderr_file'], 'w')
 
-    info['start'] = datetime.utcnow()
-    lgx.debug("thread start %s", info['start'])
+    run_stats['start'] = datetime.utcnow()
+    lgx.debug("thread start %s", run_stats['start'])
 
     #system psutil stuff
     if sysstatus:
-        info['ps_sys_cpucount'] = psutil.cpu_count()
+        sys_stats['cpucount'] = psutil.cpu_count()
         psu_vm = psutil.virtual_memory()
         for field in psu_vm._fields:
-            info['ps_sys_vmem_{}'.format(field)] = getattr(psu_vm, field)
+            run_stats['sys_vmem_{}'.format(field)] = getattr(psu_vm, field)
         psu_sw = psutil.swap_memory()
         for field in psu_sw._fields:
-            info['ps_sys_swap_{}'.format(field)] = getattr(psu_sw, field)
+            run_stats['sys_swap_{}'.format(field)] = getattr(psu_sw, field)
 
 
     if defer_run:
         P = psutil.Popen(cl, shell=True)
-        info['pid'] = P.pid
-        info['submitted'] = datetime.utcnow()
+        run_stats['pid'] = P.pid
+        run_stats['submitted'] = datetime.utcnow()
         return info
 
     def _get_psu(pid):
@@ -204,7 +236,7 @@ def simple_runner(info, executor, defer_run=False):
         strace_file.close()
         mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
         lg.debug("strace to: %s", strace_file.name)
-        mcl += " ".join(cl) 
+        mcl += " ".join(cl)
     else:
         mcl = " ".join(cl)
 
@@ -216,7 +248,7 @@ def simple_runner(info, executor, defer_run=False):
     stdout_sha = hashlib.sha1()
     stderr_sha = hashlib.sha1()
 
-    
+
     joberrors = []
 
     # in a try except to make sure that kea get's a chance to cleanly finish upon
@@ -225,33 +257,41 @@ def simple_runner(info, executor, defer_run=False):
         lg.debug("executing: %s", mcl)
         P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
-        info['strace_pid'] = P.pid
-        lgx.debug("Job has started with (strace) pid: %d", info['strace_pid'])
+        if INTERRUPTED:
+            info['status'] = 'interrupted'
+            return
+
+        run_stats['strace_pid'] = P.pid
+        lgx.debug("Job has started with (strace) pid: %d", run_stats['strace_pid'])
 
         if sysstatus:
             try:
                 psu = _get_psu(P.pid)
                 if isinstance(psu, psutil.Process):
-                    info['psutil_process'] = psu
-                    store_process_info(info)
+                    run_stats['psutil_process'] = psu
+                    store_process_info(run_stats)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 #job may have already finished - ignore
                 lg.info('has the job finished already??')
                 pass
 
-        force_quit = False
 
         #loop & poll until the process finishes..
         while True:
 
+            if INTERRUPTED:
+                # somewhere a job got interrupted
+                # KILL'EM ALL (Metallica, 1983)
+                joberrors.extend(run_interrupt(P, info))
+                info['status'] = 'interrupted'
+                break
+
             if walltime:
-                runtime = (datetime.utcnow() - info['start']).total_seconds()
+                runtime = (datetime.utcnow() - run_stats['start']).total_seconds()
                 if runtime > walltime:
-                    if not force_quit:
-                        lg.warning("Killing process (walltime)")
-                    force_quit = True
+                    # this job has been running for too long
                     joberrors.append("Hit Walltime")
-                    P.kill()
+                    joberrors.extend(run_interrupt(P, info))
 
             pc = P.poll()
 
@@ -268,7 +308,7 @@ def simple_runner(info, executor, defer_run=False):
                 else:
                     psu = _get_psu(P.pid)
                     if isinstance(psu, psutil.Process):
-                        info['psutil_process'] = psu
+                        run_stats['psutil_process'] = psu
                         store_process_info(info)
 
             try:
@@ -285,21 +325,7 @@ def simple_runner(info, executor, defer_run=False):
                 break
 
     except KeyboardInterrupt as e:
-        lg.warning("Interrupt!, press ctrl-C again to kill")
-        info['status'] = 'interrupted'
-        force_quit = True
-        joberrors.append("Keyboard interrupt")
-        P.send_signal(signal.SIGINT)
-        try:
-            while not isinstance(P.poll(), int):
-                time.sleep(0.25)
-                P.terminate()
-        except KeyboardInterrupt as e:
-            lg.warning("Kill!")
-            joberrors.append("Repeat Keyboard Interrupt, killing")
-            info['status'] = 'killed'
-            
-            P.kill()
+        joberrors.extend(run_interrupt(P, info))
 
     finally:
         #clean the pipes
@@ -320,7 +346,7 @@ def simple_runner(info, executor, defer_run=False):
                 info['status'] = 'success'
             else:
                 info['status'] = 'failed'
-                
+
     if joberrors:
         info['errors'] = joberrors
 
@@ -338,21 +364,21 @@ def simple_runner(info, executor, defer_run=False):
     if stderr_len > 0:
         info['stderr_sha1'] = stderr_sha.hexdigest()
 
-    info['stop'] = datetime.utcnow()
-    info['runtime'] = (info['stop'] - info['start']).total_seconds()
+    run_stats['stop'] = datetime.utcnow()
+    run_stats['runtime'] = (run_stats['stop'] - run_stats['start']).total_seconds()
 
-    if 'psutil_process' in info:
-        del info['psutil_process']
+    if 'psutil_process' in run_stats:
+        del run_stats['psutil_process']
 
-    info['returncode'] = P.returncode
-    info['stdout_len'] = stdout_len
-    info['stderr_len'] = stderr_len
+    run_stats['returncode'] = P.returncode
+    run_stats['stdout_len'] = stdout_len
+    run_stats['stderr_len'] = stderr_len
     lgx.debug("end thread")
 
 
     #parse strace output & store data
     if not 'files' in info:
-        info['files'] = {}
+        run_stats['files'] = {}
 
     filekeys = []
 
@@ -381,6 +407,14 @@ def simple_runner(info, executor, defer_run=False):
     ]
 
 
+
+    ##
+    ## Currently skipping parsing of the strace output
+    ## at a later stage I may want to get this back in.
+    ##
+
+    return info
+
     if not sysstatus:
         #nothing to be done anymore - we can return
         return info
@@ -394,12 +428,18 @@ def simple_runner(info, executor, defer_run=False):
                 continue
 
             if '+++ killed by SIGINT' in line:
-                info['status'] = 'interrupt'
+                info['status'] = 'interrupted'
                 continue
-                
-            typ, rest = ls[2].split('(',1)
-            rest = shlex.split(rest.rsplit(')',1)[0])
-            filename = rest[0].rstrip(',')
+
+            try:
+                typ, rest = ls[2].split('(',1)
+                rest = shlex.split(rest.rsplit(')',1)[0])
+                filename = rest[0].rstrip(',')
+            except:
+                #lg.warning("invalid strace line")
+                #lg.warning(line)
+                continue
+
             if filename.strip() in ['AT_FDCWD']:
                 continue
             if os.path.isdir(filename):
@@ -412,13 +452,13 @@ def simple_runner(info, executor, defer_run=False):
             if ignore:
                 continue
             if 'stat' in typ: continue
-            if 'SIGCHLD' in typ and filename == 'Child': 
+            if 'SIGCHLD' in typ and filename == 'Child':
                 continue
             if 'exec' in typ:
-                _fileupdate(info['files'], filename,
+                _fileupdate(run_stats['files'], filename,
                             [typ])
             else:
-                _fileupdate(info['files'], filename, 
+                _fileupdate(run_stats['files'], filename,
                             [typ] + rest[1:])
 
     #remove strace output file
@@ -426,18 +466,18 @@ def simple_runner(info, executor, defer_run=False):
 
     #done
     return info
-        
+
 class BasicExecutor(object):
 
     def __init__(self, app):
         lg.debug("Starting executor")
         self.app = app
-        
+
         try:
             self.threads =  self.app.args.threads
         except AttributeError:
             self.threads = 1
-            
+
         if self.threads < 2:
             self.simple = True
         else:
@@ -458,31 +498,46 @@ class BasicExecutor(object):
                     self.walltime = float(w[:-1]) * 60 * 60 * 24
                 else:
                     self.walltime = float(w)
-                
+
     def fire(self, info):
         lg.debug("start execution")
+        if INTERRUPTED:
+            info['status'] = 'interrupted'
+            return
 
-        info['status'] = 'start'
-        info['host'] = socket.gethostname()
-        info['fqdn'] = socket.getfqdn()
-        info['user'] = pwd.getpwuid(os.getuid())[0]
+        info['status'] = 'started'
+        info['sys']['host'] = socket.gethostname()
+
+        P = sp.Popen(['uname', '-a'], stdout=sp.PIPE)
+        uname, _ = P.communicate()
+        info['sys']['uname'] = uname.strip()
+        info['sys']['fqdn'] = socket.getfqdn()
+        info['sys']['user'] = pwd.getpwuid(os.getuid())[0]
 
         self.app.run_hook('pre_fire', info)
-        
-        if self.app.args.echo:
-            print(" ".join(info['cl']))
 
-            
+        if hasattr(self.app.args, 'echo'):
+            if self.app.args.echo:
+                print(" ".join(info['cl']))
+
+        if info.get('skip', False):
+            # for whatever reasonKea wants to skip executing this job
+            # so - we will oblige
+            info['status'] = 'skipped'
+            return
+
         if self.simple:
             simple_runner(info, self)
             self.app.run_hook('post_fire', info)
-        else:
-            def _callback(info):
-                lg.warningdebug("job finished (%s) - callback!", info['job_thread_no'])
-                self.app.run_hook('post_fire', info)
+            return
 
-            self.pool.apply_async(simple_runner, [info, self], {'defer_run': False},
-                                  callback=_callback)
+        #multithreaded operation
+        def _callback(info):
+            lg.debug("job finished (%s) - callback!", info['job_thread_no'])
+            self.app.run_hook('post_fire', info)
+
+        self.pool.apply_async(simple_runner, [info, self], {'defer_run': False},
+                              callback=_callback)
 
     def finish(self):
         if not self.simple:
@@ -495,8 +550,15 @@ class BasicExecutor(object):
 class DummyExecutor(BasicExecutor):
 
     def fire(self, info):
-        
+
         self.app.run_hook('pre_fire', info)
+
+        if info.get('skip', False):
+            # for whatever reason, Kea wants to skip executing this job
+            # so - we will oblige
+            info['status'] = 'skipped'
+            return
+
         lg.debug("start dummy execution")
         cl = copy.copy(info['cl'])
 
@@ -508,12 +570,11 @@ class DummyExecutor(BasicExecutor):
         lg.debug("  cl: %s", cl)
         print " ".join(cl)
         info['mode'] = 'synchronous'
-        info['returncode'] = 0
+        info['run']['returncode'] = 0
         info['status'] = 'success'
         self.app.run_hook('post_fire', info)
-        
+
 
 conf = leip.get_config('kea')
 conf['executors.simple'] = BasicExecutor
 conf['executors.dummy'] = DummyExecutor
-
