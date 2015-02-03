@@ -35,7 +35,7 @@ class Kea(leip.app):
         super(Kea, self).__init__('kea', disable_commands=True)
 
         self.all_jinf = [] #store job reports
-        
+
         # replace the config by a stack so we can backfill
         self.conf = fantail.Fanstack([self.conf, fantail.Fantail()])
 
@@ -44,7 +44,7 @@ class Kea(leip.app):
             lg.setLevel(logging.DEBUG)
         elif '-v' in sys.argv:
             lg.setLevel(logging.INFO)
-            
+
         # another hack - early discovery of the executor
         # print(sys.argv.find('-x')
         if not '-x' in sys.argv:
@@ -56,7 +56,14 @@ class Kea(leip.app):
             else:
                 self.executor = self.conf['default_executor']
 
-            
+            if self.executor not in self.conf['executors']:
+                lg.debug("unrecognized executor %s - setting to %s",
+                           self.executor, self.conf['default_executor'])
+                self.executor = self.conf['default_executor']
+
+
+        lg.debug("executor: %s", self.executor)
+
         lg.debug("start kea initialization")
 
         # different hooks!
@@ -87,10 +94,12 @@ def main_arg_define(app):
     app.parser.add_argument('-V', '--version', help='tool version')
     app.parser.add_argument('-o', '--stdout', help='save stdout to')
     app.parser.add_argument('-e', '--stderr', help='save stderr to')
+    app.parser.add_argument('--deferred', action='store_true',
+                            help=argparse.SUPPRESS)
     app.parser.add_argument('-n', '--jobstorun', help='no jobs to start',
                             type=int)
 
-    
+
 @leip.hook('argparse')
 def kea_argparse(app):
     """
@@ -98,11 +107,21 @@ def kea_argparse(app):
     to argparse
     """
 
+    tmpparser = copy.copy(app.parser)
 
-    app.parser.add_argument('command', nargs='?')
-    app.parser.add_argument('arg', nargs=argparse.REMAINDER)
+    tmpparser.add_argument('command', nargs='?')
+    tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
-    app.args = app.parser.parse_args()
+    tmpargs = tmpparser.parse_args()
+    if tmpargs.command is not None:
+        command_start = sys.argv.index(tmpargs.command)
+        app.args = app.parser.parse_args(sys.argv[1:command_start])
+        app.args.command = sys.argv[command_start]
+        app.args.arg = sys.argv[command_start+1:]
+    else:
+        app.args = app.parser.parse_args(sys.argv[1:])
+        app.args.command = None
+        app.args.arg = []
 
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
@@ -119,19 +138,26 @@ def kea_argparse(app):
         kea_app = leip.app('kea', partial_parse=True)
         kea_app.parser.print_usage()
         sys.exit(-1)
-        
+
     cl = [app.args.command]
-    
+
     if app.cl_args:
         cl.extend(app.cl_args)
-        
+
     #special case - probably used quotes on the command line
     if len(cl) == 1 and ' ' in cl[0]:
         cl = shlex.split(cl[0])
 
     app.cl = cl
     app.name = os.path.basename(app.cl[0])
-    app.conf['executable'] = app.cl[0]
+
+    executable = app.cl[0]
+    P = sp.Popen(['which', executable], stdout=sp.PIPE)
+    Pout, _ = P.communicate()
+    executable = Pout.strip()
+    lg.info("executable: %s", executable)
+
+    app.conf['executable'] = executable
 
     conf = get_tool_conf(app, app.name, app.args.version)
     app.conf.stack[1] = conf
@@ -149,15 +175,14 @@ def kea_argparse(app):
         v = getattr(app.args, k)
         if v is None: continue
         app.defargs[k] = v
-        
     app.executor = app.args.executor
     lg.debug("Loaded config: %s",  app.name)
 
 
-    
+
 @leip.hook('run')
 def run_kea(app):
-    
+
     lg.debug("Start Kea run")
     executor_name = app.executor
 
@@ -177,5 +202,5 @@ def run_kea(app):
         jinf['cwd'] = os.getcwd()
 
         executor.fire(jinf)
-        
+
     executor.finish()
