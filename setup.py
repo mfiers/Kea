@@ -31,6 +31,7 @@ setup(name='kea',
           'humanize',
           'jinja2',
           'psutil',
+          'termcolor',
           'toMaKe'
       ],
       classifiers=[
