@@ -72,7 +72,7 @@ class KeaSemantics:
             v = v[0]
 
         if ktype in ['option', 'other', 'flag']:
-            if kcard == '1': 
+            if kcard == '1':
                 self.options[k] = v
             else:
                 self.options[k].extend(v)
@@ -85,7 +85,7 @@ class KeaSemantics:
             else:
                 self.files[k]['path'] = self.files[k].get('path', []) + v
 
-        
+
 
     def _default(self, ast):
         if not isinstance(ast, grako.ast.AST):
@@ -99,7 +99,7 @@ class KeaSemantics:
             if not k in self.meta:
                 continue
 
-        
+
             self.set_value(k, v)
 
 PARSERS = {}
@@ -110,7 +110,7 @@ def parse_commandline(app, jinf):
     global MODS
 
     start = time.time()
-    
+
     if app.name in PARSERS:
         parser = PARSER[app.name]
     else:
@@ -123,7 +123,7 @@ def parse_commandline(app, jinf):
         parser = getattr(mod, '{}Parser'.format(app.name))()
         parser.meta = modm.meta
         PARSERS[app.name] = parser
-        
+
     cl = " ".join(app.cl)
 
     semantics = KeaSemantics(modm.meta)
@@ -143,4 +143,3 @@ def parse_commandline(app, jinf):
 
     stop = time.time()
     lg.debug("clparse took %s seconds", stop-start)
-

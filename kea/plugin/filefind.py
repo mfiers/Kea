@@ -52,5 +52,3 @@ def find_input_file(app, info):
 @leip.hook('pre_fire')
 def hook_find_input_file(app, info):
     return find_input_file(app, info)
-
-

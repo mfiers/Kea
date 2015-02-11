@@ -1,10 +1,12 @@
 
 from collections import OrderedDict
+import copy
 import datetime
 import logging
-import time
+import os
 import signal
 import sys
+import time
 
 import humanize
 import termcolor
@@ -23,36 +25,21 @@ def to_str(s):
 def logger_arg_define(app):
     logger_group = app.parser.add_argument_group('Report plugin')
 
-    logger_group.add_argument('-S', '--report_screen', action='store_true')
+    logger_group.add_argument('-S', '--report_screen', action='count', default=0)
     logger_group.add_argument('-Y', '--report_yaml', action='store_true')
     logger_group.add_argument('-L', '--report_file', action='store_true')
     logger_group.add_argument('-M', '--report_mongo', action='store_true')
 
 
-MONGOCOLLECTION = None
-
-def get_mongo_client(conf):
-
-    from pymongo import MongoClient
-    global MONGOCOLLECTION
-
-    if not MONGOCOLLECTION is None:
-        return MONGOCOLLECTION
-
-
+def get_mongo_logcol(conf):
     mconf = conf['plugin.logger.mongo']
-    host = mconf.get('host', 'localhost')
-    port = int(mconf.get('port', 27017))
-    db = mconf.get('db', 'kea')
-    
-    collection = mconf.get('collection', 'log')
+    colname = mconf.get('collection', 'log')
+    collection = kea.utils.get_mongo_collection(conf, colname)
+    collection.ensure_index('created')
+    collection.ensure_index('status')
+    collection.ensure_index('logflush')
+    return collection
 
-    MONGOCOLLECTION = MongoClient(mconf['host'], port)[db][collection]
-    MONGOCOLLECTION.ensure_index('created')
-    MONGOCOLLECTION.ensure_index('status')
-    MONGOCOLLECTION.ensure_index('logflush')
-    
-    return MONGOCOLLECTION
 
 @leip.subparser
 def mng(app, args):
@@ -61,8 +48,8 @@ def mng(app, args):
 
 @leip.subcommand(mng, 'flush')
 def mng_flush(app, args):
-    coll = get_mongo_client(app.conf)
-    coll.update({ 'status': 'start', 
+    coll = get_mongo_logcol(app.conf)
+    coll.update({ 'status': 'start',
                   'logflush': {"$exists": False}},
                 {"$set": {'logflush': True}},
                 multi=True)
@@ -72,12 +59,12 @@ def mng_flush(app, args):
 @leip.flag('-f', '--follow')
 @leip.subcommand(mng, 'ls')
 def mng_ls(app, args):
-    
+
     if not args.status:
         states = ['start', 'failed']
     states = list(set(states))
 
-    coll = get_mongo_client(app.conf)
+    coll = get_mongo_logcol(app.conf)
     fmt = '{} {} {:7s} {}@{}: {}'
     query = {'status': {"$in": states},
              'logflush': {"$exists": False}}
@@ -105,80 +92,109 @@ def mng_ls(app, args):
                 (" ".join(rec.get('cl')))[:40]
             )
             print(frec)
-        if not args.follow: 
+        if not args.follow:
             break
         time.sleep(2)
-    
+
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
-    coll = get_mongo_client(app.conf)
+    coll = get_mongo_logcol(app.conf)
+    jinf_copy = copy.copy(jinf)
     try:
-        jinf['mongo_id'] = coll.insert(jinf)
-    except:
+        del jinf_copy['run']['psutil_process']
+    except KeyError:
+        pass
+
+    try:
+        jinf['mongo_id'] = coll.insert(jinf_copy)
+    except Exception as e:
         import pprint
         pprint.pprint(jinf)
-        exit()
-    
+        raise
+
 
 @leip.hook('post_fire', 10)
 def postfire_mongo(app, jinf):
-    coll = get_mongo_client(app.conf)
+    coll = get_mongo_logcol(app.conf)
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)
-    del jinf['_id']
+    if '_id' in jinf:
+        del jinf['_id']
     jinf['mongo_id'] = str(jinf['mongo_id'])
 
-    
+
+def dictprint(d, firstpre="", nextpre=""):
+    if len(d) == 0:
+        return
+    mxkyln = max([len(x) for x in d.keys()] + [5])
+    fs = '{:<' + str(mxkyln) + '} : {}'
+    fp = '{:<' + str(mxkyln) + '} > '
+    i = 0
+    for k in sorted(d.keys()):
+        #            if k == 'run_stats':
+        #                continue
+        #            if k in ['args']:
+        #                continue
+
+        v = d[k]
+        v = kea.utils.make_pretty_kv(k, v)
+
+        if isinstance(v, str) and not v.strip():
+            continue
+
+        i = i + 1
+        pre = firstpre if i == 1 else nextpre
+        if not isinstance(v, dict):
+            print pre + fs.format(k, v)
+        else:
+            bfp = pre + fp.format(k)
+            bnp = nextpre + fp.format(' ')
+            dictprint(v, bfp, bnp)
+
+
 @leip.hook('post_fire', 100)
 def log_screen(app, jinf):
-    
+
     if app.args.report_yaml:
         import yaml
-        
+
         if 'psutil_process' in jinf:
             del jinf['psutil_process']
 
-        fn = '{}.{}.report.yaml'.format(jinf['executable'], jinf['run_uid'])
+        fn = '{}.{}.report.yaml'.format(
+            app.name, jinf['run']['uid'])
 
         with open(fn, 'w') as F:
             yaml.safe_dump(dict(jinf), F)
-    
-    if not app.args.report_screen:
-        return
-        
-    def dictprint(d, firstpre="", nextpre=""):
-        if len(d) == 0:
-            return
-        mxkyln = max([len(x) for x in d.keys()] + [5])
-        fs = '{:<' + str(mxkyln) + '} : {}'
-        fp = '{:<' + str(mxkyln) + '} > '
-        i = 0
-        for k in sorted(d.keys()):
-            if k in ['args']:
-                continue
-                
-            v = d[k]
-            v = kea.utils.make_pretty_kv(k, v)
-            
-            if isinstance(v, str) and not v.strip():
-                continue
 
-            i = i + 1
-            pre = firstpre if i == 1 else nextpre
-            if not isinstance(v, dict):
-                print pre + fs.format(k, v)
-            else:                
-                bfp = pre + fp.format(k)
-                bnp = nextpre + fp.format(' ')
-                dictprint(v, bfp, bnp)
-                
+    if app.args.report_screen == 0:
+        return
+
     print '--KEA-REPORT' + '-' * 68
-    dictprint(jinf)
+    if app.args.report_screen > 1:
+        dictprint(jinf)
+    else:
+        jj = dict(jinf)
+        jj['sys'] = {}
+        jj['run'] = {}
+        dictprint(jj)
     print '-' * 80
-    
+
+#@leip.hook('post_run')
+#def
+
 @leip.hook('post_run')
 def log_cl(app):
+
+    if not app.args.deferred:
+        oricl = copy.copy(app.original_cl)
+        oricl[0] = os.path.basename(oricl[0])
+        runsh_line = "# " + " ".join(oricl)
+        with FileLock('run.sh'):
+            with open('run.sh', 'a') as F:
+                F.write("{}\n".format(runsh_line))
+
     if not app.args.report_file:
         return
 
@@ -202,4 +218,3 @@ def log_cl(app):
 
     except Exception as e:
         lg.warning("Cannot write to log file (%s)", str(e))
-

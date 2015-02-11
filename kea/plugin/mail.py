@@ -21,24 +21,23 @@ def define_args(app):
 
     mail_group.add_argument('--mail_send', help='Send an email report',
                             action='store_true', default=None)
-    
-    mail_group.add_argument('-m', '--mail_on_success', 
+
+    mail_group.add_argument('-m', '--mail_on_success',
                             help='Also send an email when a job finishes succesfully',
                             action='store_true', default=None)
 
-    mail_group.add_argument('--mail_recipient', 
+    mail_group.add_argument('--mail_recipient',
                             help='email address to send report to (comma ' +
                             'separate multiple addresses)',
                             action='store_true', default=None)
 
-        
+
 HTML_MESSAGE = """MIME-Version: 1.0
 Content-Type: text/html;
-Subject: 
-{%- if success %} Kea/Ok: {{cl50}} 
-{%- else %} Kea/Fail: {{ cl50 }} 
+Subject:
+{%- if success %} Kea/Ok: {{cl50}}
+{%- else %} Kea/Fail: {{ cl50 }}
 {%- endif %}
-
 
 {% if success -%}
 <h2 style='color:green'>Kea/Job OK</h2>
@@ -63,7 +62,6 @@ Subject:
 </pre>
 {%- if all_jinf|length > 1 %}
 <h3>Run stats</h3>
- 
 <table>
 <tr>
   <th>No.</th>
@@ -79,14 +77,12 @@ Subject:
 {% for jinf in all_jinf %}
 <tr>
   <td><b>{{ jinf.run_no }}</b></td>
-  {%- if not success %}{% if jinf.returncode == 0 %}
+  {%- if not success %}{% if jinf.run.returncode == 0 %}
   <td><span style='color:green'>0</span></td>
   {% else %}
-  <td><span style='color:red;weight:bold;'>{{jinf.returncode}}</span></td>
+  <td><span style='color:red;weight:bold;'>{{jinf.run.returncode}}</span></td>
   {%- endif %}{% endif %}
   <td>{{ jinf.runtime }}</td>
-  <td>{{ "%.3f"|format(jinf.ps_cputime_user) }}</td>
-  <td>{{ "%d"|format(jinf.ps_meminfo_max_rss) }}</td>
   <td>{{ jinf.stdout_len }}</td>
   <td>{{ jinf.stderr_len }}</td>
 </tr>
@@ -95,12 +91,19 @@ Subject:
 {% endif %}
 
 {% for jinf in all_jinf %}
+
 <h3>Full run report {% if all_jinf|length > 1 %} ({{ jinf.run_no }}) {% endif %}</h3>
 <table>
-{% for k in jinf %}
+{% for k in jinf if not k in ['run'] %}
 <tr {% if loop.cycle(False, True) -%}style="background-color: #EEEEEE;"
     {%- endif %}><th style="text-align: left; vertical-align: text-top;">{{k}}</th>
     {{ jinf[k]|pretty(k) }}
+</tr>
+{%- endfor %}
+{% for k in jinf.run %}
+<tr {% if loop.cycle(False, True) -%}style="background-color: #EEEEEE;"
+    {%- endif %}><th style="text-align: left; vertical-align: text-top;">{{k}}</th>
+    {{ jinf.run[k]|pretty(k) }}
 </tr>
 {%- endfor %}
 </table>
@@ -128,16 +131,16 @@ def mail(app):
 
     #did all jobs finish successfully?
     success = True
-    
+
     for jinf in app.all_jinf:
-        if jinf['returncode'] != 0:
+        if jinf['run'].get('returncode', 0) != 0:
             success = False
             break
 
     if not mailsuc and success:
         lg.debug("job finished successfully - not sending mail")
         return
-        
+
     data = {}
     data['success'] = success
     data['all_jinf'] = app.all_jinf
@@ -145,7 +148,7 @@ def mail(app):
     data['clj50'] = " ".join(app.cl)[:50]
     data['clj'] = " ".join(app.cl)
 
-    
+
     if not mailrecip:
         lg.debug("No mail recipient(s) defined - cannot send mail")
         return
@@ -156,14 +159,14 @@ def mail(app):
     env = jinja2.Environment()
     env.filters['pretty'] = keapretty
     template = env.from_string(HTML_MESSAGE)
-    
+
     message = template.render(data)
 
     if ',' in mailrecip:
         mailrecip = " ".join(mailrecip.split(','))
 
     lg.debug("Sending report mail to: %s", mailrecip)
-                             
+
     p = sp.Popen("sendmail %s" % mailrecip, stdin=sp.PIPE, shell=True)
     p.communicate(message.encode('utf-8'))
 
