@@ -22,7 +22,7 @@ for i in range(1, len(sys.argv)):
         break
 
 
-if command in ['conf', 'snipset', 'jobset', 'js', 'run', 'jobrun', 'jr', 'list_executors', 'mng']:
+if command in ['conf', 'snipset', 'jobset', 'js', 'run', 'jobrun', 'jr', 'list_executors', 'tra', 'mng']:
     app = leip.app('kea', partial_parse = True)
 else:
     app = Kea()
