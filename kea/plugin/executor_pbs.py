@@ -6,6 +6,7 @@ import os
 from jinja2 import Template
 import arrow
 
+
 import leip
 
 from kea.plugin.executor_simple import BasicExecutor, get_deferred_cl
@@ -22,24 +23,29 @@ def prep_sge_exec(app):
                                help='No nodes requested', type=int)
         pbs_group.add_argument('-j', '--pbs_ppn', type=int,
                                help='No ppn requested (default=cl per job)')
-        pbs_group.add_argument('--pbs_account', 
+        pbs_group.add_argument('--module', help='module to load',
+                               action='append', default=[])
+        pbs_group.add_argument('-A', '--pbs_account',
                                help='Account requested (default none)')
-        pbs_group.add_argument('-w', '--walltime',
+        pbs_group.add_argument('-w', '--pbs_walltime',
                                 help=('max time that this process can take'))
 
 
 PBS_SUBMIT_SCRIPT_HEADER = """#!/bin/bash
-#PBS -N {{appname}}.{{uid}}
+#PBS -N {{appname}}.{{uid}}.{{batch}}
 #PBS -e {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.err
 #PBS -o {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.out
 #PBS -l nodes={{pbs_nodes}}:ppn={{pbs_ppn}}
-
 {% if pbs_account -%}
   #PBS -A {{ pbs_account }}{% endif %}
-{% if walltime -%}
-  #PBS -l walltime={{ walltime }}{% endif %}
+{% if pbs_walltime -%}
+  #PBS -l walltime={{ pbs_walltime }}{% endif %}
 
 set -v
+cd {{ cwd }}
+
+{% for mod in module %}
+module load {{ mod }}{% endfor %}
 
 """
 
@@ -57,9 +63,9 @@ class PbsExecutor(BasicExecutor):
 
     def submit_to_pbs(self):
         uid = get_base_uid()
-        
+
         #write pbs script
-        pbs_script = '{}.{}.pbs'.format(self.app.name, uid)
+        pbs_script = '{}.{}.{:03d}.pbs'.format(self.app.name, uid, self.batch)
 
         template = Template(PBS_SUBMIT_SCRIPT_HEADER)
 
@@ -67,15 +73,15 @@ class PbsExecutor(BasicExecutor):
         data['appname'] = self.app.name
         data['cwd'] = os.getcwd()
         data['uid'] = uid
+        data['batch'] = self.batch
 
-        
+
         lg.debug("submit to pbs with uid %s", uid)
         for info in self.buffer:
 
             info['submitted'] = arrow.utcnow()
             info['pbs_uid'] = uid
             info['pbs_script_file'] = pbs_script
-
             with open(pbs_script, 'w') as F:
                 F.write(template.render(**data))
                 for info in self.buffer:
@@ -111,4 +117,3 @@ class PbsExecutor(BasicExecutor):
 
 conf = leip.get_config('kea')
 conf['executors.pbs'] = PbsExecutor
-
