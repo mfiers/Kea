@@ -12,6 +12,7 @@ import sys
 
 import fantail
 import humanize
+import yaml
 from leip import set_local_config
 
 lg = logging.getLogger(__name__)
@@ -26,19 +27,19 @@ def get_base_uid():
         sha1.update(socket.getfqdn())
         BASEUID = sha1.hexdigest()[:8]
     return BASEUID
-    
+
 def get_uid(app, runno=None):
     if app.args.uid:
         base = app.args.uid
     else:
         base = get_base_uid()
-        
-    if runno:
+
+    if runno is not None:
         return '{}.{}'.format(base, runno)
     else:
         return base
 
-        
+
 # Nicely format run log stats
 FSIZEKEYS = ["ps_meminfo_max_rss", "ps_meminfo_max_vms",
              "ps_sys_swap_free", "ps_sys_swap_sin",
@@ -73,11 +74,11 @@ def nicetime(t, short=False):
     else:
         return '{} ({})'.format(humanize.naturaltime(loct), t)
 
-    
+
 def make_pretty_kv(k, v):
     if k in ['cl', 'template_cl']:
         v = " ".join(v)
-            
+
     if v is None:
         return ""
     elif isinstance(v, dict):
@@ -96,19 +97,19 @@ def make_pretty_kv(k, v):
         return str(v)
 
 def make_pretty_kv_html(k, v):
-    
+
     if k in ['cl', 'template_cl']:
         return (
             '<td colspan="2">' +
             '<span style="font-family:Lucida Console,Bitstream Vera Sans Mono,Courier New,monospace;">' +
             " ".join(v) +
             "</span></td>" )
-            
+
     if v is None:
         return '<td colspan="2"></td>'
     elif str(v).strip() == "":
         return '<td colspan="2"></td>'
-        
+
     if k == 'files':
         rv = ['<td colspan="2"><table>']
         for i, fn in enumerate(v):
@@ -121,7 +122,7 @@ def make_pretty_kv_html(k, v):
                 break
         rv.append('</table></td>')
         return "".join(rv)
-        
+
     if k in FSIZEKEYS:
         return "<td>{}</td><td>{}</td>".format(humanize.naturalsize(v), v)
     elif k in ['start', 'stop']:
@@ -220,6 +221,20 @@ def find_executable(name):
                 yield os.path.abspath(line)
 
 
+def set_info_file(jinf, category, name, filename):
+    if not category in jinf:
+        jinf[category] = {}
+
+    i = 0
+    newname = '{}_{:02}'.format(name, i)
+    while newname in jinf[category]:
+        i += 1
+        newname = '{}_{:02}'.format(name, i)
+
+    lg.debug("set file %s cat %s : %s", newname, category, filename)
+    jinf[category][newname] = dict(path=filename)
+
+
 def create_kea_link(app, name):
     """
     """
@@ -285,3 +300,24 @@ def register_executable(app, name, executable, version, is_default=None):
     set_local_config(app, '{}.version'.format(basekey), version)
 
     create_kea_link(app, name)
+
+
+MONGO_CLC_CACHE = {}
+def get_mongo_collection(conf, collection):
+
+    from pymongo import MongoClient
+
+    global MONGO_CLC_CACHE
+
+    if collection in MONGO_CLC_CACHE:
+        return MONGO_CLC_CACHE[collection]
+
+
+    mconf = conf['plugin.logger.mongo']
+    host = mconf.get('host', 'localhost')
+    port = int(mconf.get('port', 27017))
+    db = mconf.get('db', 'kea')
+
+
+    MONGO_CLC_CACHE[collection] = MongoClient(mconf['host'], port)[db][collection]
+    return MONGO_CLC_CACHE[collection]
