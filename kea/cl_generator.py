@@ -29,7 +29,7 @@ import sys
 from collections import OrderedDict
 
 import leip
-from kea.utils import get_uid
+from kea.utils import get_uid, set_info_file
 
 lg = logging.getLogger(__name__)
 
@@ -73,9 +73,9 @@ def map_range_expand(map_info, cl, pipes):
         lg.critical("Can not parse range: %s", map_info['pattern'])
         exit(-1)
 
-        
+
     substart = thisarg.index(iterstring)
-    subtail = substart + len(iterstring) 
+    subtail = substart + len(iterstring)
     for g in map_items:
         newcl = copy.copy(cl)
         argrep = thisarg[:substart] + str(g) +  thisarg[subtail:]
@@ -109,7 +109,7 @@ def map_glob_expand(map_info, cl, pipes):
 
     substart = thisarg.index(iterstring)
     subtail = len(thisarg) - (substart + len(iterstring))
-    
+
     for g in globhits:
         newcl = copy.copy(cl)
         newcl[argi] = g
@@ -148,15 +148,15 @@ def apply_map_info_to_cl(newcl, map_info):
 
     return newcl
 
-    
-    
+
+
 def basic_command_line_generator(app):
     """
     Most basic command line generator possible
     """
-    
+
     info = OrderedDict()
-    
+
     pipes = [app.args.stdout, app.args.stderr]
 
     cl = app.cl
@@ -167,16 +167,23 @@ def basic_command_line_generator(app):
     mapcount = 0
     mapins = RE_FIND_MAPINPUT.search(cljoin)
     nojobstorun = app.defargs['jobstorun']
+    lg.debug('jobs to run %s', nojobstorun)
 
     info['create'] = datetime.utcnow()
+    info['run'] = info.get('run', {})
+    info['sys'] = info.get('sys', {})
+
 
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
         info['cl'] = cl
-        info['run_no'] = 0
-        info['run_uid'] = get_uid(app)
-        info['stdout_file'] = pipes[0]
-        info['stderr_file'] = pipes[1]
+        info['run']['no'] = 0
+        info['run']['uid'] = get_uid(app)
+
+        if pipes[0]:
+            set_info_file(info, 'output', 'stdout', pipes[0])
+        if pipes[1]:
+            set_info_file(info, 'output', 'stderr', pipes[1])
         yield info
         return
 
@@ -186,9 +193,9 @@ def basic_command_line_generator(app):
     #lg.setLevel(logging.DEBUG)
 
     lg.debug("iterables found in: %s", cljoin)
-    
+
     def expander(cl, pipes):
-        
+
         for i, arg in enumerate(cl):
             mima = RE_FIND_MAPINPUT.search(arg)
             if mima:
@@ -204,15 +211,15 @@ def basic_command_line_generator(app):
 
         map_info['iterstring'] = mima.group(0)
         map_info['arg'] = arg
-        
+
 
         lg.debug("iterable name: {name} operator: {operator} pattern: {pattern}".format(**map_info))
-        
+
         map_info['re_from'] = re.compile(r'({' + map_info['name']
                                          + r'[\~\=][^}]*})')
         map_info['re_replace'] = re.compile(r'({' + map_info['name'] + r'})')
         map_info['rep_from'] = re.compile(r'({' + map_info['name'] + '})')
-        
+
         map_info['start'] = mima.start()
         map_info['tail'] = len(arg) - mima.end()
 
@@ -220,20 +227,26 @@ def basic_command_line_generator(app):
             expand_function = map_glob_expand
         elif map_info['operator'] == '=':
             expand_function = map_range_expand
-        
+
         for ncl, pipes in  expand_function(map_info, cl, pipes):
             for nncl, pipes in expander(ncl, pipes):
-                    yield nncl, pipes
+                yield nncl, pipes
 
     no = 0
     for newcl, pipes in  expander(cl, pipes):
         no += 1
         if nojobstorun and no > nojobstorun:
+            lg.warning("exceeded jobs to run")
             break
-        newinfo = copy.copy(info)
-        newinfo['run_uid'] = get_uid(app, no)
+        newinfo = copy.deepcopy(info)
+        newinfo['run']['uid'] = get_uid(app, no)
+
         newinfo['cl'] = newcl
-        newinfo['run_no'] = no
-        newinfo['stdout_file'] = pipes[0]
-        newinfo['stderr_file'] = pipes[1]
+        newinfo['run']['no'] = no
+
+        if pipes[0]:
+            set_info_file(newinfo, 'output', 'stdout', pipes[0])
+        if pipes[1]:
+            set_info_file(newinfo, 'output', 'stderr', pipes[1])
+
         yield newinfo
