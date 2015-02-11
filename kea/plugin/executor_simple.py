@@ -1,4 +1,6 @@
 
+
+
 from collections import deque
 import copy
 from datetime import datetime
@@ -90,7 +92,7 @@ def streamer(src, tar, dq, hsh=None):
 
 
 def get_deferred_cl(info):
-    dcl = ['kea']
+    dcl = ['kea', '--deferred']
     if info['stdout_file']:
         dcl.extend(['-o', info['stdout_file']])
     if info['stderr_file']:
@@ -114,7 +116,7 @@ def store_process_info(rundata):
         rundata['ps_cputime_user'] = cputime.user
         rundata['ps_cputime_system'] = cputime.system
         rundata['ps_cpu_percent_max'] = max(
-            info.get('ps_cpu_percent_max', 0),
+            rundata.get('ps_cpu_percent_max', 0),
             psu.cpu_percent())
 
         meminfo = psu.memory_info()
@@ -122,7 +124,7 @@ def store_process_info(rundata):
         for f in meminfo._fields:
             rundata['ps_meminfo_max_{}'.format(f)] = \
                     max(getattr(meminfo, f),
-                        info.get('ps_meminfo_max_{}'.format(f), 0))
+                        rundata.get('ps_meminfo_max_{}'.format(f), 0))
 
         try:
             ioc = psu.io_counters()
@@ -172,8 +174,9 @@ def simple_runner(info, executor, defer_run=False):
     global MPJOBNO
 
     thisjob = MPJOBNO
-
     MPJOBNO += 1
+
+    lg.warning("job %s started", MPJOBNO)
 
     #track system status (memory, etc)
     sysstatus = not executor.app.defargs['no_track_stat']
@@ -181,12 +184,14 @@ def simple_runner(info, executor, defer_run=False):
     run_stats = info['run']
     sys_stats = info['sys']
 
-    run_stats['job_thread_no'] = MPJOBNO
+    run_stats['job_thread_no'] = thisjob
     lgx = logging.getLogger("job{}".format(thisjob))
     #lgx.setLevel(logging.DEBUG)
 
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
+    stdout_file = info.get('output', {}).get('stdout_00', {}).get('path')
+    stderr_file = info.get('output', {}).get('stderr_00', {}).get('path')
 
     walltime = executor.walltime
 
@@ -194,12 +199,12 @@ def simple_runner(info, executor, defer_run=False):
         cl = get_deferred_cl(info)
     else:
         cl = info['cl']
-        if info['stdout_file']:
-            lg.debug('capturing stdout in %s', info['stdout_file'])
-            stdout_handle = open(info['stdout_file'], 'w')
-        if info['stderr_file']:
-            lg.debug('capturing stderr in %s', info['stderr_file'])
-            stderr_handle = open(info['stderr_file'], 'w')
+        if stdout_file:
+            lg.debug('capturing stdout in %s', stdout_file)
+            stdout_handle = open(stdout_file, 'w')
+        if stderr_file:
+            lg.debug('capturing stderr in %s', stderr_file)
+            stderr_handle = open(stderr_file, 'w')
 
     run_stats['start'] = datetime.utcnow()
     lgx.debug("thread start %s", run_stats['start'])
@@ -222,23 +227,12 @@ def simple_runner(info, executor, defer_run=False):
         return info
 
     def _get_psu(pid):
-        ppsu = psutil.Process(pid)
-        child = ppsu.children()
-        if len(child) == 0:
-            return False
-        assert len(child) == 1
-        return child[0]
+        return psutil.Process(pid)
 
     #execute!
-    lgx.debug("Starting: %s", " ".join(cl))
-    if sysstatus:
-        strace_file = tempfile.NamedTemporaryFile(delete=False)
-        strace_file.close()
-        mcl = "strace -e trace=file -tt -r -f -o {} ".format(strace_file.name)
-        lg.debug("strace to: %s", strace_file.name)
-        mcl += " ".join(cl)
-    else:
-        mcl = " ".join(cl)
+    lgx.info("Starting: %s", " ".join(cl))
+
+    mcl = " ".join(cl)
 
     #capture output
     stdout_dq = deque(maxlen=100)
@@ -254,25 +248,23 @@ def simple_runner(info, executor, defer_run=False):
     # in a try except to make sure that kea get's a chance to cleanly finish upon
     # an error
     try:
-        lg.debug("executing: %s", mcl)
+        lgx.debug("Popen: %s", mcl)
         P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
         if INTERRUPTED:
             info['status'] = 'interrupted'
             return
 
-        run_stats['strace_pid'] = P.pid
-        lgx.debug("Job has started with (strace) pid: %d", run_stats['strace_pid'])
-
         if sysstatus:
             try:
                 psu = _get_psu(P.pid)
                 if isinstance(psu, psutil.Process):
                     run_stats['psutil_process'] = psu
+                    lgx.debug("psutil: %s", psu)
                     store_process_info(run_stats)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 #job may have already finished - ignore
-                lg.info('has the job finished already??')
+                lg.warning('has the job finished already??')
                 pass
 
 
@@ -302,6 +294,7 @@ def simple_runner(info, executor, defer_run=False):
 
             #read_proc_status(td)
             time.sleep(0.2)
+
             if sysstatus:
                 if 'psutil_process' in info:
                     store_process_info(info)
@@ -310,6 +303,7 @@ def simple_runner(info, executor, defer_run=False):
                     if isinstance(psu, psutil.Process):
                         run_stats['psutil_process'] = psu
                         store_process_info(info)
+
 
             try:
                 stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
@@ -350,14 +344,14 @@ def simple_runner(info, executor, defer_run=False):
     if joberrors:
         info['errors'] = joberrors
 
-    if info['stdout_file']:
-        lg.debug('closing stdout handle on %s', info['stdout_file'])
+    if stdout_file:
+        lg.debug('closing stdout handle on %s', stdout_file)
         stdout_handle.close()
-    if info['stderr_file']:
-        lg.debug('closing stderr handle on %s', info['stderr_file'])
+    if stderr_file:
+        lg.debug('closing stderr handle on %s', stderr_file)
         stderr_handle.close()
 
-    lgx.debug("job has status: %s", info['status'])
+    lgx.info("jobstatus: %s", info['status'])
 
     if stdout_len > 0:
         info['stdout_sha1'] = stdout_sha.hexdigest()
@@ -373,99 +367,11 @@ def simple_runner(info, executor, defer_run=False):
     run_stats['returncode'] = P.returncode
     run_stats['stdout_len'] = stdout_len
     run_stats['stderr_len'] = stderr_len
-    lgx.debug("end thread")
-
-
-    #parse strace output & store data
-    if not 'files' in info:
-        run_stats['files'] = {}
-
-    filekeys = []
-
-    def _fileupdate(d, k, v):
-        if not k in filekeys:
-            filekeys.append(k)
-
-        kid = str(filekeys.index(k) + 1)
-
-        if not kid in d:
-            d[kid] = dict(path=k, mode=[])
-        if not v in d[kid]['mode']:
-            d[kid]['mode'].append(v)
-
-    to_ignore = [
-        re.compile(r'/site-packages/'),
-        re.compile(r'/project/Mad2/'),
-        re.compile(r'/project/Leip/'),
-        re.compile(r'/lib/python'),
-        re.compile(r'/project/Fantail/'),
-        re.compile(r'^/dev/'),
-        re.compile(r'^/proc/'),
-        re.compile(r'^/lib/'),
-        re.compile(r'^/usr/lib/'),
-        re.compile(r'^/usr/local/lib/'),
-    ]
-
-
-
-    ##
-    ## Currently skipping parsing of the strace output
-    ## at a later stage I may want to get this back in.
-    ##
-
+    lgx.debug("end thread, calling post_fire (uid: %s)",
+                info['run']['uid'],)
+    executor.app.run_hook('post_fire', info)
     return info
 
-    if not sysstatus:
-        #nothing to be done anymore - we can return
-        return info
-
-    #parse the strace output & add to info
-    with open(strace_file.name) as F:
-        for line in F:
-            line = line.strip()
-            ls = line.split(None, 2)
-            if '(No such file or directory)' in line:
-                continue
-
-            if '+++ killed by SIGINT' in line:
-                info['status'] = 'interrupted'
-                continue
-
-            try:
-                typ, rest = ls[2].split('(',1)
-                rest = shlex.split(rest.rsplit(')',1)[0])
-                filename = rest[0].rstrip(',')
-            except:
-                #lg.warning("invalid strace line")
-                #lg.warning(line)
-                continue
-
-            if filename.strip() in ['AT_FDCWD']:
-                continue
-            if os.path.isdir(filename):
-                continue #no directories
-            ignore = False
-            for toi in to_ignore:
-                if toi.search(filename):
-                    ignore=True
-                    break
-            if ignore:
-                continue
-            if 'stat' in typ: continue
-            if 'SIGCHLD' in typ and filename == 'Child':
-                continue
-            if 'exec' in typ:
-                _fileupdate(run_stats['files'], filename,
-                            [typ])
-            else:
-                _fileupdate(run_stats['files'], filename,
-                            [typ] + rest[1:])
-
-    #remove strace output file
-    os.unlink(strace_file.name)
-
-    #done
-    return info
 
 class BasicExecutor(object):
 
@@ -483,7 +389,7 @@ class BasicExecutor(object):
         else:
             self.simple = False
             self.pool = ThreadPool(self.threads)
-            lg.debug("using a threadpool with %d threads", self.threads)
+            lg.info("using a threadpool with %d threads", self.threads)
 
 
         self.walltime = None
@@ -521,30 +427,29 @@ class BasicExecutor(object):
                 print(" ".join(info['cl']))
 
         if info.get('skip', False):
-            # for whatever reasonKea wants to skip executing this job
+            # for whatever reason, Kea wants to skip this job
             # so - we will oblige
             info['status'] = 'skipped'
+            self.app.run_hook('post_fire', info)
             return
 
         if self.simple:
+            lg.debug("starting single threaded run")
             simple_runner(info, self)
             self.app.run_hook('post_fire', info)
             return
 
-        #multithreaded operation
-        def _callback(info):
-            lg.debug("job finished (%s) - callback!", info['job_thread_no'])
-            self.app.run_hook('post_fire', info)
-
-        self.pool.apply_async(simple_runner, [info, self], {'defer_run': False},
-                              callback=_callback)
+        lg.debug("starting parallel run")
+        res = self.pool.apply_async(simple_runner,
+                                    [info, self],
+                                    {'defer_run': False})
 
     def finish(self):
         if not self.simple:
-            lg.info('waiting for the threads to finish')
+            lg.warning('waiting for the threads to finish')
             self.pool.close()
             self.pool.join()
-            lg.debug('finished waiting for threads to finish')
+            lg.warning('finished waiting for threads to finish')
 
 
 class DummyExecutor(BasicExecutor):
@@ -557,21 +462,26 @@ class DummyExecutor(BasicExecutor):
             # for whatever reason, Kea wants to skip executing this job
             # so - we will oblige
             info['status'] = 'skipped'
-            return
+        else:
 
-        lg.debug("start dummy execution")
-        cl = copy.copy(info['cl'])
+            lg.debug("start dummy execution")
+            cl = copy.copy(info['cl'])
 
-        if info['stdout_file']:
-            cl.extend(['>', info['stdout_file']])
-        if info['stderr_file']:
-            cl.extend(['2>', info['stderr_file']])
+            stdout_file = info.get('output', {}).get('stdout_00', {}).get('path')
+            stderr_file = info.get('output', {}).get('stderr_00', {}).get('path')
 
-        lg.debug("  cl: %s", cl)
-        print " ".join(cl)
+            if stdout_file:
+                cl.extend(['>', stdout_file])
+            if stderr_file:
+                cl.extend(['2>', stderr_file])
+
+            lg.debug("  cl: %s", cl)
+            print " ".join(cl)
+
         info['mode'] = 'synchronous'
         info['run']['returncode'] = 0
-        info['status'] = 'success'
+        info['status'] = 'skipped'
+
         self.app.run_hook('post_fire', info)
 
 
