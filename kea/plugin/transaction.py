@@ -26,9 +26,17 @@ MADAPP = None       # contains mad applicaton object
 @leip.hook('pre_argparse')
 def transaction_arg_define(app):
     tragroup = app.parser.add_argument_group('Transaction plugin')
-    tragroup.add_argument('--st', dest = 'save_transation_to_disk', help='save transaction to disk',
+    tragroup.add_argument('--st', dest = 'save_transation_to_disk',
+                          help='save transaction to disk',
                           action='store_true')
-    tragroup.add_argument('-B', '--always_run', help='do not skip because of transaction match',
+    tragroup.add_argument('-B', '--always_run',
+                          help='do not skip because of a transaction match',
+                          action='store_true')
+    tragroup.add_argument('--utd', dest='up_to_date',
+                          help='assume all files are up to date if they exists',
+                          action='store_true')
+    tragroup.add_argument('--ss', dest='skip_save',
+                          help='create a transcation for skipped jobs',
                           action='store_true')
 
 
@@ -102,13 +110,15 @@ def mad_register_file(app, jinf):
             try:
                 fdata['sha1sum'] = str(madfile['sha1sum'])
             except:
-                lg.warning("error getting mad/sha1sum for %s", filename)
+                lg.info("error getting mad/sha1sum for %s", filename)
                 continue
 
 
 
 @leip.hook('pre_fire', 1000)
 def check_transaction(app, jinf):
+
+#    lg.setLevel(logging.DEBUG)
     lg.debug("check transaction")
 
     madfiles = {}
@@ -118,6 +128,7 @@ def check_transaction(app, jinf):
 
     if not 'output' in jinf:
         #no outputfiles - can't really check if we need to rerun
+        lg.debug("no outputfiles - nothing to check")
         return
 
     madapp = get_madapp()
@@ -132,7 +143,14 @@ def check_transaction(app, jinf):
             madfile = get_mad_file(madapp, filename)
             madfiles[filename] = madfile
 
+    if all_outputfiles_exist and app.args.up_to_date:
+        lg.debug("files exists - assume up to date")
+        jinf['skip'] = True
+        lg.info("Assuming up to date -> Skipping")
+        return
+
     if not all_outputfiles_exist:
+        lg.debug("not all outputfiles exists - returning")
         return
 
     transact_list = defaultdict(lambda: set())
@@ -149,11 +167,11 @@ def check_transaction(app, jinf):
             transact_list[infile].add(rec['transaction_id'])
 
 
-    translist = transact_list.values()[0]
-    for t in transact_list:
-        translist &= transact_list[t]
-
-    if len(translist) == 0:
+    if len(transact_list) > 0:
+        translist = transact_list.values()[0]
+        for t in transact_list:
+            translist &= transact_list[t]
+    else:
         lg.debug("no candidate transaction found based on input file sha1sums")
         return
 
@@ -180,9 +198,14 @@ def check_transaction(app, jinf):
                 output_matches = False
                 break
 
+            if not outfile in trarec['output']:
+                output_matches = False
+                break
+
             if madfiles[filename]['sha1sum'] != trarec['output'][outfile]['sha1sum']:
                 output_matches = False
                 break
+
             lg.debug("match %s (%s)", filename, madfiles[filename]['sha1sum'])
 
         if not output_matches:
@@ -201,7 +224,8 @@ def create_transaction(app, jinf):
     #clean jinf a little
     dat = yaml.load(yaml.safe_dump(dict(jinf), default_flow_style=False))
 
-    if not jinf['status'] == 'success':
+    if not ( (app.args.skip_save and jinf['status'] == 'skipped') or \
+             (jinf['status'] == 'success') ):
         lg.warning("Not storing transaction (status:%s)", jinf['status'])
         return
 
@@ -244,10 +268,90 @@ def create_transaction(app, jinf):
             mc_c2t.insert(rec)
 
 
-
 @leip.subparser
 def tra(app, args):
     pass
+
+@leip.arg('output')
+@leip.arg('file')
+@leip.subcommand(tra, 'network')
+def build_network(app, args):
+
+    import networkx as nx
+    from mad2.util import get_mad_file
+
+    mc_tra, mc_c2t = get_coll_transaction(app.conf)
+
+    filename = args.file
+    madapp = get_madapp()
+    madfile = get_mad_file(madapp, filename)
+    sha1sum = madfile['sha1sum']
+    G = nx.DiGraph()
+
+    tra_seen = set()
+    sha_seen = set()
+
+    def _add_transcation(tra_id):
+        if tra_id in tra_seen:
+            return
+
+        tra_seen.add(tra_id)
+
+        trarec = mc_tra.find_one(dict(_id=ObjectId(tra_id)))
+        traobj = trarec['transaction']
+        tra_cwd = traobj['cwd']
+        tra_name = os.path.basename(traobj['executable'])
+
+        G.add_node(tra_id,
+                   name=tra_name,
+                   cwd=tra_cwd,
+                   type='transaction',
+                   host=traobj.get('sys', {}).get('host', 'unknown'),
+                   status=traobj.get('status', 'unknown'))
+
+        for cat in ['input', 'database', 'use', 'output']:
+            if cat not in traobj:
+                continue
+            for fn, fo in traobj[cat].items():
+                if not 'sha1sum' in fo:
+                    return
+                fosh = fo['sha1sum']
+                name = os.path.basename(fo['path'])
+
+                G.add_node(fosh,
+                           name=name,
+                           type='file',
+                           path=os.path.join(tra_cwd, fo['path']))
+
+                if cat == 'output':
+                    G.add_edge(tra_id, fosh, type=cat)
+                else:
+                    G.add_edge(fosh, tra_id, type=cat)
+                    _add_sha1sum(fosh)
+
+    def _add_sha1sum(sha1sum):
+        if sha1sum in sha_seen:
+            return
+        sha_seen.add(sha1sum)
+
+        if False:
+            for rec in mc_c2t.find({'file_sha1sum': sha1sum}):
+                _add_transcation(rec['transaction_record_id'])
+        else:
+            latest_rec = None
+            latest_date = None
+            hits =mc_c2t.find(dict(file_sha1sum=sha1sum,
+                                  category='output'),
+                             sort=[('timestamp',-1)],
+                             limit=1)
+            for hit in hits:
+                _add_transcation(hit['transaction_record_id'])
+                break
+
+    _add_sha1sum(sha1sum)
+    print(len(G.nodes()))
+    nx.write_graphml(G, args.output)
+
 
 @leip.arg("file")
 @leip.subcommand(tra, "find")
@@ -274,16 +378,19 @@ def find_transactions(app, args):
             cprint("Category: ", end="")
             cprint("{:10}".format(cat), "yellow")
             for fk, fd in sorted(jinf[cat].items()):
-                cprint(" - {}".format(fk), "blue", end=":")
                 fdp = fd['path']
                 s1s = fd['sha1sum']
                 if s1s == sha1sum:
-                    cprint("*", "yellow", end=":")
+                    cprint(" * ", 'yellow', end="")
+                else:
+                    cprint(" - ", 'blue', end="")
+
+                cprint("{}".format(fk), "blue", end=":")
+
                 if os.path.exists(fdp):
                     cprint(fd['path'], "green")
                 else:
                     cprint(fd['path'], "red")
-
 
 @leip.arg('transaction_file')
 @leip.subcommand(tra, 'validate')
