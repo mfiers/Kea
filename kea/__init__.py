@@ -95,7 +95,7 @@ def main_arg_define(app):
     app.parser.add_argument('-o', '--stdout', help='save stdout to')
     app.parser.add_argument('-e', '--stderr', help='save stderr to')
     app.parser.add_argument('--deferred', action='store_true',
-                            help=argparse.SUPPRESS)
+                            help=argparse.SUPPRESS) #internal use
     app.parser.add_argument('-n', '--jobstorun', help='no jobs to start',
                             type=int)
 
@@ -109,6 +109,7 @@ def kea_argparse(app):
 
     tmpparser = copy.copy(app.parser)
 
+    app.original_cl = copy.copy(sys.argv)
     tmpparser.add_argument('command', nargs='?')
     tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
