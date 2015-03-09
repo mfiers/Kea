@@ -78,6 +78,7 @@ def flag(cl, jinf, tree, *flags):
     #return the command line with this flag removed
     return cl[:flag_i] + cl[flag_i+2:]
 
+
 def repeat(cl, jinf, tree, pos=0):
     while cl:
         cl = processor(cl, jinf, tree)
@@ -96,7 +97,6 @@ def pop(cl, jinf, tree, pos=0):
         lg.debug("pop: -1  %s", cl[pos])
         processor([cl[-1]], jinf, tree)
         return cl[:-1]
-
 
 def index(cl, jinf, tree, idx):
     idx = int(idx)
@@ -118,7 +118,6 @@ def element_check(cl, jinf, tree, idx, pattern):
     if pattern in elem:
         processor(cl, jinf, tree)
 
-
 def search (cl, jinf, tree, pattern):
     regex = re.compile(pattern)
     mtch = regex.search(cl[0])
@@ -136,6 +135,10 @@ def append(cl, jinf, tree, txt):
 
 def path_append(cl, jinf, tree, txt):
     ncl = [os.path.join(cl[0], txt)] + cl[1:]
+    processor(ncl, jinf, tree)
+
+def insert(cl, jinf, tree, item):
+    ncl = [item] + cl
     processor(ncl, jinf, tree)
 
 def apply(cl, jinf, tree, txt):
