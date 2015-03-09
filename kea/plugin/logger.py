@@ -156,6 +156,9 @@ def dictprint(d, firstpre="", nextpre=""):
 @leip.hook('post_fire', 100)
 def log_screen(app, jinf):
 
+    if jinf.get('deferred'):
+        return
+
     if app.args.report_yaml:
         import yaml
 

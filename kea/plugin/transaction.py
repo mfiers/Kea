@@ -20,6 +20,9 @@ import kea.utils
 
 lg = logging.getLogger(__name__)
 
+madlog = logging.getLogger("mad2")
+madlog.setLevel(logging.WARNING)
+
 MADAPP = None       # contains mad applicaton object
 
 
@@ -103,14 +106,20 @@ def mad_register_file(app, jinf):
 
     madapp = get_madapp()
 
+    if jinf.get('deferred'):
+        return
+
     for cat in ['input', 'output', 'database', 'use']:
         for name, fdata in jinf.get(cat, {}).items():
             filename = fdata['path']
+            if not os.path.exists(filename):
+                continue
+
             madfile = get_mad_file(madapp, filename)
             try:
                 fdata['sha1sum'] = str(madfile['sha1sum'])
             except:
-                lg.info("error getting mad/sha1sum for %s", filename)
+                lg.debug("error getting mad/sha1sum for %s", filename)
                 continue
 
 
@@ -202,6 +211,10 @@ def check_transaction(app, jinf):
                 output_matches = False
                 break
 
+            if not madfiles[filename].has_key('sha1sum'):
+                output_matches = False
+                break
+
             if madfiles[filename]['sha1sum'] != trarec['output'][outfile]['sha1sum']:
                 output_matches = False
                 break
@@ -222,11 +235,15 @@ def check_transaction(app, jinf):
 @leip.hook('post_fire', 1000)
 def create_transaction(app, jinf):
     #clean jinf a little
+
+    if jinf.get('deferred'):
+        return
+
     dat = yaml.load(yaml.safe_dump(dict(jinf), default_flow_style=False))
 
     if not ( (app.args.skip_save and jinf['status'] == 'skipped') or \
              (jinf['status'] == 'success') ):
-        lg.warning("Not storing transaction (status:%s)", jinf['status'])
+        lg.info("Not storing transaction (status:%s)", jinf['status'])
         return
 
     tra = {}
