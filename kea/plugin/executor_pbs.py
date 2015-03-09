@@ -21,10 +21,14 @@ def prep_sge_exec(app):
         pbs_group = app.parser.add_argument_group('PBS Executor')
         pbs_group.add_argument('--pbs_nodes',
                                help='No nodes requested', type=int)
-        pbs_group.add_argument('-j', '--pbs_ppn', type=int,
-                               help='No ppn requested (default=cl per job)')
+        pbs_group.add_argument('-j', dest='cl_per_job', type=int, default=1,
+                               help='no of cls running parallel per job')
+        pbs_group.add_argument('--ppn', dest='pbs_ppn', type=int, default=1,
+                               help='No ppn requested')
         pbs_group.add_argument('--module', help='module to load',
                                action='append', default=[])
+        pbs_group.add_argument('--mem', help='node memory to request of pbs', dest='pbs_mem',
+                               default='8gb')
         pbs_group.add_argument('-A', '--pbs_account',
                                help='Account requested (default none)')
         pbs_group.add_argument('-w', '--pbs_walltime',
@@ -36,16 +40,26 @@ PBS_SUBMIT_SCRIPT_HEADER = """#!/bin/bash
 #PBS -e {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.err
 #PBS -o {{ cwd }}/{{appname}}.{{uid}}.$PBS_JOBID.out
 #PBS -l nodes={{pbs_nodes}}:ppn={{pbs_ppn}}
+#PBS -l mem={{pbs_mem}}
 {% if pbs_account -%}
   #PBS -A {{ pbs_account }}{% endif %}
 {% if pbs_walltime -%}
   #PBS -l walltime={{ pbs_walltime }}{% endif %}
 
-set -v
-cd {{ cwd }}
+set -v  # verbose output
+set -e  # catch errors
 
 {% for mod in module %}
 module load {{ mod }}{% endfor %}
+
+# make sure we're in the work directory
+cd {{ cwd }}
+
+{%if virtualenv %}
+#load virtual environment
+source {{ virtualenv }}/bin/activate
+{% endif %}
+
 
 """
 
@@ -53,7 +67,6 @@ module load {{ mod }}{% endfor %}
 class PbsExecutor(BasicExecutor):
 
     def __init__(self, app):
-
         super(PbsExecutor, self).__init__(app)
 
         self.buffer = []
@@ -70,6 +83,11 @@ class PbsExecutor(BasicExecutor):
         template = Template(PBS_SUBMIT_SCRIPT_HEADER)
 
         data = dict(self.app.defargs)
+
+        if "VIRTUAL_ENV" in os.environ:
+            lg.warning("virtual env: %s", os.environ['VIRTUAL_ENV'])
+            data['virtualenv'] = os.environ['VIRTUAL_ENV']
+
         data['appname'] = self.app.name
         data['cwd'] = os.getcwd()
         data['uid'] = uid
@@ -82,6 +100,7 @@ class PbsExecutor(BasicExecutor):
             info['submitted'] = arrow.utcnow()
             info['pbs_uid'] = uid
             info['pbs_script_file'] = pbs_script
+            info['deferred'] = True
             with open(pbs_script, 'w') as F:
                 F.write(template.render(**data))
                 for info in self.buffer:
@@ -101,12 +120,16 @@ class PbsExecutor(BasicExecutor):
 
     def fire(self, info):
         self.app.run_hook('pre_fire', info)
+
+        if info.get('skip'):
+            lg.debug("Pbs submit skip")
+            return
         self.buffer.append(copy.copy(info))
         info['returncode'] = 0
         info['status'] = 'queued'
         self.app.run_hook('post_fire', info)
-        if len(self.buffer) >= self.app.defargs['pbs_ppn']:
-            lg.info("submitting pbs job. No commands: %d", len(self.buffer))
+        if len(self.buffer) >= self.app.defargs['cl_per_job']:
+            lg.warning("submitting pbs job. No commands: %d", len(self.buffer))
             self.submit_to_pbs()
 
     def finish(self):

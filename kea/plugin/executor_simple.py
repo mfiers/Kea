@@ -93,9 +93,9 @@ def streamer(src, tar, dq, hsh=None):
 
 def get_deferred_cl(info):
     dcl = ['kea', '--deferred']
-    if info['stdout_file']:
+    if info.get('stdout_file'):
         dcl.extend(['-o', info['stdout_file']])
-    if info['stderr_file']:
+    if info.get('stderr_file'):
         dcl.extend(['-e', info['stderr_file']])
     dcl.extend(info['cl'])
     return dcl
