@@ -22,10 +22,10 @@ def run(app, args):
         with open ('./run.sh') as F:
             snippet = shlex.split(F.read())
             if 'kea' in snippet[0]:
-                snippet = snippet[1:] 
+                snippet = snippet[1:]
     else:
         snippet = app.conf.get('snippet.{}'.format(args.name))
-        
+
     sys.argv = sys.argv[:sys.argv.index('run')] + snippet + args.arg
     kea_app = Kea()
     kea_app.run()
@@ -41,12 +41,12 @@ def jobrun(app, args):
 
     os.system(code)
     exit()
-    
+
 @leip.command
 def jr(app, args):
     return jobrun(app, args)
 
-    
+
 @leip.arg('args', nargs=argparse.REMAINDER)
 @leip.arg('name')
 @leip.command
@@ -71,7 +71,7 @@ def jobset(app, args):
 
     if no command line is provided a prompt is provided
     """
-    
+
     if len(args.command_line) == 0:
         import toMaKe.ui
         default = ""
@@ -94,4 +94,3 @@ def js(app, args):
     Alias for jobset
     """
     return jobset(app, args)
-    

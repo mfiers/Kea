@@ -100,6 +100,13 @@ def pop(cl, jinf, tree, pos=0):
 
 def index(cl, jinf, tree, idx):
     idx = int(idx)
+    try:
+        item = cl[idx]
+    except IndexError:
+        global PARSEFAIL
+        PARSEFAIL = True
+        return
+
     lg.debug("index: %d -> %s", idx, cl[idx])
     processor([cl[idx]], jinf, tree)
 
