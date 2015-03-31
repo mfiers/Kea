@@ -49,20 +49,20 @@ def register_set_default(app, args):
     """
     tkey = args.version
     tdata = app.conf['app.{}.version.{}'.format(args.name, args.version)]
-    print "set default:"
-    print '{}: {}'.format(tkey, tdata['executable'])
+    print("set default:")
+    print('{}: {}'.format(tkey, tdata['executable']))
 
     tv = tdata['version']
     if len(tv) < 80:
-        print '  version: {}'.format(tv)
+        print('  version: {}'.format(tv))
     else:
         i = 0
         while tv:
             if i == 0:
-                print '  version: {}'.format(tv[:80])
+                print('  version: {}'.format(tv[:80]))
                 tv = tv[80:]
             else:
-                print '     {}'.format(tv[:86])
+                print('     {}'.format(tv[:86]))
                 tv = tv[86:]
             i += 1
 
@@ -74,18 +74,18 @@ def print_tool_versions(app, appname):
     def_version = app.conf['app.{}.default_version'.format(appname)]
     for tkey in tool_version_data:
         tdata = app.conf['app.{}.versions.{}'.format(appname, tkey)]
-        print '{}: {}'.format(tkey, tdata['executable'])
+        print('{}: {}'.format(tkey, tdata['executable']))
         tv = tdata['version']
         if len(tv) < 80:
-            print '  version: {}'.format(tdata['version'])
+            print('  version: {}'.format(tdata['version']))
         else:
             i = 0
             while tv:
                 if i == 0:
-                    print '  version: {}'.format(tv[:80])
+                    print('  version: {}'.format(tv[:80]))
                     tv = tv[80:]
                 else:
-                    print '     {}'.format(tv[:86])
+                    print('     {}'.format(tv[:86]))
                     tv = tv[86:]
                 i += 1
         if tkey == def_version:

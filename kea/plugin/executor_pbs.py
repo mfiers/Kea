@@ -113,7 +113,7 @@ class PbsExecutor(BasicExecutor):
 
         #fire & forget the pbs job
         pbs_cl = ['qsub', pbs_script]
-        print " ".join(pbs_cl)
+        print(" ".join(pbs_cl))
         self.buffer = []
         self.batch += 1
 

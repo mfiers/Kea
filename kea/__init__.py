@@ -83,10 +83,9 @@ class Kea(leip.app):
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
-
     app.parser.add_argument('-h', '--help', action='store_true',
                             help='Show this help and exit')
-    app.parser.add_argument('-v', '--verbose', action='count')
+    app.parser.add_argument('-v', '--verbose', action='count', default=0)
     app.parser.add_argument('-U', '--uid',
                             help='unique identifier for this run')
     app.parser.add_argument('-x', '--executor', help='executor to use',
@@ -126,9 +125,9 @@ def kea_argparse(app):
 
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
-        print "# Command mode\n"
+        print("# Command mode\n")
         app.parser.print_help()
-        print "\n# Utility mode\n"
+        print("\n# Utility mode\n")
         kea_app.parser.print_help()
         exit(0)
 
@@ -155,7 +154,7 @@ def kea_argparse(app):
     executable = app.cl[0]
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
-    executable = Pout.strip()
+    executable = Pout.strip().decode('utf-8')
     lg.info("executable: %s", executable)
 
     app.conf['executable'] = executable

@@ -54,7 +54,7 @@ def snipset(app, args):
     cl = args.args
     lg.warning('saving to "%s": %s', args.name, " ".join(args.args))
     lconf = leip.get_local_config_file('kea')
-    if lconf.has_key('snippet'):
+    if 'snippet' in lconf:
         lconf['snippet'] = {}
     lconf['snippet.{}'.format(args.name)] = args.args
     leip.save_local_config_file(lconf, 'kea')

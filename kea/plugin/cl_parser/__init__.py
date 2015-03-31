@@ -18,12 +18,12 @@ lg = logging.getLogger(__name__)
 
 #thanks: http://tinyurl.com/nttpj9
 def convert_to_str(data):
-    if isinstance(data, basestring):
+    if isinstance(data, str):
         return str(data)
     elif isinstance(data, collections.Mapping):
-        return dict(map(convert_to_str, data.iteritems()))
+        return dict(list(map(convert_to_str, iter(data.items()))))
     elif isinstance(data, collections.Iterable):
-        return type(data)(map(convert_to_str, data))
+        return type(data)(list(map(convert_to_str, data)))
     else:
         return data
 
@@ -32,10 +32,10 @@ def astparse(ast, data={}):
         [astparse(x, data) for x in ast]
     elif isinstance(ast, dict):
         data.update(convert_to_str(ast))
-    elif isinstance(ast, (str, unicode)):
+    elif isinstance(ast, str):
         pass
     else:
-        print('x' * 80, ast)
+        print(('x' * 80, ast))
     return data
 
 
@@ -46,7 +46,7 @@ class KeaSemantics:
         self.options = collections.defaultdict(list)
         self.files = collections.defaultdict(dict)
 
-        for k, m in meta.iteritems():
+        for k, m in meta.items():
             if 'default' in m:
                 if m['type'] == 'flag':
                     self.set_value(k, True)
@@ -56,8 +56,8 @@ class KeaSemantics:
     def set_value(self, k, v):
 
         if isinstance(v, collections.Mapping):
-            v = map(str, v)
-        elif isinstance(v, unicode):
+            v = list(map(str, v))
+        elif isinstance(v, str):
             v = str(v)
 
         kmeta = self.meta[k]
@@ -78,7 +78,7 @@ class KeaSemantics:
                 self.options[k].extend(v)
 
         if ktype == 'file':
-            print k, v, kcard, kmeta
+            print(k, v, kcard, kmeta)
             self.files[k]['category'] = kmeta['category']
             if kcard == '1':
                 self.files[k]['path'] = v
@@ -91,7 +91,7 @@ class KeaSemantics:
         if not isinstance(ast, grako.ast.AST):
             return
 
-        for k, v in ast.iteritems():
+        for k, v in ast.items():
             if not isinstance(v, list):
                 continue
             if len(v) == 0:

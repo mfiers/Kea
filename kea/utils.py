@@ -23,8 +23,8 @@ def get_base_uid():
     global BASEUID
     if BASEUID is None:
         sha1 = hashlib.sha1()
-        sha1.update(str(datetime.now()))
-        sha1.update(socket.getfqdn())
+        sha1.update(str(datetime.now()).encode('UTF-8'))
+        sha1.update(socket.getfqdn().encode('UTF-8'))
         BASEUID = sha1.hexdigest()[:8]
     return BASEUID
 
@@ -262,7 +262,7 @@ def register_executable(app, name, executable, version, is_default=None):
 
     version_key = 'a'
 
-    if app.conf.has_key('app.{}.versions'.format(name)):
+    if 'app.{}.versions'.format(name) in app.conf:
         is_first_version = False
         for k in app.conf['app.{}.versions'.format(name)]:
             vinf = app.conf['app.{}.versions.{}'\

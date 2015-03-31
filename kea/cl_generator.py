@@ -63,10 +63,10 @@ def map_range_expand(map_info, cl, pipes):
 
     if mappat_range_3:
         start, stop, step = mappat_range_3.groups()
-        map_items = map(str, range(int(start), int(stop), int(step)))
+        map_items = list(map(str, list(range(int(start), int(stop), int(step)))))
     elif mappat_range_2:
         start, stop = mappat_range_2.groups()
-        map_items = map(str, range(int(start), int(stop)))
+        map_items = list(map(str, list(range(int(start), int(stop)))))
     elif ',' in map_info['pattern']:
         map_items = [x.strip() for x in map_info['pattern'].split(',')]
     else:
