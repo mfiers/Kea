@@ -312,8 +312,11 @@ def get_mongo_collection(conf, collection):
     if collection in MONGO_CLC_CACHE:
         return MONGO_CLC_CACHE[collection]
 
-
-    mconf = conf['plugin.logger.mongo']
+    try:
+        mconf = conf['plugin.logger.mongo']
+    except KeyError:
+        return None
+    
     host = mconf.get('host', 'localhost')
     port = int(mconf.get('port', 27017))
     db = mconf.get('db', 'kea')

@@ -457,7 +457,8 @@ class DummyExecutor(BasicExecutor):
     def fire(self, info):
 
         self.app.run_hook('pre_fire', info)
-
+        info['dummy'] = True
+        
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip executing this job
             # so - we will oblige
@@ -466,7 +467,7 @@ class DummyExecutor(BasicExecutor):
 
             lg.debug("start dummy execution")
             cl = copy.copy(info['cl'])
-
+            
             stdout_file = info.get('output', {}).get('stdout_00', {}).get('path')
             stderr_file = info.get('output', {}).get('stderr_00', {}).get('path')
 

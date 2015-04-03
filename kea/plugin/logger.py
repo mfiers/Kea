@@ -32,7 +32,11 @@ def logger_arg_define(app):
 
 
 def get_mongo_logcol(conf):
-    mconf = conf['plugin.logger.mongo']
+    try:
+        mconf = conf['plugin.logger.mongo']
+    except KeyError:
+        return None
+    
     colname = mconf.get('collection', 'log')
     collection = kea.utils.get_mongo_collection(conf, colname)
     collection.ensure_index('created')
@@ -49,6 +53,9 @@ def mng(app, args):
 @leip.subcommand(mng, 'flush')
 def mng_flush(app, args):
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+    
     coll.update({ 'status': 'start',
                   'logflush': {"$exists": False}},
                 {"$set": {'logflush': True}},
@@ -65,6 +72,10 @@ def mng_ls(app, args):
     states = list(set(states))
 
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+
+    
     fmt = '{} {} {:7s} {}@{}: {}'
     query = {'status': {"$in": states},
              'logflush': {"$exists": False}}
@@ -99,6 +110,9 @@ def mng_ls(app, args):
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+    
     jinf_copy = copy.copy(jinf)
     try:
         del jinf_copy['run']['psutil_process']
@@ -116,6 +130,9 @@ def prefire_mongo_mongo(app, jinf):
 @leip.hook('post_fire', 10)
 def postfire_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+    
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)

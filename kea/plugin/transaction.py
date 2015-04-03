@@ -10,7 +10,7 @@ import logging
 import os
 
 from bson.objectid import ObjectId
-import gnupg
+
 import leip
 from termcolor import cprint
 import yaml
@@ -76,10 +76,13 @@ def get_coll_transaction(conf):
     c2t_name = 'checksum2transaction'
     tra_name = 'transaction'
 
-    c2t = kea.utils.get_mongo_collection(conf, c2t_name)
 
+    c2t = kea.utils.get_mongo_collection(conf, c2t_name)
     tra = kea.utils.get_mongo_collection(conf, tra_name)
 
+    if tra is None or c2t is None:  #mongo not configured?
+        return None, None
+    
     tra.ensure_index('timestamp')
     tra.ensure_index('transaction_id')
 
@@ -102,12 +105,16 @@ def get_madapp():
 
 @leip.hook('post_fire')
 def mad_register_file(app, jinf):
+
     from mad2.util import get_mad_file
 
     madapp = get_madapp()
 
     if jinf.get('deferred'):
         return
+    if jinf.get('dummy'):
+        return
+    
 
     for cat in ['input', 'output', 'database', 'use']:
         for name, fdata in jinf.get(cat, {}).items():
@@ -132,6 +139,9 @@ def check_transaction(app, jinf):
 
     madfiles = {}
     mng_tra, mng_c2t = get_coll_transaction(app.conf)
+    
+    if mng_tra is mng_c2t is None:  # mongo not configured?
+        return
 
     from mad2.util import get_mad_file
 
