@@ -1,4 +1,4 @@
-from __future__ import print_function
+
 
 import copy
 from datetime import datetime
@@ -10,7 +10,7 @@ import logging
 import os
 
 from bson.objectid import ObjectId
-
+#import gnupg
 import leip
 from termcolor import cprint
 import yaml
@@ -46,7 +46,7 @@ def transaction_arg_define(app):
 def hash(o):
     o = str(o)
     h = hashlib.sha256()
-    h.update(o)
+    h.update(o.encode('utf-8'))
     return h.hexdigest()
 
 
@@ -65,7 +65,7 @@ def make_hash(o):
     return hash(o)
 
   new_o = copy.deepcopy(o)
-  for k, v in new_o.items():
+  for k, v in list(new_o.items()):
     new_o[k] = make_hash(v)
 
   return hash(tuple(frozenset(sorted(new_o.items()))))
@@ -117,7 +117,8 @@ def mad_register_file(app, jinf):
     
 
     for cat in ['input', 'output', 'database', 'use']:
-        for name, fdata in jinf.get(cat, {}).items():
+        for name, fdata in list(jinf.get(cat, {}).items()):
+
             filename = fdata['path']
             if not os.path.exists(filename):
                 continue
@@ -154,7 +155,7 @@ def check_transaction(app, jinf):
 
     all_outputfiles_exist = True
     #check if all output files exist
-    for outfile, outfile_data in jinf.get('output', {}).items():
+    for outfile, outfile_data in list(jinf.get('output', {}).items()):
         filename = outfile_data['path']
         if not os.path.exists(filename):
             all_outputfiles_exist = False
@@ -174,9 +175,9 @@ def check_transaction(app, jinf):
 
     transact_list = defaultdict(lambda: set())
 
-    for infile, infile_data in chain(jinf.get('input', {}).items(),
-                                     jinf.get('database', {}).items(),
-                                     jinf.get('use', {}).items()):
+    for infile, infile_data in chain(list(jinf.get('input', {}).items()),
+                                     list(jinf.get('database', {}).items()),
+                                     list(jinf.get('use', {}).items())):
         filename = infile_data['path']
         madfile = get_mad_file(madapp, filename)
         query = {'name': infile,
@@ -187,7 +188,7 @@ def check_transaction(app, jinf):
 
 
     if len(transact_list) > 0:
-        translist = transact_list.values()[0]
+        translist = list(transact_list.values())[0]
         for t in transact_list:
             translist &= transact_list[t]
     else:
@@ -207,7 +208,7 @@ def check_transaction(app, jinf):
 #        dictprint(tra)
         output_matches = True
         #check if output files match
-        for outfile, outfile_data in jinf.get('output', {}).items():
+        for outfile, outfile_data in list(jinf.get('output', {}).items()):
             filename = outfile_data['path']
             if not os.path.exists(filename):
                 output_matches = False
@@ -221,7 +222,7 @@ def check_transaction(app, jinf):
                 output_matches = False
                 break
 
-            if not madfiles[filename].has_key('sha1sum'):
+            if 'sha1sum' not in madfiles[filename]:
                 output_matches = False
                 break
 
@@ -339,7 +340,7 @@ def build_network(app, args):
         for cat in ['input', 'database', 'use', 'output']:
             if cat not in traobj:
                 continue
-            for fn, fo in traobj[cat].items():
+            for fn, fo in list(traobj[cat].items()):
                 if not 'sha1sum' in fo:
                     return
                 fosh = fo['sha1sum']

@@ -42,7 +42,7 @@ def runtest(x):
                 
                 tdata = yaml.load(nextline[1:].strip())
                 def listifykeys(d):
-                    for k, v in d.items():
+                    for k, v in list(d.items()):
                         if isinstance(v, dict):
                             listifykeys(v)
                         elif not isinstance(v, list):
@@ -67,12 +67,12 @@ def runtest(x):
 
     #thanks: http://tinyurl.com/nttpj9
     def convert_to_str(data):
-        if isinstance(data, basestring):
+        if isinstance(data, str):
             return str(data)
         elif isinstance(data, collections.Mapping):
-            return dict(map(convert_to_str, data.iteritems()))
+            return dict(list(map(convert_to_str, iter(data.items()))))
         elif isinstance(data, collections.Iterable):
-            return type(data)(map(convert_to_str, data))
+            return type(data)(list(map(convert_to_str, data)))
         else:
             return data
 
@@ -81,10 +81,10 @@ def runtest(x):
             [astparse(x, data) for x in ast]
         elif isinstance(ast, dict):
             data.update(convert_to_str(ast))
-        elif isinstance(ast, (str, unicode)):
+        elif isinstance(ast, str):
             pass
         else:
-            print('x' * 80, ast)
+            print(('x' * 80, ast))
         return data
 
 
@@ -124,7 +124,7 @@ def runtest(x):
             if tres == '-':
                 testresult = '-'
 
-            print "{}{}{}{} : {}".format(testresult, mustfail, success, tres, line)
+            print("{}{}{}{} : {}".format(testresult, mustfail, success, tres, line))
 
             if not '+' in testresult and success == '+':
                 pprint(data)

@@ -46,7 +46,7 @@ def basename(cl, jinf, tree, extens=""):
     processor([rv], jinf, tree)
 
 def debug(cl, jinf, tree, *args):
-    print(cl, tree, args)
+    print((cl, tree, args))
 
 def flag0(cl, jinf, tree, *flags):
     flag = None
@@ -100,6 +100,13 @@ def pop(cl, jinf, tree, pos=0):
 
 def index(cl, jinf, tree, idx):
     idx = int(idx)
+    try:
+        item = cl[idx]
+    except IndexError:
+        global PARSEFAIL
+        PARSEFAIL = True
+        return
+
     lg.debug("index: %d -> %s", idx, cl[idx])
     processor([cl[idx]], jinf, tree)
 
@@ -186,7 +193,7 @@ def processor(cl, jinf, tree):
     if isinstance(tree, str):
         items = [(tree, [{}])]
     elif isinstance(tree, dict):
-        items = tree.items()
+        items = list(tree.items())
     else:
         lg.warning("invalid tree structure")
         exit(-1)
@@ -276,8 +283,8 @@ def parse_commandline(app, jinf):
     if not PARSEFAIL:
         jinf.update(parse_jinf)
         if app.args.pfe:
-            print('-' * 80)
-            print(" ".join(jinf['cl']))
+            print(('-' * 80))
+            print((" ".join(jinf['cl'])))
             for c in ['input', 'output', 'database', 'use']:
                 if c not in jinf:
                     continue

@@ -89,8 +89,8 @@ def mng_ls(app, args):
     while True:
         if args.follow:
             sys.stdout.write(chr(27) + "[2J" + chr(27) + "[1;1f")
-            print datetime.datetime.now()
-            print
+            print(datetime.datetime.now())
+            print()
         for rec in coll.find(query):
             frec = fmt.format(
                 rec['run_uid'],
@@ -144,7 +144,7 @@ def postfire_mongo(app, jinf):
 def dictprint(d, firstpre="", nextpre=""):
     if len(d) == 0:
         return
-    mxkyln = max([len(x) for x in d.keys()] + [5])
+    mxkyln = max([len(x) for x in list(d.keys())] + [5])
     fs = '{:<' + str(mxkyln) + '} : {}'
     fp = '{:<' + str(mxkyln) + '} > '
     i = 0
@@ -163,7 +163,7 @@ def dictprint(d, firstpre="", nextpre=""):
         i = i + 1
         pre = firstpre if i == 1 else nextpre
         if not isinstance(v, dict):
-            print pre + fs.format(k, v)
+            print(pre + fs.format(k, v))
         else:
             bfp = pre + fp.format(k)
             bnp = nextpre + fp.format(' ')
@@ -191,7 +191,7 @@ def log_screen(app, jinf):
     if app.args.report_screen == 0:
         return
 
-    print '--KEA-REPORT' + '-' * 68
+    print('--KEA-REPORT' + '-' * 68)
     if app.args.report_screen > 1:
         dictprint(jinf)
     else:
@@ -199,7 +199,7 @@ def log_screen(app, jinf):
         jj['sys'] = {}
         jj['run'] = {}
         dictprint(jj)
-    print '-' * 80
+    print('-' * 80)
 
 #@leip.hook('post_run')
 #def

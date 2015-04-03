@@ -37,7 +37,7 @@ def main_arg_define(app):
         simple_group.add_argument('-T', '--no_track_stat', help='do not track process status',
                                 action='store_true', default=None)
         simple_group.add_argument('-j', '--threads', help='no threads to use',
-                                type=int)
+                                  type=int, default=1)
         simple_group.add_argument('-E', '--echo', help='echo command line to screen',
                                 action='store_true', default=None)
         simple_group.add_argument('-w', '--walltime',
@@ -79,15 +79,16 @@ def streamer(src, tar, dq, hsh=None):
     global BINARY_STREAMS
     stream_id = '{}_{}'.format(src.__repr__(), tar.__repr__())
 
+    dd = d.decode('utf-8')
     if not stream_id in BINARY_STREAMS:
         try:
-            dq.append(d.decode('utf-8'))
+            dq.append(dd)
         except UnicodeDecodeError:
             BINARY_STREAMS.add(stream_id)
 
     d_len = len(d)
     with outputlock:
-        tar.write(d) #d.encode('utf-8'))
+        tar.write(dd) #.encode('utf-8'))
     return d_len
 
 
@@ -424,7 +425,7 @@ class BasicExecutor(object):
 
         if hasattr(self.app.args, 'echo'):
             if self.app.args.echo:
-                print(" ".join(info['cl']))
+                print((" ".join(info['cl'])))
 
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip this job
@@ -477,7 +478,7 @@ class DummyExecutor(BasicExecutor):
                 cl.extend(['2>', stderr_file])
 
             lg.debug("  cl: %s", cl)
-            print " ".join(cl)
+            print(" ".join(cl))
 
         info['mode'] = 'synchronous'
         info['run']['returncode'] = 0
