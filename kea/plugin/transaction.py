@@ -277,7 +277,10 @@ def create_transaction(app, jinf):
             F.write(yaml.safe_dump(tra, default_flow_style=False))
 
     mc_tra, mc_c2t = get_coll_transaction(app.conf)
-
+    if mc_tra is None:
+        #no mongo database - return
+        return
+    
     tra_recid = str(mc_tra.insert(tra))
 
     for cat in ['input', 'output', 'database', 'use']:
