@@ -13,6 +13,7 @@ with open('VERSION') as F:
 entry_points = {
     'console_scripts': [
         'kea = kea.cli:dispatch',
+        '_init_kea = kea.cli.initkea:dispatch',
     ]}
 
 setup(name='kea',
