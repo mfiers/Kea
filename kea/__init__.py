@@ -68,6 +68,7 @@ class Kea(leip.app):
 
         # different hooks!
         self.hook_order = [
+            'snippet',
             'pre_argparse',
             'argparse',
             'post_argparse',

@@ -177,7 +177,7 @@ def simple_runner(info, executor, defer_run=False):
     thisjob = MPJOBNO
     MPJOBNO += 1
 
-    lg.warning("job %s started", MPJOBNO)
+    lg.info("job %s started", MPJOBNO)
 
     #track system status (memory, etc)
     sysstatus = not executor.app.defargs['no_track_stat']
