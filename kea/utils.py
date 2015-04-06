@@ -136,7 +136,10 @@ def make_pretty_kv_html(k, v):
 
 def get_tool_conf(app, name, version='default'):
 
-    data = copy.copy(app.conf['group.default'])
+    try:
+        data = copy.copy(app.conf['group.default'])
+    except KeyError:
+        data = fantail.Fantail()
     tool_data = copy.copy(app.conf.get('app.{}'.format(name), fantail.Fantail()))
     group = tool_data.get('group')
 
