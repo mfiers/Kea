@@ -1,4 +1,0 @@
-bowtie2 -x db -U ../random_reads.fq
-> {database: db, reads: ../random_reads.fq}
-bowtie2 -x db -1 ../forward.fq -2 ../reverse.fq
-> {database: db, forward_reads: ../forward.fq, reverse_reads: ../reverse.fq}
