@@ -145,8 +145,9 @@ def mail(app):
     data['success'] = success
     data['all_jinf'] = app.all_jinf
     data['app'] = app
-    data['clj50'] = " ".join(app.cl)[:50]
-    data['clj'] = " ".join(app.cl)
+    cl = app.conf['cl']
+    data['clj50'] = " ".join(cl)[:50]
+    data['clj'] = " ".join(cl)
 
 
     if not mailrecip:

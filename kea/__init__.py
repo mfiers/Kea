@@ -137,7 +137,7 @@ def kea_argparse(app):
         kea_app.parser.print_help()
         exit(0)
 
-    app.cl_args = app.args.arg
+    app.conf['cl_args'] = app.args.arg
 
     if not app.args.command:
         app.parser.print_usage()
@@ -147,18 +147,18 @@ def kea_argparse(app):
 
     cl = [app.args.command]
 
-    if app.cl_args:
-        cl.extend(app.cl_args)
+    if app.conf['cl_args']:
+        cl.extend(app.conf['cl_args'])
 
     #special case - probably used quotes on the command line
     if len(cl) == 1 and ' ' in cl[0]:
         cl = shlex.split(cl[0])
 
-    app.cl = cl
-    app.name = os.path.basename(app.cl[0])
+    app.conf['cl'] = cl
+    app.name = os.path.basename(app.conf['cl'][0])
 
-    app.conf['original_executable'] = app.cl[0]
-    executable = app.cl[0]
+    app.conf['original_executable'] = app.conf['cl'][0]
+    executable = app.conf['cl'][0]
     
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
@@ -206,7 +206,7 @@ def run_kea(app):
         cl = jinf['cl']
         lg.debug("command line arguments: %s", " ".join(cl))
 
-        jinf['args'] = " ".join(app.cl_args)
+        jinf['args'] = " ".join(app.conf['cl_args'])
         jinf['cwd'] = os.getcwd()
 
         executor.fire(jinf)

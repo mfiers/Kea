@@ -158,8 +158,8 @@ def basic_command_line_generator(app):
     info = OrderedDict()
 
     pipes = [app.args.stdout, app.args.stderr]
-
-    cl = app.cl
+    
+    cl = app.conf['cl']
 
     cljoin = " ".join(cl)
 
