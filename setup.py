@@ -12,6 +12,7 @@ with open('VERSION') as F:
 
 entry_points = {
     'console_scripts': [
+        '_kea = kea.cli:dispatch',
         'kea = kea.cli:dispatch',
         '_init_kea = kea.cli.initkea:dispatch',
     ]}

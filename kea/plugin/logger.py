@@ -206,14 +206,15 @@ def log_screen(app, jinf):
 
 @leip.hook('post_run')
 def log_cl(app):
+    
+    if app.args.deferred:
+        return
 
-    if not app.args.deferred:
-        oricl = copy.copy(app.original_cl)
-        oricl[0] = os.path.basename(oricl[0])
-        runsh_line = "# " + " ".join(oricl)
-        with FileLock('run.sh'):
-            with open('run.sh', 'a') as F:
-                F.write("{}\n".format(runsh_line))
+    runsh_line = "# " + app.conf['original_cl_raw']
+    
+    with FileLock('run.sh'):
+        with open('run.sh', 'a') as F:
+            F.write("{}\n".format(runsh_line))
 
     if not app.args.report_file:
         return

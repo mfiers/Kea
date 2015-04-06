@@ -108,7 +108,13 @@ def kea_argparse(app):
 
     tmpparser = copy.copy(app.parser)
 
-    app.original_cl = copy.copy(sys.argv)
+    if 'KEA_LAST_COMMAND' in os.environ:
+        app.conf['original_cl_raw'] = os.environ['KEA_LAST_COMMAND']
+        app.conf['original_cl'] = shlex.split(os.environ['KEA_LAST_COMMAND'])
+    else:
+        app.conf['original_cl_raw'] = " ".join(sys.argv)
+        app.conf['original_cl'] = copy.copy(sys.argv)
+        
     tmpparser.add_argument('command', nargs='?')
     tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
@@ -151,7 +157,9 @@ def kea_argparse(app):
     app.cl = cl
     app.name = os.path.basename(app.cl[0])
 
+    app.conf['original_executable'] = app.cl[0]
     executable = app.cl[0]
+    
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
     executable = Pout.strip().decode('utf-8')
