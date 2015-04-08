@@ -21,7 +21,7 @@ import kea.utils
 lg = logging.getLogger(__name__)
 
 madlog = logging.getLogger("mad2")
-madlog.setLevel(logging.WARNING)
+#madlog.setLevel(logging.DEBUG)
 
 MADAPP = None       # contains mad applicaton object
 
@@ -69,6 +69,7 @@ def make_hash(o):
     new_o[k] = make_hash(v)
 
   return hash(tuple(frozenset(sorted(new_o.items()))))
+
 
 def get_coll_transaction(conf):
     mconf = conf['plugin.transaction']

@@ -32,6 +32,8 @@ INTERRUPTED = False
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
+    app.parser.add_argument('-X', dest='executor', action='store_const', const='dummy')
+    
     if app.executor == 'simple':
         simple_group = app.parser.add_argument_group('Simple Executor')
         simple_group.add_argument('-T', '--no_track_stat', help='do not track process status',

@@ -18,8 +18,7 @@ function _kea_prompt {
   lc="${lc# *[0-9]*  }"; 
   lc="${lc#"${lc%%[![:space:]]*}"}";
   export KEA_LAST_COMMAND=${lc};
-  if [[ "$lc" =~ ^kea* ]];
-  then eval "_${lc}"; fi; 
+  if [[ "$lc" =~ ^kea* ]]; then eval "_${lc}"; fi; 
 }
 
 """

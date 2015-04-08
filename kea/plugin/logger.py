@@ -211,10 +211,18 @@ def log_cl(app):
         return
 
     runsh_line = "# " + app.conf['original_cl_raw']
+
+    #check if there is snippet converted command line:
+    if 'snippet_cl_raw' in app.conf:
+        snipsh_line = "# " + app.conf['snippet_cl_raw']
+    else:
+        snipsh_line = None
     
     with FileLock('run.sh'):
         with open('run.sh', 'a') as F:
             F.write("{}\n".format(runsh_line))
+            if not snipsh_line is None:
+                F.write("{}\n".format(snipsh_line))
 
     if not app.args.report_file:
         return

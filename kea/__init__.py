@@ -69,7 +69,6 @@ class Kea(leip.app):
         # different hooks!
         self.hook_order = [
             'pre_argparse',
-            'snippet',
             'argparse',
             'post_argparse',
             'prepare',
@@ -82,7 +81,7 @@ class Kea(leip.app):
         self.discover(globals())
 
 
-@leip.hook('pre_argparse')
+@leip.hook('pre_argparse', 10)
 def main_arg_define(app):
     app.parser.add_argument('-h', '--help', action='store_true',
                             help='Show this help and exit')
@@ -129,7 +128,7 @@ def kea_argparse(app):
         app.args = app.parser.parse_args(sys.argv[1:])
         app.args.command = None
         app.args.arg = []
-
+        
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
         print("# Command mode\n")
@@ -137,6 +136,22 @@ def kea_argparse(app):
         print("\n# Utility mode\n")
         kea_app.parser.print_help()
         exit(0)
+
+    if app.args.command and app.args.command[0] == '+':
+        #snippet mode!!
+        app.run_hook('snippet', app.args.command)
+
+        tmpargs = tmpparser.parse_args()
+        if tmpargs.command is not None:
+            command_start = sys.argv.index(tmpargs.command)
+            app.args = app.parser.parse_args(sys.argv[1:command_start])
+            app.args.command = sys.argv[command_start]
+            app.args.arg = sys.argv[command_start+1:]
+        else:
+            app.args = app.parser.parse_args(sys.argv[1:])
+            app.args.command = None
+            app.args.arg = []
+    
 
     app.conf['cl_args'] = app.args.arg
 
