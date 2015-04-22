@@ -319,7 +319,7 @@ def get_mongo_collection(conf, collection):
         mconf = conf['plugin.logger.mongo']
     except KeyError:
         return None
-    
+
     host = mconf.get('host', 'localhost')
     port = int(mconf.get('port', 27017))
     db = mconf.get('db', 'kea')

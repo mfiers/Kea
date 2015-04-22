@@ -12,7 +12,7 @@ import leip
 from kea import Kea
 
 lg = logging.getLogger('name')
-lg.setLevel(logging.DEBUG)
+#lg.setLevel(logging.DEBUG)
 
 def get_snippet_repos(app):
 
@@ -104,15 +104,15 @@ def edit_snippet(app, name):
 def process_snippet(app, snippet):
 
     FLAGS = 'p<>'
-    sysarg = app.conf['original_cl']
+    sysarg = sys.argv
     snippos = sysarg.index(snippet)
     snippet = snippet[1:].strip()
 
     if len(sysarg) > snippos+1:
         snipcomm = sysarg[snippos+1]
-        if snipcomm == 'edit':
+        if snipcomm == '+edit':
             return edit_snippet(app, snippet)
-        if snipcomm == 'raw':
+        if snipcomm == '+raw':
             return raw_snippet(app, snippet)
 
     lg.debug("snippet: %s", snippet)
@@ -126,8 +126,9 @@ def process_snippet(app, snippet):
         # no need to expand - set & return
         lg.debug("no need to expand the snippet")
         lg.debug("returning: %s", snipraw)
-        snipraw  = shlex.split(snipraw)
-        sys.argv = sysarg[:snippos] + snipraw
+        snipsplit  = shlex.split(snipraw)
+        app.conf['snippet_cl'] = " ".join(sysarg[:snippos]) + ' ' + snipraw
+        sys.argv = sysarg[:snippos] + snipsplit
         return
 
     comments = re.compile(
@@ -151,7 +152,7 @@ def process_snippet(app, snippet):
     ## parse snippet & build argparser object
     ##
 
-    lg.debug("regex parsing raw snippet")
+    lg.debug("regex parsing raw snippet: %s", snipraw)
     for i, arghit in enumerate(find_arg.finditer(snipraw)):
 
         hitdata = arghit.groupdict()
@@ -223,8 +224,6 @@ def process_snippet(app, snippet):
             errors = True
             continue
         clargvals[name] = clarg
-#        replace_re = r'{{[p]*\s*' + name + r'(?=\W).*?}}'
-#        parsed_snip = re.sub(replace_re, clarg, parsed_snip)
 
     for name, kwargs in posargs:
         clarg = getattr(commandline_args, name)
@@ -233,8 +232,6 @@ def process_snippet(app, snippet):
             errors = True
             continue
         clargvals[name] = clarg
-#        replace_re = r'{{[' + FLAGS + r']*\s*' + name + r'(?=\W).*?}}'
-#        parsed_snip = re.sub(replace_re, clarg, parsed_snip)
 
     if errors:
         parser.print_help()
@@ -255,78 +252,12 @@ def process_snippet(app, snippet):
                 else:
                     rep = "{" + iou + name + "} " \
                           + '{' + name + '~' + rep +'}'
+
         lg.debug("replace --- %s --- %s ---", src, rep)
         parsed_snip = parsed_snip.replace(src, rep)
 
     lg.debug("converted: %s", parsed_snip)
     parsed_snip_split = shlex.split(parsed_snip)
 
-    app.conf['snippet_cl_raw'] = " ".join(sysarg[:snippos]) + ' ' + parsed_snip
-    app.conf['snippet_cl'] = sysarg[:snippos] + parsed_snip_split
+    app.conf['snippet_cl'] = " ".join(sysarg[:snippos]) + ' ' + parsed_snip
     sys.argv = sysarg[:snippos] + parsed_snip_split
-
-
-# @leip.command
-# def jobrun(app, args):
-
-#     if not os.path.exists('run.sh'):
-#         lg.error("no run.sh found")
-#         exit(-1)
-#     with open ('./run.sh') as F:
-#         code = F.read()
-
-#     os.system(code)
-#     exit()
-
-# @leip.command
-# def jr(app, args):
-#     return jobrun(app, args)
-
-
-# @leip.arg('args', nargs=argparse.REMAINDER)
-# @leip.arg('name')
-# @leip.command
-# def snipset(app, args):
-#     cl = args.args
-#     lg.warning('saving to "%s": %s', args.name, " ".join(args.args))
-#     lconf = leip.get_local_config_file('kea')
-#     if 'snippet' in lconf:
-#         lconf['snippet'] = {}
-#     lconf['snippet.{}'.format(args.name)] = args.args
-#     leip.save_local_config_file(lconf, 'kea')
-
-#     #force rehash
-#     leip.get_config('kea', rehash=True)
-
-
-# @leip.arg('command_line', nargs=argparse.REMAINDER)
-# @leip.command
-# def jobset(app, args):
-#     """
-#     Set a local job
-
-#     if no command line is provided a prompt is provided
-#     """
-
-#     if len(args.command_line) == 0:
-#         import toMaKe.ui
-#         default = ""
-#         if os.path.exists('run.sh'):
-#             with open('run.sh') as F:
-#                 default = F.read().strip()
-#         jcl = toMaKe.ui.askUser("cl", appname='kea', default=default,
-#                                 prompt='cl: ')
-#     else:
-#         jcl = args.command_line
-
-#     lg.info('saving as job: %s', " ".join(jcl))
-#     with open('./run.sh', 'w') as F:
-#         F.write(jcl.rstrip() +  "\n")
-
-# @leip.arg('command_line', nargs=argparse.REMAINDER)
-# @leip.command
-# def js(app, args):
-#     """
-#     Alias for jobset
-#     """
-#     return jobset(app, args)

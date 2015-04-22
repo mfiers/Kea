@@ -32,11 +32,10 @@ import leip
 from kea.utils import get_uid, set_info_file
 
 lg = logging.getLogger(__name__)
-
-
+#lg.setLevel(logging.DEBUG)
 
 RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
-RE_FIND_FILETARGET = re.compile(r'{([\^<>])([a-zA-Z_][a-zA-Z0-9_]*)}')
+RE_FIND_FILETARGET = re.compile(r'{([\^<>])([a-zA-Z_][a-zA-Z0-9_]*)}\s+')
 
 
 def map_range_expand(map_info, cl, pipes):
@@ -149,11 +148,25 @@ def apply_map_info_to_cl(newcl, map_info):
     return newcl
 
 
-def process_targetfiles(cl, info):
-    lg.warning('targets: %s', cl)
-
-    for fillin in RE_FIND_FILETARGET.finditer(cl):
-        print(fillin)
+def process_targetfiles(info):
+    cl = info['cl']
+    lg.debug('targets: %s', cl)
+    done = False
+    while True:
+        for m in RE_FIND_FILETARGET.finditer(cl):
+            fname = shlex.split(cl[m.end():])[0]
+            ftype, name = m.groups()
+            cat = {'<': 'input',
+                   '>': 'output',
+                   '^': 'use',
+                   'x': 'executable'}[ftype]
+            set_info_file(info, cat, name, fname)
+            cl = cl[:m.start()] + cl[m.end():]
+            break
+        else:
+            done = True
+            break
+    info['cl'] = cl
 
 def basic_command_line_generator(app):
     """
@@ -166,13 +179,10 @@ def basic_command_line_generator(app):
 
     cl = app.conf['cl']
 
-    cljoin = " ".join(cl)
-
-
     #check if there are iterable arguments in here
     mapcount = 0
-    mapins = RE_FIND_MAPINPUT.search(cljoin)
-    filins = RE_FIND_FILETARGET.search(cljoin)
+    mapins = RE_FIND_MAPINPUT.search(cl)
+    filins = RE_FIND_FILETARGET.search(cl)
 
     nojobstorun = app.defargs['jobstorun']
     lg.debug('jobs to run %s', nojobstorun)
@@ -183,7 +193,7 @@ def basic_command_line_generator(app):
 
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
-        #process_targetfiles(cl, info)
+        process_targetfiles(info)
         info['cl'] = cl
         info['run']['no'] = 0
         info['run']['uid'] = get_uid(app)
@@ -201,16 +211,19 @@ def basic_command_line_generator(app):
 
     #lg.setLevel(logging.DEBUG)
 
-    lg.debug("iterables found in: %s", cljoin)
+    lg.debug("iterables found in: %s", cl)
 
-    def expander(cl, pipes):
-        for i, arg in enumerate(cl):
+    def expander(clsplit, pipes):
+
+        for i, arg in enumerate(clsplit):
             mima = RE_FIND_MAPINPUT.search(arg)
             if mima:
                 break
         else:
-            yield cl, pipes
+            yield clsplit, pipes
             return
+
+        lg.debug("start expand: %s", clsplit)
 
         map_info = {}
         map_info['re_search'] = mima
@@ -236,12 +249,16 @@ def basic_command_line_generator(app):
         elif map_info['operator'] == '=':
             expand_function = map_range_expand
 
-        for ncl, pipes in  expand_function(map_info, cl, pipes):
+
+        for ncl, pipes in  expand_function(map_info, clsplit, pipes):
             for nncl, pipes in expander(ncl, pipes):
                 yield nncl, pipes
 
     no = 0
-    for newcl, pipes in expander(cl, pipes):
+    lg.debug("start expansion: %s", cl)
+    for newclsplit, pipes in expander(shlex.split(cl), pipes):
+        lg.debug("expanded: %s", newclsplit)
+        newcl = " ".join(newclsplit)
         no += 1
         if nojobstorun and no > nojobstorun:
             lg.warning("exceeded jobs to run")
@@ -257,5 +274,5 @@ def basic_command_line_generator(app):
         if pipes[1]:
             set_info_file(newinfo, 'output', 'stderr', pipes[1])
 
-        #process_targetfiles(newcl, newinfo)
+        process_targetfiles(newinfo)
         yield newinfo

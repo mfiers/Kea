@@ -83,7 +83,7 @@ def get_coll_transaction(conf):
 
     if tra is None or c2t is None:  #mongo not configured?
         return None, None
-    
+
     tra.ensure_index('timestamp')
     tra.ensure_index('transaction_id')
 
@@ -115,7 +115,7 @@ def mad_register_file(app, jinf):
         return
     if jinf.get('dummy'):
         return
-    
+
 
     for cat in ['input', 'output', 'database', 'use']:
         for name, fdata in list(jinf.get(cat, {}).items()):
@@ -141,7 +141,7 @@ def check_transaction(app, jinf):
 
     madfiles = {}
     mng_tra, mng_c2t = get_coll_transaction(app.conf)
-    
+
     if mng_tra is mng_c2t is None:  # mongo not configured?
         return
 
@@ -206,7 +206,6 @@ def check_transaction(app, jinf):
         tra = mng_tra.find_one({'transaction_id': traid})
         trarec = tra['transaction']
 
-#        dictprint(tra)
         output_matches = True
         #check if output files match
         for outfile, outfile_data in list(jinf.get('output', {}).items()):
@@ -281,7 +280,7 @@ def create_transaction(app, jinf):
     if mc_tra is None:
         #no mongo database - return
         return
-    
+
     tra_recid = str(mc_tra.insert(tra))
 
     for cat in ['input', 'output', 'database', 'use']:

@@ -109,10 +109,13 @@ def kea_argparse(app):
     tmpparser = copy.copy(app.parser)
 
     if 'KEA_LAST_COMMAND' in os.environ:
-        app.conf['original_cl'] = os.environ['KEA_LAST_COMMAND']
+        _orco = os.environ['KEA_LAST_COMMAND']
+        app.conf['original_cl'] = _orco
+        sys.argv = shlex.split(_orco)
     else:
         app.conf['original_cl'] = " ".join(sys.argv)
 
+    lg.debug("execute: %s", sys.argv)
     tmpparser.add_argument('command', nargs='?')
     tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
@@ -151,7 +154,7 @@ def kea_argparse(app):
             app.args.arg = []
 
 
-    app.conf['cl_args'] = app.args.arg
+    app.conf['cl_args'] = " ".join(app.args.arg)
 
     if not app.args.command:
         app.parser.print_usage()
@@ -159,25 +162,21 @@ def kea_argparse(app):
         kea_app.parser.print_usage()
         sys.exit(-1)
 
-    cl = [app.args.command]
+    cl = app.args.command
 
     if app.conf['cl_args']:
-        cl.extend(app.conf['cl_args'])
-
-    #special case - probably used quotes on the command line
-    if len(cl) == 1 and ' ' in cl[0]:
-        cl = shlex.split(cl[0])
+        cl += ' ' + app.conf['cl_args']
 
     app.conf['cl'] = cl
-    app.name = os.path.basename(app.conf['cl'][0])
+    app.name = os.path.basename(app.args.command)
 
-    app.conf['original_executable'] = app.conf['cl'][0]
-    executable = app.conf['cl'][0]
+    app.conf['original_executable'] = app.args.command
+    executable = app.args.command
 
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
     executable = Pout.strip().decode('utf-8')
-    lg.info("executable: %s", executable)
+    lg.debug("executable: %s", executable)
 
     app.conf['executable'] = executable
 

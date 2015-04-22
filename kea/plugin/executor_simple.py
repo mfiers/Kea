@@ -33,7 +33,7 @@ INTERRUPTED = False
 @leip.hook('pre_argparse')
 def main_arg_define(app):
     app.parser.add_argument('-X', dest='executor', action='store_const', const='dummy')
-    
+
     if app.executor == 'simple':
         simple_group = app.parser.add_argument_group('Simple Executor')
         simple_group.add_argument('-T', '--no_track_stat', help='do not track process status',
@@ -95,12 +95,12 @@ def streamer(src, tar, dq, hsh=None):
 
 
 def get_deferred_cl(info):
-    dcl = ['kea', '--deferred']
+    dcl = 'kea --deferred'
     if info.get('stdout_file'):
-        dcl.extend(['-o', info['stdout_file']])
+        dcl += ' -o ' + info['stdout_file']
     if info.get('stderr_file'):
-        dcl.extend(['-e', info['stderr_file']])
-    dcl.extend(info['cl'])
+        dcl += ' -e ' + info['stderr_file']
+    dcl += " " + info['cl']
     return dcl
 
 
@@ -233,9 +233,7 @@ def simple_runner(info, executor, defer_run=False):
         return psutil.Process(pid)
 
     #execute!
-    lgx.info("Starting: %s", " ".join(cl))
-
-    mcl = " ".join(cl)
+    lgx.info("Starting: %s", cl)
 
     #capture output
     stdout_dq = deque(maxlen=100)
@@ -251,8 +249,8 @@ def simple_runner(info, executor, defer_run=False):
     # in a try except to make sure that kea get's a chance to cleanly finish upon
     # an error
     try:
-        lgx.debug("Popen: %s", mcl)
-        P = psutil.Popen(mcl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+        lgx.debug("Popen: %s", cl)
+        P = psutil.Popen(cl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
         if INTERRUPTED:
             info['status'] = 'interrupted'
@@ -427,7 +425,7 @@ class BasicExecutor(object):
 
         if hasattr(self.app.args, 'echo'):
             if self.app.args.echo:
-                print((" ".join(info['cl'])))
+                print(info['cl'])
 
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip this job
@@ -461,7 +459,7 @@ class DummyExecutor(BasicExecutor):
 
         self.app.run_hook('pre_fire', info)
         info['dummy'] = True
-        
+
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip executing this job
             # so - we will oblige
@@ -470,7 +468,7 @@ class DummyExecutor(BasicExecutor):
 
             lg.debug("start dummy execution")
             cl = copy.copy(info['cl'])
-            
+
             stdout_file = info.get('output', {}).get('stdout_00', {}).get('path')
             stderr_file = info.get('output', {}).get('stderr_00', {}).get('path')
 
@@ -480,7 +478,7 @@ class DummyExecutor(BasicExecutor):
                 cl.extend(['2>', stderr_file])
 
             lg.debug("  cl: %s", cl)
-            print(" ".join(cl))
+            print(cl)
 
         info['mode'] = 'synchronous'
         info['run']['returncode'] = 0

@@ -36,7 +36,7 @@ def get_mongo_logcol(conf):
         mconf = conf['plugin.logger.mongo']
     except KeyError:
         return None
-    
+
     colname = mconf.get('collection', 'log')
     collection = kea.utils.get_mongo_collection(conf, colname)
     collection.ensure_index('created')
@@ -55,7 +55,7 @@ def mng_flush(app, args):
     coll = get_mongo_logcol(app.conf)
     if coll is None:
         return
-    
+
     coll.update({ 'status': 'start',
                   'logflush': {"$exists": False}},
                 {"$set": {'logflush': True}},
@@ -75,7 +75,7 @@ def mng_ls(app, args):
     if coll is None:
         return
 
-    
+
     fmt = '{} {} {:7s} {}@{}: {}'
     query = {'status': {"$in": states},
              'logflush': {"$exists": False}}
@@ -112,7 +112,7 @@ def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
     if coll is None:
         return
-    
+
     jinf_copy = copy.copy(jinf)
     try:
         del jinf_copy['run']['psutil_process']
@@ -132,7 +132,7 @@ def postfire_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
     if coll is None:
         return
-    
+
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)
@@ -206,18 +206,18 @@ def log_screen(app, jinf):
 
 @leip.hook('post_run')
 def log_cl(app):
-    
+
     if app.args.deferred:
         return
 
-    runsh_line = "# " + app.conf['original_cl_raw']
+    runsh_line = "# " + app.conf['original_cl']
 
     #check if there is snippet converted command line:
-    if 'snippet_cl_raw' in app.conf:
-        snipsh_line = "# " + app.conf['snippet_cl_raw']
+    if 'snippet_cl' in app.conf:
+        snipsh_line = "# " + app.conf['snippet_cl']
     else:
         snipsh_line = None
-    
+
     with FileLock('run.sh'):
         with open('run.sh', 'a') as F:
             F.write("{}\n".format(runsh_line))
