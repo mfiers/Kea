@@ -108,12 +108,7 @@ def kea_argparse(app):
 
     tmpparser = copy.copy(app.parser)
 
-    if 'KEA_LAST_COMMAND' in os.environ:
-        _orco = os.environ['KEA_LAST_COMMAND']
-        app.conf['original_cl'] = _orco
-        sys.argv = shlex.split(_orco)
-    else:
-        app.conf['original_cl'] = " ".join(sys.argv)
+    app.conf['original_cl'] = " ".join(sys.argv)
 
     lg.debug("execute: %s", sys.argv)
     tmpparser.add_argument('command', nargs='?')
