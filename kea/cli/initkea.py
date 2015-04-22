@@ -8,17 +8,19 @@
 
 SCRIPT = """
 if [[ ! "$PROMPT_COMMAND" =~ "_kea_prompt" ]];
-then export PROMPT_COMMAND="_kea_prompt;$PROMPT_COMMAND"; 
-fi; 
+then export PROMPT_COMMAND="_kea_prompt;$PROMPT_COMMAND";
+fi;
 
 alias kea='#';
 
-function _kea_prompt { 
-  local lc=$(history 1); 
-  lc="${lc# *[0-9]*  }"; 
+function _kea_prompt {
+  local lc=$(history 1);
+  lc="${lc## }";
+  lc="${lc#* }";
+  lc="${lc## }";
   lc="${lc#"${lc%%[![:space:]]*}"}";
   export KEA_LAST_COMMAND=${lc};
-  if [[ "$lc" =~ ^kea* ]]; then eval "_${lc}"; fi; 
+  if [[ "$lc" =~ ^kea* ]]; then eval "_kea"; fi;
 }
 
 """

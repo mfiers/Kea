@@ -36,6 +36,7 @@ lg = logging.getLogger(__name__)
 
 
 RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
+RE_FIND_FILETARGET = re.compile(r'{([\^<>])([a-zA-Z_][a-zA-Z0-9_]*)}')
 
 
 def map_range_expand(map_info, cl, pipes):
@@ -82,7 +83,6 @@ def map_range_expand(map_info, cl, pipes):
         newcl[argi] = argrep
         for j, rarg in enumerate(newcl):
             newcl[j] = map_info['rep_from'].sub(g, rarg)
-
 
         new_pipes = []
         for p in pipes:
@@ -149,6 +149,11 @@ def apply_map_info_to_cl(newcl, map_info):
     return newcl
 
 
+def process_targetfiles(cl, info):
+    lg.warning('targets: %s', cl)
+
+    for fillin in RE_FIND_FILETARGET.finditer(cl):
+        print(fillin)
 
 def basic_command_line_generator(app):
     """
@@ -158,14 +163,17 @@ def basic_command_line_generator(app):
     info = OrderedDict()
 
     pipes = [app.args.stdout, app.args.stderr]
-    
+
     cl = app.conf['cl']
 
     cljoin = " ".join(cl)
 
+
     #check if there are iterable arguments in here
     mapcount = 0
     mapins = RE_FIND_MAPINPUT.search(cljoin)
+    filins = RE_FIND_FILETARGET.search(cljoin)
+
     nojobstorun = app.defargs['jobstorun']
     lg.debug('jobs to run %s', nojobstorun)
 
@@ -173,12 +181,13 @@ def basic_command_line_generator(app):
     info['run'] = info.get('run', {})
     info['sys'] = info.get('sys', {})
 
-
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
+        #process_targetfiles(cl, info)
         info['cl'] = cl
         info['run']['no'] = 0
         info['run']['uid'] = get_uid(app)
+
 
         if pipes[0]:
             set_info_file(info, 'output', 'stdout', pipes[0])
@@ -195,7 +204,6 @@ def basic_command_line_generator(app):
     lg.debug("iterables found in: %s", cljoin)
 
     def expander(cl, pipes):
-
         for i, arg in enumerate(cl):
             mima = RE_FIND_MAPINPUT.search(arg)
             if mima:
@@ -233,7 +241,7 @@ def basic_command_line_generator(app):
                 yield nncl, pipes
 
     no = 0
-    for newcl, pipes in  expander(cl, pipes):
+    for newcl, pipes in expander(cl, pipes):
         no += 1
         if nojobstorun and no > nojobstorun:
             lg.warning("exceeded jobs to run")
@@ -249,4 +257,5 @@ def basic_command_line_generator(app):
         if pipes[1]:
             set_info_file(newinfo, 'output', 'stderr', pipes[1])
 
+        #process_targetfiles(newcl, newinfo)
         yield newinfo

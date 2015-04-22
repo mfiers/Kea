@@ -109,12 +109,10 @@ def kea_argparse(app):
     tmpparser = copy.copy(app.parser)
 
     if 'KEA_LAST_COMMAND' in os.environ:
-        app.conf['original_cl_raw'] = os.environ['KEA_LAST_COMMAND']
-        app.conf['original_cl'] = shlex.split(os.environ['KEA_LAST_COMMAND'])
+        app.conf['original_cl'] = os.environ['KEA_LAST_COMMAND']
     else:
-        app.conf['original_cl_raw'] = " ".join(sys.argv)
-        app.conf['original_cl'] = copy.copy(sys.argv)
-        
+        app.conf['original_cl'] = " ".join(sys.argv)
+
     tmpparser.add_argument('command', nargs='?')
     tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
@@ -128,7 +126,7 @@ def kea_argparse(app):
         app.args = app.parser.parse_args(sys.argv[1:])
         app.args.command = None
         app.args.arg = []
-        
+
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
         print("# Command mode\n")
@@ -151,7 +149,7 @@ def kea_argparse(app):
             app.args = app.parser.parse_args(sys.argv[1:])
             app.args.command = None
             app.args.arg = []
-    
+
 
     app.conf['cl_args'] = app.args.arg
 
@@ -175,7 +173,7 @@ def kea_argparse(app):
 
     app.conf['original_executable'] = app.conf['cl'][0]
     executable = app.conf['cl'][0]
-    
+
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
     executable = Pout.strip().decode('utf-8')

@@ -12,13 +12,13 @@ import leip
 from kea import Kea
 
 lg = logging.getLogger('name')
-#lg.setLevel(logging.DEBUG)
+lg.setLevel(logging.DEBUG)
 
 def get_snippet_repos(app):
-    
+
     if not 'snippet' in app.conf:
         return []
-    
+
     groups = []
     for group in app.conf['snippet']:
         data = app.conf['snippet'][group]
@@ -28,32 +28,32 @@ def get_snippet_repos(app):
             order =100
 
         groups.append((order, group))
-        
+
     groups.sort()
     return groups
-    
+
 def find_snippet_path(app, name, ensure_result=False):
 
     groups = get_snippet_repos(app)
 
     primary_group = groups[0][1]
     primary_path = None
-    
+
     for order, group in groups:
         lg.debug("procssing snippet group %d %s", order, group)
-        
-        data = app.conf['snippet'][group]        
+
+        data = app.conf['snippet'][group]
         pth = data['dir']
-        
+
         if not pth:
             lg.warning("Invalid snippet definition:\n %s", data.pretty())
 
         fullpath = os.path.join(os.path.expanduser(pth),
-                                '{}.snippet'.format(name)) 
+                                '{}.snippet'.format(name))
 
         if group == primary_group:
             primary_path = fullpath
-       
+
         if os.path.exists(fullpath):
             return fullpath
 
@@ -62,49 +62,59 @@ def find_snippet_path(app, name, ensure_result=False):
     else:
         return None
 
-    
+
 def get_snippet(app, name):
-    fullpath = find_snippet_path(app, name)
+
+    fullpath = find_snippet_path(app, name, ensure_result=True)
+
+    fulldir = os.path.dirname(fullpath)
+    if not os.path.exists(fulldir):
+        os.makedirs(fulldir)
+
     if fullpath is None:
         lg.warning("cannot find snippet definition for %s", name)
-        sys.exit(-1)
-        
+        return ""
+
+    if not os.path.exists(fullpath):
+        return ""
+
     with open(fullpath) as F:
         raw = F.read().strip()
 
     return raw
 
+def raw_snippet(app, name):
+    snip = get_snippet(app, name)
+    print(snip)
+    sys.exit()
 
-def edit_snippet(app, snippet):
+def edit_snippet(app, name):
 
-    fullpath = find_snippet_path(app, snippet, ensure_result=True)
-    fulldir = os.path.dirname(fullpath)
-    if not os.path.exists(fulldir):
-        os.makedirs(fulldir)
-
-    if os.path.exists(fullpath):
-        with open(fullpath) as F:
-            default = F.read()
-    else:
-        default = ""
-
+    default = get_snippet(app, name)
+    fullpath = find_snippet_path(app, name, ensure_result=True)
     from toMaKe import ui
     newdef = ui.askUserEditor(default)
 
     with open(fullpath, 'w') as F:
         F.write(newdef)
     sys.exit()
-    
+
 
 @leip.hook('snippet')
 def process_snippet(app, snippet):
 
-    snippos = sys.argv.index(snippet)
+    FLAGS = 'p<>'
+    sysarg = app.conf['original_cl']
+    snippos = sysarg.index(snippet)
     snippet = snippet[1:].strip()
 
-    if len(sys.argv) > snippos+1 and sys.argv[snippos+1] == 'edit':
-        return edit_snippet(app, snippet)
-    
+    if len(sysarg) > snippos+1:
+        snipcomm = sysarg[snippos+1]
+        if snipcomm == 'edit':
+            return edit_snippet(app, snippet)
+        if snipcomm == 'raw':
+            return raw_snippet(app, snippet)
+
     lg.debug("snippet: %s", snippet)
 
     snipraw = get_snippet(app, snippet)
@@ -117,118 +127,143 @@ def process_snippet(app, snippet):
         lg.debug("no need to expand the snippet")
         lg.debug("returning: %s", snipraw)
         snipraw  = shlex.split(snipraw)
-        sys.argv = sys.argv[:snippos] + snipraw
+        sys.argv = sysarg[:snippos] + snipraw
         return
 
+    comments = re.compile(
+        r'{{\s*#.*?}}')
+
     find_arg = re.compile(
-        r'{{\s*(?P<name>\w+)\s*' +
-        r'(\|(?P<default>[^}\|]*))?'
-        r'}}'
-    )
+        r'{{(?P<type>[' + FLAGS + \
+        r']*)\s*(?P<name>\w+)(?:\s*\|\s*(?P<args>.*?))?\s*}}')
+
+    snipraw = comments.sub('', snipraw)
 
     lg.debug("Start parsing snippet")
-    pargs = defaultdict(lambda:{})
-    positional_counter = 0
-    ## preparse snippet - remove predefined arguments
-    snipsplit = snipraw.split("\n")
-    newsnip = []
-    for line in snipsplit:
-        line = line.strip()
-        if not line: continue
-        if line[:2] == '##':
-            #prepare argument
-            line = line[2:]
-            line = shlex.split(line)
-            name = line[0]
-            positional = False
-            adata = {}
-            for a in line[1:]:
-                if a == 'positional':
-                    adata['positional'] = positional_counter
-                    positional_counter += 1
-                    continue
-                k, v = a.split('=', 1)
-                adata[k] = v
-            if positional:
-                ppargs[name] = adata
-            else:
-                pargs[name] = adata
-            continue
-        
-        #lastword = shlex.split(line)[-1]
-        # if line[-1] not in ';\\{' and \
-        #   lastword not in 'then do in'.split():
-        #    line += ';'
-        newsnip.append(line)
 
-    snipraw = "\n".join(newsnip).rstrip(';')
-    
+    toreplace = []
+
+    keyargs = []
+    posargs = []
+    #matches = []
+
     ##
-    ## parse snippet
+    ## parse snippet & build argparser object
     ##
 
-    for arghit in find_arg.finditer(snipraw):
+    lg.debug("regex parsing raw snippet")
+    for i, arghit in enumerate(find_arg.finditer(snipraw)):
+
         hitdata = arghit.groupdict()
+
         name = hitdata['name'].strip()
-        lg.debug("found argument: %s", name)
+        atype = hitdata['type']
+        rawargs = hitdata['args']
+
+        hitdata['raw'] = snipraw[arghit.start():arghit.end()]
+
+        lg.debug("found: %s", hitdata['raw'])
+        lg.debug(" - name: %s", name)
+        lg.debug(" - atype: %s", atype)
+        lg.debug(" - rawargs: %s", rawargs)
+
+        arg_kwdata = {}
+
+        if not rawargs is None:
+            for k, v in [(a.strip(), b.strip()) for
+                         a,b in [x.strip().split('=', 1) for x in
+                                 hitdata.get('args', '').split('|')]]:
+                arg_kwdata[k] = v
+
+        #check if an environment variable is defined
         envname = 'KEA_{}'.format(name.upper())
         envdef = os.environ.get(envname)
 
         if not envdef is None:
-            pargs[name]['default'] = envdef
+            arg_kwdata['default'] = envdef
+
+        if 'p' in atype:
+            posargs.append((name, arg_kwdata))
         else:
-            default = hitdata.get('default')
+            keyargs.append((name, arg_kwdata))
 
-        # do not overwrite default value when it is already set
-        # this may come in useful when there are multiple instances
-        # of an argument
+        toreplace.append(hitdata)
 
-        if not 'default' in pargs[name] or pargs[name]['default'] is None:
-            pargs[name]['default'] = default
-
-    # prepare temp command line
-    
+    # prepare argument parser for this snippet
     parser = argparse.ArgumentParser(snippet)
-    posargs = []
-    for name, kwdata in pargs.items():
+
+    for name, kwdata in posargs:
+        if kwdata.get('default'):
+            kwdata['nargs'] = '?'
+            kwdata['help'] = kwdata.get('help', '') + ' (default: {})'.format(
+                kwdata['default']).strip()
+
+        parser.add_argument(name, **kwdata)
+
+    for name, kwdata in keyargs:
         if kwdata.get('default'):
             kwdata['help'] = kwdata.get('help', '') + ' ({})'.format(kwdata['default']).strip()
         else:
             kwdata['help'] = kwdata.get('help', '') + ' (mandatory)'.strip()
 
-        if 'positional' in kwdata:
-            posno = kwdata['positional']
-            del kwdata['positional']
-            posargs.append((posno, name, kwdata))
-        else:
-            parser.add_argument('--{}'.format(name), **kwdata)
+        parser.add_argument('--{}'.format(name), **kwdata)
 
-    posargs.sort()
-    for ano, name, kwdata in posargs:
-        parser.add_argument(name, **kwdata)
-        
-    commandline_args = parser.parse_args(sys.argv[snippos+1:])
+
+    # parse command line for this snippet
+    commandline_args = parser.parse_args(sysarg[snippos+1:])
     errors = False
     parsed_snip = snipraw
-    
-    for name in pargs:
+
+    clargvals = {}
+    # process arguments:
+    for name in keyargs:
         clarg = getattr(commandline_args, name)
         if clarg is None:
             lg.debug('No value found for: %s', name)
             errors = True
             continue
-        replace_re = r'{{\s*' + name + r'(?=[\|\s}]).*?}}'
-        parsed_snip = re.sub(replace_re, clarg, parsed_snip)
+        clargvals[name] = clarg
+#        replace_re = r'{{[p]*\s*' + name + r'(?=\W).*?}}'
+#        parsed_snip = re.sub(replace_re, clarg, parsed_snip)
+
+    for name, kwargs in posargs:
+        clarg = getattr(commandline_args, name)
+        if clarg is None:
+            lg.debug('No value found for: %s', name)
+            errors = True
+            continue
+        clargvals[name] = clarg
+#        replace_re = r'{{[' + FLAGS + r']*\s*' + name + r'(?=\W).*?}}'
+#        parsed_snip = re.sub(replace_re, clarg, parsed_snip)
 
     if errors:
         parser.print_help()
         sys.exit(-1)
-        
+
+    #process snip -
+    for item in toreplace:
+        name = item['name']
+        src = item['raw']
+        rep = clargvals[name]
+        typ = item['type']
+        lg.debug("clarg %s: %s", name, rep)
+
+        for iou in '<^>':
+            if iou in typ:
+                if '{' in rep:
+                    rep = "{" + iou + name + "} "  + rep
+                else:
+                    rep = "{" + iou + name + "} " \
+                          + '{' + name + '~' + rep +'}'
+        lg.debug("replace --- %s --- %s ---", src, rep)
+        parsed_snip = parsed_snip.replace(src, rep)
+
+    lg.debug("converted: %s", parsed_snip)
     parsed_snip_split = shlex.split(parsed_snip)
-    
-    app.conf['snippet_cl_raw'] = " ".join(sys.argv[:snippos]) + ' ' + parsed_snip
-    app.conf['snippet_cl'] = sys.argv[:snippos] + parsed_snip_split
-    sys.argv = sys.argv[:snippos] + parsed_snip_split
+
+    app.conf['snippet_cl_raw'] = " ".join(sysarg[:snippos]) + ' ' + parsed_snip
+    app.conf['snippet_cl'] = sysarg[:snippos] + parsed_snip_split
+    sys.argv = sysarg[:snippos] + parsed_snip_split
 
 
 # @leip.command

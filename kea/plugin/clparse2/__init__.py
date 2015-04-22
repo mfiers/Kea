@@ -29,6 +29,7 @@ def clparse2_arg_define(app):
 
     clparse2_group.add_argument('--pfe', action='store_true',
                                 help='print parsed files & exit', default=0)
+
     clparse2_group.add_argument('--inf', default=[],
                                 help='mark this file as an input file',
                                 action='append')
@@ -38,6 +39,7 @@ def foreach(cl, jinf, tree, flag):
         processor(cl, jinf, tree)
         cl = cl[1:]
 
+
 def basename(cl, jinf, tree, extens=""):
     rv = os.path.basename(cl[0])
     if extens and rv.endswith(extens):
@@ -45,8 +47,10 @@ def basename(cl, jinf, tree, extens=""):
     lg.warning('basename: %s -> %s', cl[0], rv)
     processor([rv], jinf, tree)
 
+
 def debug(cl, jinf, tree, *args):
     print((cl, tree, args))
+
 
 def flag0(cl, jinf, tree, *flags):
     flag = None
