@@ -1,5 +1,3 @@
-
-
 # initialize by adding:
 #
 # eval $(_init_kea)
@@ -15,12 +13,9 @@ alias kea='#';
 
 function _kea_prompt {
   local lc=$(history 1);
-  lc="${lc## }";
-  lc="${lc#* }";
-  lc="${lc## }";
-  lc="${lc#"${lc%%[![:space:]]*}"}";
-  export KEA_LAST_COMMAND=${lc};
-  if [[ "$lc" =~ ^kea* ]]; then _kea; fi;
+  export KEA_LAST_HIST=${lc};
+  rex=' *[0-9]+ +kea';
+  if [[ "$lc" =~ $rex ]]; then _kea; fi;
 }
 
 """

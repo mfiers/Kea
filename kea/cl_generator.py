@@ -35,7 +35,6 @@ lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
 
 RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
-RE_FIND_FILETARGET = re.compile(r'{([\^<>])([a-zA-Z_][a-zA-Z0-9_]*)}\s+')
 
 
 def map_range_expand(map_info, cl, pipes):
@@ -149,13 +148,20 @@ def apply_map_info_to_cl(newcl, map_info):
 
 
 def process_targetfiles(info):
+    RE_FIND_FILETARGET = re.compile(r'{([\^<>])([a-zA-Z_][a-zA-Z0-9_]*)}\s+')
+
     cl = info['cl']
+    param = info.get('cl_param', {})
+    
     lg.debug('targets: %s', cl)
     done = False
     while True:
         for m in RE_FIND_FILETARGET.finditer(cl):
             fname = shlex.split(cl[m.end():])[0]
             ftype, name = m.groups()
+            
+            param[name] = fname
+            
             cat = {'<': 'input',
                    '>': 'output',
                    '^': 'use',
@@ -168,6 +174,7 @@ def process_targetfiles(info):
             break
     info['cl'] = cl
 
+    
 def basic_command_line_generator(app):
     """
     Most basic command line generator possible
@@ -182,7 +189,6 @@ def basic_command_line_generator(app):
     #check if there are iterable arguments in here
     mapcount = 0
     mapins = RE_FIND_MAPINPUT.search(cl)
-    filins = RE_FIND_FILETARGET.search(cl)
 
     nojobstorun = app.defargs['jobstorun']
     lg.debug('jobs to run %s', nojobstorun)
@@ -193,8 +199,8 @@ def basic_command_line_generator(app):
 
     # no map definitions found - then simply return the cl & execute
     if mapins is None:
-        process_targetfiles(info)
         info['cl'] = cl
+        process_targetfiles(info)
         info['run']['no'] = 0
         info['run']['uid'] = get_uid(app)
 
@@ -256,10 +262,12 @@ def basic_command_line_generator(app):
 
     no = 0
     lg.debug("start expansion: %s", cl)
+    
     for newclsplit, pipes in expander(shlex.split(cl), pipes):
         lg.debug("expanded: %s", newclsplit)
         newcl = " ".join(newclsplit)
         no += 1
+        
         if nojobstorun and no > nojobstorun:
             lg.warning("exceeded jobs to run")
             break

@@ -1,5 +1,6 @@
 
 import os
+import re
 import sys
 import shlex
 import subprocess as sp
@@ -20,8 +21,9 @@ def dispatch():
 command = None
 
 
-if 'KEA_LAST_COMMAND' in os.environ:
-    _orco = os.environ['KEA_LAST_COMMAND']
+if 'KEA_LAST_HIST' in os.environ:
+    _orco = os.environ['KEA_LAST_HIST']
+    _orco = re.sub(r'^ *[0-9]+ +', '', _orco)
     sys.argv = shlex.split(_orco)
 
 
