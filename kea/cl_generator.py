@@ -22,6 +22,7 @@ import hashlib
 import glob
 import logging
 import itertools
+import os
 import re
 import shlex
 import socket
@@ -35,59 +36,6 @@ lg = logging.getLogger(__name__)
 #lg.setLevel(logging.DEBUG)
 
 
-def map_range_expand(map_info, cl, pipes):
-    """
-    Convert a map range to a list of items:
-
-    first - range conversion:
-      - a,b,c -> ['a', 'b', 'c']
-      - 5:10 -> [5,6,7,8,9]
-      - 5:10:2 -> [5,7,9]
-    then, merge with the command line item in which this was embedded (if any)
-
-    so: test.{a=5:10:2}.in becomes: ['test.5.in', 'test.7.in', 'test.9.in']
-
-    """
-
-    mappat_range_3 = re.match(r'([0-9]+):([0-9]+):([0-9]+)',
-                              map_info['pattern'])
-    mappat_range_2 = re.match(r'([0-9]+):([0-9]+)',
-                              map_info['pattern'])
-
-    thisarg = map_info['arg']
-    iterstring = map_info['iterstring']
-    argi = cl.index(thisarg)
-
-    if mappat_range_3:
-        start, stop, step = mappat_range_3.groups()
-        map_items = list(map(str, list(range(int(start), int(stop), int(step)))))
-    elif mappat_range_2:
-        start, stop = mappat_range_2.groups()
-        map_items = list(map(str, list(range(int(start), int(stop)))))
-    elif ',' in map_info['pattern']:
-        map_items = [x.strip() for x in map_info['pattern'].split(',')]
-    else:
-        lg.critical("Can not parse range: %s", map_info['pattern'])
-        exit(-1)
-
-
-    substart = thisarg.index(iterstring)
-    subtail = substart + len(iterstring)
-    for g in map_items:
-        newcl = copy.copy(cl)
-        argrep = thisarg[:substart] + str(g) +  thisarg[subtail:]
-        newcl[argi] = argrep
-        for j, rarg in enumerate(newcl):
-            newcl[j] = map_info['rep_from'].sub(g, rarg)
-
-        new_pipes = []
-        for p in pipes:
-            if p is None:
-                new_pipes.append(None)
-            else:
-                new_pipes.append(map_info['rep_from'].sub(g, p))
-
-        yield newcl, new_pipes
 
 def map_num_expand(mtch, info):
     cl = info['cl']
@@ -148,17 +96,11 @@ def map_glob_expand(mtch, info):
         newcl = cl.replace(matched_word, ghit)
         lg.debug('   - param: "%s"="%s"', name, rep_str)
         newinfo = info.copy()
-        newinfo['cl'] = newcl
+        newinfo['cl'] = newcl.strip()
         newinfo['param'][name] = rep_str
         yield newinfo
 
         
-def map_iter(map_info):
-    for i in map_info['items']:
-        map_clean = copy.copy(map_info)
-        map_clean['item'] = i
-        yield map_clean
-
 
 def apply_map_info_to_cl(newcl, map_info):
     item = map_info['item']
@@ -197,22 +139,52 @@ def process_targetfiles(info):
         else:
             done = True
             break
-    info['cl'] = cl
+    info['cl'] = cl.strip()
 
 def render_parameters(s, param):
-    FIND_PARAM = re.compile(r'{([A-Za-z_][a-zA-Z0-9_]*)}')
+    FIND_PARAM = re.compile(r'{([A-Za-z_][a-zA-Z0-9_]*)(?:\|([^}]+)?)?}')
     while True:
         mtch = FIND_PARAM.search(s)
         if not mtch:
             break
+
         name = mtch.groups()[0]
-        
+        flags = mtch.groups()[1]
+        if not flags:
+            flags = ''
+            
+        if '|' in flags:
+            flags, pattern = flags.split('|', 1)
+        else:
+            pattern = None
+            
+        #lg.setLevel(logging.DEBUG)
+        lg.debug('cl render')
+        lg.debug(' -  string: %s', s)
+        lg.debug(' -    name: %s', name)
+        lg.debug(' -   flags: %s', flags)
+        lg.debug(' - pattern: %s' % pattern)
+
         if not name in param:
             lg.critical("invalid replacement: %s",
-                        cl[mtch.start():mtch.end()])
+                        s[mtch.start():mtch.end()])
             exit()
-        s = s[:mtch.start()] + str(param[name]) + s[mtch.end():]
-    return s
+
+        replace = str(param[name])
+        if '/' in  flags:
+            replace = os.path.basename(replace)
+        for _extcut in range(flags.count('.')):
+            if not '.' in replace:
+                break
+            replace = replace.rsplit('.')[0]
+
+        if pattern:
+            replace = pattern.replace('*', replace)
+            
+        lg.debug(' - pattern: %s' % pattern)
+        lg.debug(' - replace: %s' % replace)
+        s = s[:mtch.start()] + replace + s[mtch.end():]
+    return s.strip()
     
 def iterate_cls(info):
 

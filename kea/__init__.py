@@ -136,7 +136,6 @@ def kea_argparse(app):
     if app.args.command and app.args.command[0] == '+':
         #snippet mode!!
         app.run_hook('snippet', app.args.command)
-
         tmpargs = tmpparser.parse_args()
         if tmpargs.command is not None:
             command_start = sys.argv.index(tmpargs.command)

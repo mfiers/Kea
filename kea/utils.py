@@ -228,14 +228,17 @@ def set_info_file(jinf, category, name, filename):
     if not category in jinf:
         jinf[category] = {}
 
-    i = 0
-    newname = '{}_{:02}'.format(name, i)
-    while newname in jinf[category]:
-        i += 1
-        newname = '{}_{:02}'.format(name, i)
+    newname = name
+    if newname in jinf[category]:
+        i = 0
+        newname = '{}{}'.format(name, i)
+        while newname in jinf[category]:
+            i += 1
+            newname = '{}{}'.format(name, i)
 
     lg.debug("set file %s cat %s : %s", newname, category, filename)
     jinf[category][newname] = dict(path=filename)
+    return newname
 
 
 def create_kea_link(app, name):
@@ -315,15 +318,13 @@ def get_mongo_collection(conf, collection):
     if collection in MONGO_CLC_CACHE:
         return MONGO_CLC_CACHE[collection]
 
-    try:
-        mconf = conf['plugin.logger.mongo']
-    except KeyError:
-        return None
+    mconf = conf.get('store.mongo', {})
 
     host = mconf.get('host', 'localhost')
     port = int(mconf.get('port', 27017))
     db = mconf.get('db', 'kea')
 
+    lg.debug("mongo db @ %s:%s/%s", host, port, db)
 
-    MONGO_CLC_CACHE[collection] = MongoClient(mconf['host'], port)[db][collection]
+    MONGO_CLC_CACHE[collection] = MongoClient(host, port)[db][collection]
     return MONGO_CLC_CACHE[collection]

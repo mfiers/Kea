@@ -16,6 +16,7 @@ from termcolor import cprint
 import yaml
 
 from kea.plugin.logger import dictprint
+from kea.cl_generator import render_parameters
 import kea.utils
 
 lg = logging.getLogger(__name__)
@@ -38,9 +39,20 @@ def transaction_arg_define(app):
     tragroup.add_argument('--utd', dest='up_to_date',
                           help='assume all files are up to date if they exists',
                           action='store_true')
+
     tragroup.add_argument('--ss', dest='skip_save',
                           help='create a transcation for skipped jobs',
                           action='store_true')
+    
+    tragroup.add_argument('--tfi', dest='transact_file_in', action='append',
+                          help='transcription input file', nargs=2)
+    tragroup.add_argument('--tfo', dest='transact_file_out', action='append',
+                          help='transcription output file', nargs=2)
+    tragroup.add_argument('--tfu', dest='transact_file_use', action='append',
+                          help='transcription used file', nargs=2)
+    tragroup.add_argument('--pt', dest='print_transaction', action='store_true',
+                          help='print a transaction summary to screen')
+    
 
 
 def hash(o):
@@ -72,11 +84,11 @@ def make_hash(o):
 
 
 def get_coll_transaction(conf):
+    
     mconf = conf['plugin.transaction']
 
     c2t_name = 'checksum2transaction'
     tra_name = 'transaction'
-
 
     c2t = kea.utils.get_mongo_collection(conf, c2t_name)
     tra = kea.utils.get_mongo_collection(conf, tra_name)
@@ -106,7 +118,7 @@ def get_madapp():
 
 @leip.hook('post_fire')
 def mad_register_file(app, jinf):
-
+    
     from mad2.util import get_mad_file
 
     madapp = get_madapp()
@@ -136,6 +148,28 @@ def mad_register_file(app, jinf):
 @leip.hook('pre_fire', 1000)
 def check_transaction(app, jinf):
 
+    #first check if there are more in/output files defined...
+    for cat, filelist in [['input', app.args.transact_file_in],
+                      ['output', app.args.transact_file_out],
+                      ['use', app.args.transact_file_use]]:
+        if not filelist:
+            continue
+        for name, pattern in filelist:
+            fname = render_parameters(pattern, jinf['param'])
+            kea.utils.set_info_file(jinf, cat, name, fname)
+
+    if app.args.print_transaction:
+        for cat in ['input', 'output', 'use']:
+            files = jinf.get(cat, {})
+            if len(files) == 0:
+                continue
+            filekeys = sorted(files.keys())
+            for fk in filekeys:
+                cprint('#', end=' ')
+                cprint(fk, 'cyan', end=' (')
+                cprint(cat, 'green', end=') ')
+                cprint(files[fk]['path'], 'yellow')
+    
 #    lg.setLevel(logging.DEBUG)
     lg.debug("check transaction")
 
@@ -143,6 +177,7 @@ def check_transaction(app, jinf):
     mng_tra, mng_c2t = get_coll_transaction(app.conf)
 
     if mng_tra is mng_c2t is None:  # mongo not configured?
+        lg.debug('no mongo db - no transcation check')
         return
 
     from mad2.util import get_mad_file
@@ -200,7 +235,8 @@ def check_transaction(app, jinf):
     lg.debug("Found %d %s transactions with the same inputfiles", len(translist), app.name)
 
     one_transaction_matches = False
-
+    matching_transcations = []
+    
     for traid in translist:
         lg.debug("checking transaction %s", traid)
         tra = mng_tra.find_one({'transaction_id': traid})
@@ -235,13 +271,29 @@ def check_transaction(app, jinf):
         if not output_matches:
             continue
 
-        lg.info('transaction match!')
+        lg.debug('transaction match!')
         one_transaction_matches = True
-
+        matching_transcations.append(tra)
+        
     if one_transaction_matches and (not app.args.always_run):
-        lg.warning("Transaction match -> Skipping job")
+        if app.args.print_transaction:
+            cprint("# Transcation Match -- skipping job", 'green')
+            cprint("# No transcations matching:", end=" ")
+            cprint(str(len(matching_transcations)), 'yellow')
+            t = matching_transcations[0]
+            for t in matching_transcations:
+                cprint("# transcation id:", end=" ")
+                cprint(t['transaction_id'], 'green')
+                cprint("#           date:", end=" ")
+                cprint(t['timestamp'], 'blue')
+
+        else:
+            lg.warning("Transaction match (%d) -> Skipping job", len(matching_transcations))        
+            lg.warning("Transcation %s", matching_transcations[0])
+            cprint
         jinf['skip'] = True
 
+    exit()
 
 @leip.hook('post_fire', 1000)
 def create_transaction(app, jinf):
@@ -322,7 +374,7 @@ def build_network(app, args):
     tra_seen = set()
     sha_seen = set()
 
-    def _add_transcation(tra_id):
+    def _add_transaction(tra_id):
         if tra_id in tra_seen:
             return
 
@@ -367,7 +419,7 @@ def build_network(app, args):
 
         if False:
             for rec in mc_c2t.find({'file_sha1sum': sha1sum}):
-                _add_transcation(rec['transaction_record_id'])
+                _add_transaction(rec['transaction_record_id'])
         else:
             latest_rec = None
             latest_date = None
@@ -376,7 +428,7 @@ def build_network(app, args):
                              sort=[('timestamp',-1)],
                              limit=1)
             for hit in hits:
-                _add_transcation(hit['transaction_record_id'])
+                _add_transaction(hit['transaction_record_id'])
                 break
 
     _add_sha1sum(sha1sum)

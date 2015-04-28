@@ -209,12 +209,12 @@ def log_cl(app):
 
     if app.args.deferred:
         return
-
-    runsh_line = "# " + app.conf['original_cl']
+    print('hi')
+    runsh_line = "# " + "# ".join(app.conf['original_cl'].split("\n"))
 
     #check if there is snippet converted command line:
     if 'snippet_cl' in app.conf:
-        snipsh_line = "# " + app.conf['snippet_cl']
+        snipsh_line = "# " + "# ".join(app.conf['snippet_cl'].split("\n"))
     else:
         snipsh_line = None
 
