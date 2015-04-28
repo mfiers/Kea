@@ -247,17 +247,13 @@ def process_snippet(app, snippet):
 
         for iou in '<^>':
             if iou in typ:
-                if '{' in rep:
-                    rep = "{" + iou + name + "} "  + rep
-                else:
-                    rep = "{" + iou + name + "} " \
-                          + '{' + name + '~' + rep +'}'
+                rep = "{" + iou + name + "} "  + rep
 
         lg.debug("replace --- %s --- %s ---", src, rep)
         parsed_snip = parsed_snip.replace(src, rep)
 
     lg.debug("converted: %s", parsed_snip)
-    parsed_snip_split = shlex.split(parsed_snip)
+    parsed_snip_split = [x for x in shlex.split(parsed_snip) if x.strip()]
 
     app.conf['snippet_cl'] = " ".join(sysarg[:snippos]) + ' ' + parsed_snip
     sys.argv = sysarg[:snippos] + parsed_snip_split
