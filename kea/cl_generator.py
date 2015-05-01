@@ -125,14 +125,20 @@ def process_targetfiles(info):
     while True:
         for m in RE_FIND_FILETARGET.finditer(cl):
             fname = shlex.split(cl[m.end():])[0]
+            if '{' in fname:
+                # not good - not rendered (yet?)
+                # maybe in the next round
+                continue
+            
             ftype, name = m.groups()
             
             cat = {'<': 'input',
                    '>': 'output',
                    '^': 'use',
                    'x': 'executable'}[ftype]
-            
+
             newname = set_info_file(info, cat, name, fname)
+#            print("set info file: ", cat, name, fname, newname)
             info['param'][newname] = fname
             cl = cl[:m.start()] + cl[m.end():]
             break
@@ -143,8 +149,10 @@ def process_targetfiles(info):
 
 def render_parameters(s, param):
     FIND_PARAM = re.compile(r'{([A-Za-z_][a-zA-Z0-9_]*)(?:\|([^}]+)?)?}')
+    search_start = 0
+    
     while True:
-        mtch = FIND_PARAM.search(s)
+        mtch = FIND_PARAM.search(s, search_start)
         if not mtch:
             break
 
@@ -166,9 +174,15 @@ def render_parameters(s, param):
         lg.debug(' - pattern: %s' % pattern)
 
         if not name in param:
-            lg.critical("invalid replacement: %s",
-                        s[mtch.start():mtch.end()])
-            exit()
+            # this value may yet be found as a redirect file
+            if re.search('{?' + name + '}', s):
+                search_start = mtch.end()
+                break
+            else:
+                lg.critical("invalid replacement: %s",
+                            s[mtch.start():mtch.end()])
+                lg.critical(s)
+                exit()
 
         replace = str(param[name])
         if '/' in  flags:
@@ -239,8 +253,17 @@ def basic_command_line_generator(app):
         if nojobstorun and i >= nojobstorun:
             break
 
-        process_targetfiles(info)
-        info['cl'] = render_parameters(info['cl'], info['param'])
+        #iterative rendering - fun!
+        lastcl = info['cl']
+        while True:
+            process_targetfiles(info) 
+            info['cl'] = render_parameters(info['cl'], info['param'])
+            if lastcl == info['cl']:
+                break
+            lastcl = info['cl']
+#            else:
+#                print(info['cl'])
+
         info['run']['no'] = i
         if pipes[0]:
             set_info_file(info, 'output', 'stdout',

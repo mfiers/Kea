@@ -213,7 +213,7 @@ def run_kea(app):
         cl = jinf['cl']
         lg.debug("command line arguments: %s", " ".join(cl))
 
-        jinf['args'] = " ".join(app.conf['cl_args'])
+        jinf['args'] =app.conf['cl_args']
         jinf['cwd'] = os.getcwd()
 
         executor.fire(jinf)

@@ -1,5 +1,3 @@
-
-
 import copy
 from datetime import datetime
 from collections import defaultdict
@@ -262,19 +260,21 @@ def check_transaction(app, jinf):
                 output_matches = False
                 break
 
-            if madfiles[filename]['sha1sum'] != trarec['output'][outfile]['sha1sum']:
+            if madfiles[filename]['sha1sum'] != trarec['output'][outfile].get('sha1sum'):
                 output_matches = False
                 break
 
             lg.debug("match %s (%s)", filename, madfiles[filename]['sha1sum'])
 
         if not output_matches:
+            lg.debug("no transaction match")
             continue
 
         lg.debug('transaction match!')
         one_transaction_matches = True
         matching_transcations.append(tra)
-        
+
+    
     if one_transaction_matches and (not app.args.always_run):
         if app.args.print_transaction:
             cprint("# Transcation Match -- skipping job", 'green')
@@ -289,11 +289,11 @@ def check_transaction(app, jinf):
 
         else:
             lg.warning("Transaction match (%d) -> Skipping job", len(matching_transcations))        
-            lg.warning("Transcation %s", matching_transcations[0])
-            cprint
-        jinf['skip'] = True
+            lg.debug("Transcation %s", matching_transcations[0])
 
-    exit()
+        jinf['skip'] = True
+        
+
 
 @leip.hook('post_fire', 1000)
 def create_transaction(app, jinf):
@@ -322,11 +322,15 @@ def create_transaction(app, jinf):
     # tra['signature_key'] = key['keyid']
     #print(gpg)
 
-    if app.args.save_transation_to_disk:
-        filename = "{}.{}.{}.transaction".format(
-            app.name, jinf['run']['uid'], jinf['run']['no'])
-        with gzip.open(filename, 'w') as F:
-            F.write(yaml.safe_dump(tra, default_flow_style=False))
+    with open('kea.transaction', 'ab') as F:
+        F.write(b'---\n')
+        F.write(yaml.safe_dump(tra, default_flow_style=False).encode('UTF-8'))
+        
+    # if app.args.save_transation_to_disk:
+    #     filename = "{}.{}.{}.transaction".format(
+    #         app.name, jinf['run']['uid'], jinf['run']['no'])
+    #     with gzip.open(filename, 'w') as F:
+    #         F.write(yaml.safe_dump(tra, default_flow_style=False).encode('UTF-8'))
 
     mc_tra, mc_c2t = get_coll_transaction(app.conf)
     if mc_tra is None:
