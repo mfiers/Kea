@@ -228,13 +228,11 @@ def set_info_file(jinf, category, name, filename):
     if not category in jinf:
         jinf[category] = {}
 
-    newname = name
-    if newname in jinf[category]:
-        i = 0
+    i = 0
+    newname = '{}__{:03d}'.format(name, i)
+    while newname in jinf[category]:
+        i += 1
         newname = '{}{}'.format(name, i)
-        while newname in jinf[category]:
-            i += 1
-            newname = '{}{}'.format(name, i)
 
     lg.debug("set file %s cat %s : %s", newname, category, filename)
     jinf[category][newname] = dict(path=filename)

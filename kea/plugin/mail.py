@@ -56,7 +56,7 @@ Subject:
 <h3>Command line</h3>{% endif %}
 
 <pre>{% for jinf in all_jinf -%}
-{{ jinf.run_no }}.  {{ jinf['cl']|join(" ") }}
+{{ jinf.run_no }}.  {{ jinf['cl'] }}
 
 {% endfor %}
 </pre>
@@ -146,8 +146,8 @@ def mail(app):
     data['all_jinf'] = app.all_jinf
     data['app'] = app
     cl = app.conf['cl']
-    data['clj50'] = " ".join(cl)[:50]
-    data['clj'] = " ".join(cl)
+    data['clj50'] = cl[:50]
+    data['clj'] = cl
 
 
     if not mailrecip:

@@ -41,7 +41,7 @@ def transaction_arg_define(app):
     tragroup.add_argument('--ss', dest='skip_save',
                           help='create a transcation for skipped jobs',
                           action='store_true')
-    
+
     tragroup.add_argument('--tfi', dest='transact_file_in', action='append',
                           help='transcription input file', nargs=2)
     tragroup.add_argument('--tfo', dest='transact_file_out', action='append',
@@ -50,7 +50,7 @@ def transaction_arg_define(app):
                           help='transcription used file', nargs=2)
     tragroup.add_argument('--pt', dest='print_transaction', action='store_true',
                           help='print a transaction summary to screen')
-    
+
 
 
 def hash(o):
@@ -82,7 +82,7 @@ def make_hash(o):
 
 
 def get_coll_transaction(conf):
-    
+
     mconf = conf['plugin.transaction']
 
     c2t_name = 'checksum2transaction'
@@ -116,7 +116,7 @@ def get_madapp():
 
 @leip.hook('post_fire')
 def mad_register_file(app, jinf):
-    
+
     from mad2.util import get_mad_file
 
     madapp = get_madapp()
@@ -167,7 +167,7 @@ def check_transaction(app, jinf):
                 cprint(fk, 'cyan', end=' (')
                 cprint(cat, 'green', end=') ')
                 cprint(files[fk]['path'], 'yellow')
-    
+
 #    lg.setLevel(logging.DEBUG)
     lg.debug("check transaction")
 
@@ -234,7 +234,7 @@ def check_transaction(app, jinf):
 
     one_transaction_matches = False
     matching_transcations = []
-    
+
     for traid in translist:
         lg.debug("checking transaction %s", traid)
         tra = mng_tra.find_one({'transaction_id': traid})
@@ -274,7 +274,7 @@ def check_transaction(app, jinf):
         one_transaction_matches = True
         matching_transcations.append(tra)
 
-    
+
     if one_transaction_matches and (not app.args.always_run):
         if app.args.print_transaction:
             cprint("# Transcation Match -- skipping job", 'green')
@@ -288,11 +288,11 @@ def check_transaction(app, jinf):
                 cprint(t['timestamp'], 'blue')
 
         else:
-            lg.warning("Transaction match (%d) -> Skipping job", len(matching_transcations))        
+            lg.warning("Transaction match (%d) -> Skipping job", len(matching_transcations))
             lg.debug("Transcation %s", matching_transcations[0])
 
         jinf['skip'] = True
-        
+
 
 
 @leip.hook('post_fire', 1000)
@@ -325,7 +325,7 @@ def create_transaction(app, jinf):
     with open('kea.transaction', 'ab') as F:
         F.write(b'---\n')
         F.write(yaml.safe_dump(tra, default_flow_style=False).encode('UTF-8'))
-        
+
     # if app.args.save_transation_to_disk:
     #     filename = "{}.{}.{}.transaction".format(
     #         app.name, jinf['run']['uid'], jinf['run']['no'])

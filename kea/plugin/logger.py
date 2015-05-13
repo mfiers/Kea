@@ -33,7 +33,7 @@ def logger_arg_define(app):
 
 def get_mongo_logcol(conf):
     try:
-        mconf = conf['plugin.logger.mongo']
+        mconf = conf['store.mongo']
     except KeyError:
         return None
 
@@ -210,7 +210,7 @@ def log_cl(app):
     if app.args.deferred:
         return
 
-    runsh_line = "# " + "# ".join(app.conf['original_cl'].split("\n"))
+    runsh_line = "# " + "\\\n#   ".join(app.conf['original_cl'].split("\n"))
 
     #check if there is snippet converted command line:
     if 'snippet_cl' in app.conf:

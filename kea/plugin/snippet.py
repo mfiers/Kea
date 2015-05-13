@@ -8,6 +8,8 @@ import sys
 import re
 
 import leip
+import jinja2
+from jinja2 import Template as jinjaTemplate
 
 from kea import Kea
 
@@ -103,7 +105,7 @@ def edit_snippet(app, name):
 @leip.hook('snippet')
 def process_snippet(app, snippet):
 
-    FLAGS = 'p<>'
+    FLAGS = 'p<>+b'
     sysarg = sys.argv
     snippos = sysarg.index(snippet)
     snippet = snippet[1:].strip()
@@ -132,11 +134,11 @@ def process_snippet(app, snippet):
         return
 
     comments = re.compile(
-        r'{{\s*#.*?}}')
+        r'{{{\s*#.*?}}}')
 
     find_arg = re.compile(
-        r'{{(?P<type>[' + FLAGS + \
-        r']*)\s*(?P<name>\w+)(?:\s*\|\s*(?P<args>.*?))?\s*}}')
+        r'{{{(?P<type>[' + FLAGS + \
+        r']*)\s*(?P<name>\w+)(?:\s*\|\s*(?P<args>.*?))?\s*}}}')
 
     snipraw = comments.sub('', snipraw)
 
@@ -146,7 +148,6 @@ def process_snippet(app, snippet):
 
     keyargs = []
     posargs = []
-    #matches = []
 
     ##
     ## parse snippet & build argparser object
@@ -183,6 +184,12 @@ def process_snippet(app, snippet):
         if not envdef is None:
             arg_kwdata['default'] = envdef
 
+        if '+' in atype:
+            arg_kwdata['nargs'] = '+'
+
+        if 'b' in atype:
+            arg_kwdata['action'] = 'store_true'
+
         if 'p' in atype:
             posargs.append((name, arg_kwdata))
         else:
@@ -203,8 +210,9 @@ def process_snippet(app, snippet):
 
     for name, kwdata in keyargs:
         if kwdata.get('default'):
-            kwdata['help'] = kwdata.get('help', '') + ' ({})'.format(kwdata['default']).strip()
-        else:
+            kwdata['help'] = kwdata.get('help', '') + \
+                             ' ({})'.format(kwdata['default']).strip()
+        elif not kwdata['action'] in ['store_true']:
             kwdata['help'] = kwdata.get('help', '') + ' (mandatory)'.strip()
 
         parser.add_argument('--{}'.format(name), **kwdata)
@@ -216,8 +224,10 @@ def process_snippet(app, snippet):
     parsed_snip = snipraw
 
     clargvals = {}
+
     # process arguments:
-    for name in keyargs:
+    for name, kwargs in keyargs:
+        lg.debug("get arg value for %s", name)
         clarg = getattr(commandline_args, name)
         if clarg is None:
             lg.debug('No value found for: %s', name)
@@ -237,23 +247,39 @@ def process_snippet(app, snippet):
         parser.print_help()
         sys.exit(-1)
 
+    tdata = {}
     #process snip -
     for item in toreplace:
         name = item['name']
         src = item['raw']
         rep = clargvals[name]
         typ = item['type']
+
+        #on having  + flag - join the fields togehter
+        if '+' in typ and isinstance(rep, list):
+            rep = " ".join(rep)
+
         lg.debug("clarg %s: %s", name, rep)
+
+        tdata[name] = rep
 
         for iou in '<^>':
             if iou in typ:
+
                 rep = "{" + iou + name + "} "  + rep
 
         lg.debug("replace --- %s --- %s ---", src, rep)
-        parsed_snip = parsed_snip.replace(src, rep)
+
+        parsed_snip = parsed_snip.replace(src, str(rep))
+
+    if '{{' in parsed_snip or '{%' in parsed_snip:
+        template = jinjaTemplate(parsed_snip)
+        parsed_snip = template.render(tdata).strip()
 
     lg.debug("converted: %s", parsed_snip)
     parsed_snip_split = [x for x in shlex.split(parsed_snip) if x.strip()]
 
+    app.conf['snippet_param'] = tdata
+    app.conf['parsed_snippet'] = parsed_snip
     app.conf['snippet_cl'] = " ".join(sysarg[:snippos]) + ' ' + parsed_snip
     sys.argv = sysarg[:snippos] + parsed_snip_split

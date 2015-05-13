@@ -456,7 +456,6 @@ class BasicExecutor(object):
 class DummyExecutor(BasicExecutor):
 
     def fire(self, info):
-
         self.app.run_hook('pre_fire', info)
         info['dummy'] = True
 
