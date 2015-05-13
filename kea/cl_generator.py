@@ -60,7 +60,7 @@ def map_num_expand(mtch, info):
         newinfo['param'][name] = r
         yield newinfo
 
-    
+
 def map_glob_expand(mtch, info):
 
     cl = info['cl']
@@ -100,7 +100,7 @@ def map_glob_expand(mtch, info):
         newinfo['param'][name] = rep_str
         yield newinfo
 
-        
+
 
 def apply_map_info_to_cl(newcl, map_info):
     item = map_info['item']
@@ -116,6 +116,7 @@ def apply_map_info_to_cl(newcl, map_info):
 
 
 def process_targetfiles(info):
+
     RE_FIND_FILETARGET = re.compile(r'{([\^<>!])([a-zA-Z_][a-zA-Z0-9_]*)}\s+')
 
     cl = info['cl']
@@ -129,28 +130,28 @@ def process_targetfiles(info):
                 # not good - not rendered (yet?)
                 # maybe in the next round
                 continue
-            
+
             ftype, name = m.groups()
-            
+
             cat = {'<': 'input',
                    '>': 'output',
                    '^': 'use',
                    'x': 'executable'}[ftype]
 
             newname = set_info_file(info, cat, name, fname)
-#            print("set info file: ", cat, name, fname, newname)
             info['param'][newname] = fname
             cl = cl[:m.start()] + cl[m.end():]
             break
         else:
             done = True
             break
+
     info['cl'] = cl.strip()
 
 def render_parameters(s, param):
     FIND_PARAM = re.compile(r'{([A-Za-z_][a-zA-Z0-9_]*)(?:\|([^}]+)?)?}')
     search_start = 0
-    
+
     while True:
         mtch = FIND_PARAM.search(s, search_start)
         if not mtch:
@@ -160,12 +161,12 @@ def render_parameters(s, param):
         flags = mtch.groups()[1]
         if not flags:
             flags = ''
-            
+
         if '|' in flags:
             flags, pattern = flags.split('|', 1)
         else:
             pattern = None
-            
+
         #lg.setLevel(logging.DEBUG)
         lg.debug('cl render')
         lg.debug(' -  string: %s', s)
@@ -194,46 +195,51 @@ def render_parameters(s, param):
 
         if pattern:
             replace = pattern.replace('*', replace)
-            
+
         lg.debug(' - pattern: %s' % pattern)
         lg.debug(' - replace: %s' % replace)
         s = s[:mtch.start()] + replace + s[mtch.end():]
     return s.strip()
-    
+
 def iterate_cls(info):
 
     yielded = 0
 
     cl = info['cl']
-    
+
     RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
     mapins = RE_FIND_MAPINPUT.search(cl)
-    
+
     mtch = RE_FIND_MAPINPUT.search(cl)
     if mtch is None:
         yield info.copy()
         return
-    
+
     name, operator, pattern = mtch.groups()
     if operator == '~':
         expand_function = map_glob_expand
     elif operator == '=':
         expand_function = map_num_expand
-            
+
     for info in expand_function(mtch, info.copy()):
         for info in iterate_cls(info):
             yield info
-    
-    
+
+
 def basic_command_line_generator(app):
     """
     Most basic command line generator possible
     """
 
     info = OrderedDict()
-    info['param'] = info.get('param', {})
+    if 'snippet_param' in app.conf:
+        info['param'] = dict(copy.copy(app.conf['snippet_param']))
+    else:
+        info['param'] = {}
+
     info['cl'] = app.conf['cl']
-    
+
+    lg.warning("rendering: %s", info['cl'])
     pipes = [app.args.stdout, app.args.stderr]
 
     #check if there are iterable arguments in here
@@ -256,7 +262,7 @@ def basic_command_line_generator(app):
         #iterative rendering - fun!
         lastcl = info['cl']
         while True:
-            process_targetfiles(info) 
+            process_targetfiles(info)
             info['cl'] = render_parameters(info['cl'], info['param'])
             if lastcl == info['cl']:
                 break
@@ -272,4 +278,3 @@ def basic_command_line_generator(app):
             set_info_file(info, 'output', 'stderr',
                           render_parameters(pipes[1], info['param']))
         yield info
-                    
