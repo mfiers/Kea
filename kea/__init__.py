@@ -81,12 +81,11 @@ class Kea(leip.app):
         self.discover(globals())
 
 
-@leip.hook('pre_argparse')
+@leip.hook('pre_argparse', 10)
 def main_arg_define(app):
-
     app.parser.add_argument('-h', '--help', action='store_true',
                             help='Show this help and exit')
-    app.parser.add_argument('-v', '--verbose', action='count')
+    app.parser.add_argument('-v', '--verbose', action='count', default=0)
     app.parser.add_argument('-U', '--uid',
                             help='unique identifier for this run')
     app.parser.add_argument('-x', '--executor', help='executor to use',
@@ -110,7 +109,9 @@ def kea_argparse(app):
 
     tmpparser = copy.copy(app.parser)
 
-    app.original_cl = copy.copy(sys.argv)
+    app.conf['original_cl'] = " ".join(sys.argv)
+
+    lg.debug("execute: %s", sys.argv)
     tmpparser.add_argument('command', nargs='?')
     tmpparser.add_argument('arg', nargs=argparse.REMAINDER)
 
@@ -127,13 +128,28 @@ def kea_argparse(app):
 
     if app.args.help:
         kea_app = leip.app('kea', partial_parse=True)
-        print "# Command mode\n"
+        print("# Command mode\n")
         app.parser.print_help()
-        print "\n# Utility mode\n"
+        print("\n# Utility mode\n")
         kea_app.parser.print_help()
         exit(0)
 
-    app.cl_args = app.args.arg
+    if app.args.command and app.args.command[0] == '+':
+        #snippet mode!!
+        app.run_hook('snippet', app.args.command)
+        tmpargs = tmpparser.parse_args()
+        if tmpargs.command is not None:
+            command_start = sys.argv.index(tmpargs.command)
+            app.args = app.parser.parse_args(sys.argv[1:command_start])
+            app.args.command = sys.argv[command_start]
+            app.args.arg = sys.argv[command_start+1:]
+        else:
+            app.args = app.parser.parse_args(sys.argv[1:])
+            app.args.command = None
+            app.args.arg = []
+
+
+    app.conf['cl_args'] = " ".join(app.args.arg)
 
     if not app.args.command:
         app.parser.print_usage()
@@ -141,23 +157,21 @@ def kea_argparse(app):
         kea_app.parser.print_usage()
         sys.exit(-1)
 
-    cl = [app.args.command]
+    cl = app.args.command
 
-    if app.cl_args:
-        cl.extend(app.cl_args)
+    if app.conf['cl_args']:
+        cl += ' ' + app.conf['cl_args']
 
-    #special case - probably used quotes on the command line
-    if len(cl) == 1 and ' ' in cl[0]:
-        cl = shlex.split(cl[0])
+    app.conf['cl'] = cl
+    app.name = os.path.basename(app.args.command)
 
-    app.cl = cl
-    app.name = os.path.basename(app.cl[0])
+    app.conf['original_executable'] = app.args.command
+    executable = app.args.command
 
-    executable = app.cl[0]
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
-    executable = Pout.strip()
-    lg.info("executable: %s", executable)
+    executable = Pout.strip().decode('utf-8')
+    lg.debug("executable: %s", executable)
 
     app.conf['executable'] = executable
 
@@ -200,7 +214,7 @@ def run_kea(app):
         cl = jinf['cl']
         lg.debug("command line arguments: %s", " ".join(cl))
 
-        jinf['args'] = " ".join(app.cl_args)
+        jinf['args'] =app.conf['cl_args']
         jinf['cwd'] = os.getcwd()
 
         executor.fire(jinf)

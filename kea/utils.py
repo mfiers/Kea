@@ -23,8 +23,8 @@ def get_base_uid():
     global BASEUID
     if BASEUID is None:
         sha1 = hashlib.sha1()
-        sha1.update(str(datetime.now()))
-        sha1.update(socket.getfqdn())
+        sha1.update(str(datetime.now()).encode('UTF-8'))
+        sha1.update(socket.getfqdn().encode('UTF-8'))
         BASEUID = sha1.hexdigest()[:8]
     return BASEUID
 
@@ -136,7 +136,10 @@ def make_pretty_kv_html(k, v):
 
 def get_tool_conf(app, name, version='default'):
 
-    data = copy.copy(app.conf['group.default'])
+    try:
+        data = copy.copy(app.conf['group.default'])
+    except KeyError:
+        data = fantail.Fantail()
     tool_data = copy.copy(app.conf.get('app.{}'.format(name), fantail.Fantail()))
     group = tool_data.get('group')
 
@@ -225,14 +228,17 @@ def set_info_file(jinf, category, name, filename):
     if not category in jinf:
         jinf[category] = {}
 
-    i = 0
-    newname = '{}_{:02}'.format(name, i)
-    while newname in jinf[category]:
-        i += 1
-        newname = '{}_{:02}'.format(name, i)
+    newname = name
+    if newname in jinf[category]:
+        i = 0
+        newname = '{}{}'.format(name, i)
+        while newname in jinf[category]:
+            i += 1
+            newname = '{}{}'.format(name, i)
 
     lg.debug("set file %s cat %s : %s", newname, category, filename)
     jinf[category][newname] = dict(path=filename)
+    return newname
 
 
 def create_kea_link(app, name):
@@ -262,7 +268,7 @@ def register_executable(app, name, executable, version, is_default=None):
 
     version_key = 'a'
 
-    if app.conf.has_key('app.{}.versions'.format(name)):
+    if 'app.{}.versions'.format(name) in app.conf:
         is_first_version = False
         for k in app.conf['app.{}.versions'.format(name)]:
             vinf = app.conf['app.{}.versions.{}'\
@@ -312,14 +318,18 @@ def get_mongo_collection(conf, collection):
     if collection in MONGO_CLC_CACHE:
         return MONGO_CLC_CACHE[collection]
 
+<<<<<<< HEAD
     if not 'plugin.logger.mongo' in conf:
         return None
+=======
+    mconf = conf.get('store.mongo', {})
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
 
-    mconf = conf['plugin.logger.mongo']
     host = mconf.get('host', 'localhost')
     port = int(mconf.get('port', 27017))
     db = mconf.get('db', 'kea')
 
+    lg.debug("mongo db @ %s:%s/%s", host, port, db)
 
-    MONGO_CLC_CACHE[collection] = MongoClient(mconf['host'], port)[db][collection]
+    MONGO_CLC_CACHE[collection] = MongoClient(host, port)[db][collection]
     return MONGO_CLC_CACHE[collection]

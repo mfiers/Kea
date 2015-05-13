@@ -29,6 +29,7 @@ def clparse2_arg_define(app):
 
     clparse2_group.add_argument('--pfe', action='store_true',
                                 help='print parsed files & exit', default=0)
+
     clparse2_group.add_argument('--inf', default=[],
                                 help='mark this file as an input file',
                                 action='append')
@@ -38,6 +39,7 @@ def foreach(cl, jinf, tree, flag):
         processor(cl, jinf, tree)
         cl = cl[1:]
 
+
 def basename(cl, jinf, tree, extens=""):
     rv = os.path.basename(cl[0])
     if extens and rv.endswith(extens):
@@ -45,8 +47,10 @@ def basename(cl, jinf, tree, extens=""):
     lg.warning('basename: %s -> %s', cl[0], rv)
     processor([rv], jinf, tree)
 
+
 def debug(cl, jinf, tree, *args):
-    print(cl, tree, args)
+    print((cl, tree, args))
+
 
 def flag0(cl, jinf, tree, *flags):
     flag = None
@@ -78,6 +82,7 @@ def flag(cl, jinf, tree, *flags):
     #return the command line with this flag removed
     return cl[:flag_i] + cl[flag_i+2:]
 
+
 def repeat(cl, jinf, tree, pos=0):
     while cl:
         cl = processor(cl, jinf, tree)
@@ -97,9 +102,15 @@ def pop(cl, jinf, tree, pos=0):
         processor([cl[-1]], jinf, tree)
         return cl[:-1]
 
-
 def index(cl, jinf, tree, idx):
     idx = int(idx)
+    try:
+        item = cl[idx]
+    except IndexError:
+        global PARSEFAIL
+        PARSEFAIL = True
+        return
+
     lg.debug("index: %d -> %s", idx, cl[idx])
     processor([cl[idx]], jinf, tree)
 
@@ -118,7 +129,6 @@ def element_check(cl, jinf, tree, idx, pattern):
     if pattern in elem:
         processor(cl, jinf, tree)
 
-
 def search (cl, jinf, tree, pattern):
     regex = re.compile(pattern)
     mtch = regex.search(cl[0])
@@ -136,6 +146,10 @@ def append(cl, jinf, tree, txt):
 
 def path_append(cl, jinf, tree, txt):
     ncl = [os.path.join(cl[0], txt)] + cl[1:]
+    processor(ncl, jinf, tree)
+
+def insert(cl, jinf, tree, item):
+    ncl = [item] + cl
     processor(ncl, jinf, tree)
 
 def apply(cl, jinf, tree, txt):
@@ -183,7 +197,7 @@ def processor(cl, jinf, tree):
     if isinstance(tree, str):
         items = [(tree, [{}])]
     elif isinstance(tree, dict):
-        items = tree.items()
+        items = list(tree.items())
     else:
         lg.warning("invalid tree structure")
         exit(-1)
@@ -273,8 +287,8 @@ def parse_commandline(app, jinf):
     if not PARSEFAIL:
         jinf.update(parse_jinf)
         if app.args.pfe:
-            print('-' * 80)
-            print(" ".join(jinf['cl']))
+            print(('-' * 80))
+            print((" ".join(jinf['cl'])))
             for c in ['input', 'output', 'database', 'use']:
                 if c not in jinf:
                     continue

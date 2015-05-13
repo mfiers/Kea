@@ -5,3 +5,4 @@
 .#*
 kea.log
 dist
+*.bak

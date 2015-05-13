@@ -32,12 +32,14 @@ INTERRUPTED = False
 
 @leip.hook('pre_argparse')
 def main_arg_define(app):
+    app.parser.add_argument('-X', dest='executor', action='store_const', const='dummy')
+
     if app.executor == 'simple':
         simple_group = app.parser.add_argument_group('Simple Executor')
         simple_group.add_argument('-T', '--no_track_stat', help='do not track process status',
                                 action='store_true', default=None)
         simple_group.add_argument('-j', '--threads', help='no threads to use',
-                                type=int)
+                                  type=int, default=1)
         simple_group.add_argument('-E', '--echo', help='echo command line to screen',
                                 action='store_true', default=None)
         simple_group.add_argument('-w', '--walltime',
@@ -80,27 +82,32 @@ def streamer(src, tar, dq, hsh=None):
     global BINARY_STREAMS
     stream_id = '{}_{}'.format(src.__repr__(), tar.__repr__())
 
+    dd = d.decode('utf-8')
     if not stream_id in BINARY_STREAMS:
         try:
-            dq.append(d.decode('utf-8'))
+            dq.append(dd)
         except UnicodeDecodeError:
             BINARY_STREAMS.add(stream_id)
 
     d_len = len(d)
     with outputlock:
+<<<<<<< HEAD
         tar.write(d) #d.encode('utf-8'))
 
     print(src, tar, d_len)
+=======
+        tar.write(dd) #.encode('utf-8'))
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
     return d_len
 
 
 def get_deferred_cl(info):
-    dcl = ['kea', '--deferred']
-    if info['stdout_file']:
-        dcl.extend(['-o', info['stdout_file']])
-    if info['stderr_file']:
-        dcl.extend(['-e', info['stderr_file']])
-    dcl.extend(info['cl'])
+    dcl = 'kea --deferred'
+    if info.get('stdout_file'):
+        dcl += ' -o ' + info['stdout_file']
+    if info.get('stderr_file'):
+        dcl += ' -e ' + info['stderr_file']
+    dcl += " " + info['cl']
     return dcl
 
 
@@ -179,7 +186,11 @@ def simple_runner(info, executor, defer_run=False):
     thisjob = MPJOBNO
     MPJOBNO += 1
 
+<<<<<<< HEAD
     lg.debug("job %s started", MPJOBNO)
+=======
+    lg.info("job %s started", MPJOBNO)
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
 
     #track system status (memory, etc)
     sysstatus = not executor.app.defargs['no_track_stat']
@@ -236,9 +247,7 @@ def simple_runner(info, executor, defer_run=False):
         return psutil.Process(pid)
 
     #execute!
-    lgx.info("Starting: %s", " ".join(cl))
-
-    mcl = " ".join(cl)
+    lgx.info("Starting: %s", cl)
 
     #capture output
     stdout_dq = deque(maxlen=100)
@@ -257,9 +266,14 @@ def simple_runner(info, executor, defer_run=False):
     # in a try except to make sure that kea get's a chance to cleanly finish upon
     # an error
     try:
+<<<<<<< HEAD
         lgx.debug("Popen: %s", mcl)
 #        P = psutil.Popen(mcl, shell=True, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
         P = psutil.Popen(mcl, shell=True, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+=======
+        lgx.debug("Popen: %s", cl)
+        P = psutil.Popen(cl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
 
         if INTERRUPTED:
             info['status'] = 'interrupted'
@@ -439,7 +453,7 @@ class BasicExecutor(object):
 
         if hasattr(self.app.args, 'echo'):
             if self.app.args.echo:
-                print(" ".join(info['cl']))
+                print(info['cl'])
 
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip this job
@@ -472,6 +486,7 @@ class DummyExecutor(BasicExecutor):
     def fire(self, info):
 
         self.app.run_hook('pre_fire', info)
+        info['dummy'] = True
 
         if info.get('skip', False):
             # for whatever reason, Kea wants to skip executing this job
@@ -491,7 +506,7 @@ class DummyExecutor(BasicExecutor):
                 cl.extend(['2>', stderr_file])
 
             lg.debug("  cl: %s", cl)
-            print " ".join(cl)
+            print(cl)
 
         info['mode'] = 'synchronous'
         info['run']['returncode'] = 0

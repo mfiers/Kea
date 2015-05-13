@@ -32,10 +32,18 @@ def logger_arg_define(app):
 
 
 def get_mongo_logcol(conf):
+<<<<<<< HEAD
     if not 'plugin.logger.mongo' in conf:
         return None
 
     mconf = conf['plugin.logger.mongo']
+=======
+    try:
+        mconf = conf['plugin.logger.mongo']
+    except KeyError:
+        return None
+
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
     colname = mconf.get('collection', 'log')
     collection = kea.utils.get_mongo_collection(conf, colname)
     collection.ensure_index('created')
@@ -52,6 +60,9 @@ def mng(app, args):
 @leip.subcommand(mng, 'flush')
 def mng_flush(app, args):
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+
     coll.update({ 'status': 'start',
                   'logflush': {"$exists": False}},
                 {"$set": {'logflush': True}},
@@ -68,6 +79,10 @@ def mng_ls(app, args):
     states = list(set(states))
 
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
+
+
     fmt = '{} {} {:7s} {}@{}: {}'
     query = {'status': {"$in": states},
              'logflush': {"$exists": False}}
@@ -81,8 +96,8 @@ def mng_ls(app, args):
     while True:
         if args.follow:
             sys.stdout.write(chr(27) + "[2J" + chr(27) + "[1;1f")
-            print datetime.datetime.now()
-            print
+            print(datetime.datetime.now())
+            print()
         for rec in coll.find(query):
             frec = fmt.format(
                 rec['run_uid'],
@@ -102,9 +117,13 @@ def mng_ls(app, args):
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+<<<<<<< HEAD
 
     if coll is None:
         #mongo is not configured?
+=======
+    if coll is None:
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
         return
 
     jinf_copy = copy.copy(jinf)
@@ -126,6 +145,10 @@ def postfire_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
     if coll is None:
         return
+<<<<<<< HEAD
+=======
+
+>>>>>>> bd275d3929519dcdbeb33e3a97b938f06faa0265
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)
@@ -137,7 +160,7 @@ def postfire_mongo(app, jinf):
 def dictprint(d, firstpre="", nextpre=""):
     if len(d) == 0:
         return
-    mxkyln = max([len(x) for x in d.keys()] + [5])
+    mxkyln = max([len(x) for x in list(d.keys())] + [5])
     fs = '{:<' + str(mxkyln) + '} : {}'
     fp = '{:<' + str(mxkyln) + '} > '
     i = 0
@@ -156,7 +179,7 @@ def dictprint(d, firstpre="", nextpre=""):
         i = i + 1
         pre = firstpre if i == 1 else nextpre
         if not isinstance(v, dict):
-            print pre + fs.format(k, v)
+            print(pre + fs.format(k, v))
         else:
             bfp = pre + fp.format(k)
             bnp = nextpre + fp.format(' ')
@@ -165,6 +188,9 @@ def dictprint(d, firstpre="", nextpre=""):
 
 @leip.hook('post_fire', 100)
 def log_screen(app, jinf):
+
+    if jinf.get('deferred'):
+        return
 
     if app.args.report_yaml:
         import yaml
@@ -181,7 +207,7 @@ def log_screen(app, jinf):
     if app.args.report_screen == 0:
         return
 
-    print '--KEA-REPORT' + '-' * 68
+    print('--KEA-REPORT' + '-' * 68)
     if app.args.report_screen > 1:
         dictprint(jinf)
     else:
@@ -189,7 +215,7 @@ def log_screen(app, jinf):
         jj['sys'] = {}
         jj['run'] = {}
         dictprint(jj)
-    print '-' * 80
+    print('-' * 80)
 
 #@leip.hook('post_run')
 #def
@@ -197,13 +223,22 @@ def log_screen(app, jinf):
 @leip.hook('post_run')
 def log_cl(app):
 
-    if not app.args.deferred:
-        oricl = copy.copy(app.original_cl)
-        oricl[0] = os.path.basename(oricl[0])
-        runsh_line = "# " + " ".join(oricl)
-        with FileLock('run.sh'):
-            with open('run.sh', 'a') as F:
-                F.write("{}\n".format(runsh_line))
+    if app.args.deferred:
+        return
+
+    runsh_line = "# " + "# ".join(app.conf['original_cl'].split("\n"))
+
+    #check if there is snippet converted command line:
+    if 'snippet_cl' in app.conf:
+        snipsh_line = "# " + "# ".join(app.conf['snippet_cl'].split("\n"))
+    else:
+        snipsh_line = None
+
+    with FileLock('run.sh'):
+        with open('run.sh', 'a') as F:
+            F.write("{}\n".format(runsh_line))
+            if not snipsh_line is None:
+                F.write("{}\n".format(snipsh_line))
 
     if not app.args.report_file:
         return

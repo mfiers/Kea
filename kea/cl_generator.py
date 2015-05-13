@@ -22,6 +22,7 @@ import hashlib
 import glob
 import logging
 import itertools
+import os
 import re
 import shlex
 import socket
@@ -32,108 +33,73 @@ import leip
 from kea.utils import get_uid, set_info_file
 
 lg = logging.getLogger(__name__)
+#lg.setLevel(logging.DEBUG)
 
 
 
-RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
+def map_num_expand(mtch, info):
+    cl = info['cl']
+    name, operator, pattern = mtch.groups()
+    matched_str = cl[mtch.start():mtch.end()]
+
+    lg.debug('cl glob expansion')
+    lg.debug('   -    name: %s', name)
+    lg.debug('   -   match: %s', matched_str)
+    lg.debug('   - pattern: %s', pattern)
+
+    if ':' in pattern:
+        nums = [int(x) for x in pattern.split(':')]
+        rng = range(*nums)
+    elif ',' in pattern:
+        rng = [float(x) for x in pattern.split(',')]
+
+    for r in rng:
+        newcl = cl[:mtch.start()] + str(r) + cl[mtch.end():]
+        newinfo = info.copy()
+        newinfo['cl'] = newcl
+        newinfo['param'][name] = r
+        yield newinfo
 
 
-def map_range_expand(map_info, cl, pipes):
-    """
-    Convert a map range to a list of items:
+def map_glob_expand(mtch, info):
 
-    first - range conversion:
-      - a,b,c -> ['a', 'b', 'c']
-      - 5:10 -> [5,6,7,8,9]
-      - 5:10:2 -> [5,7,9]
-    then, merge with the command line item in which this was embedded (if any)
+    cl = info['cl']
+    name, operator, pattern = mtch.groups()
+    matched_str = cl[mtch.start():mtch.end()]
+    clsplit = shlex.split(cl)
 
-    so: test.{a=5:10:2}.in becomes: ['test.5.in', 'test.7.in', 'test.9.in']
+    matched_word = [x for x in clsplit if matched_str in x]
+    assert len(matched_word) == 1
+    matched_word = matched_word[0]
 
-    """
+    assert matched_word.count(matched_str) == 1
+    globstr = matched_word.replace(matched_str, pattern)
 
-    mappat_range_3 = re.match(r'([0-9]+):([0-9]+):([0-9]+)',
-                              map_info['pattern'])
-    mappat_range_2 = re.match(r'([0-9]+):([0-9]+)',
-                              map_info['pattern'])
+    lg.debug('cl glob expansion')
+    lg.debug('   -    name: %s', name)
+    lg.debug('   -   match: %s', matched_str)
+    lg.debug('   - in word: %s', matched_word)
+    lg.debug('   -    glob: %s', globstr)
 
-    thisarg = map_info['arg']
-    iterstring = map_info['iterstring']
-    argi = cl.index(thisarg)
-
-    if mappat_range_3:
-        start, stop, step = mappat_range_3.groups()
-        map_items = map(str, range(int(start), int(stop), int(step)))
-    elif mappat_range_2:
-        start, stop = mappat_range_2.groups()
-        map_items = map(str, range(int(start), int(stop)))
-    elif ',' in map_info['pattern']:
-        map_items = [x.strip() for x in map_info['pattern'].split(',')]
-    else:
-        lg.critical("Can not parse range: %s", map_info['pattern'])
-        exit(-1)
-
-
-    substart = thisarg.index(iterstring)
-    subtail = substart + len(iterstring)
-    for g in map_items:
-        newcl = copy.copy(cl)
-        argrep = thisarg[:substart] + str(g) +  thisarg[subtail:]
-        newcl[argi] = argrep
-        for j, rarg in enumerate(newcl):
-            newcl[j] = map_info['rep_from'].sub(g, rarg)
-
-
-        new_pipes = []
-        for p in pipes:
-            if p is None:
-                new_pipes.append(None)
-            else:
-                new_pipes.append(map_info['rep_from'].sub(g, p))
-
-        yield newcl, new_pipes
-
-
-def map_glob_expand(map_info, cl, pipes):
-    thisarg = map_info['arg']
-    argi = cl.index(thisarg)
-    iterpat = map_info['pattern']
-    iterstring = map_info['iterstring']
-
-    globpattern = RE_FIND_MAPINPUT.sub(iterpat, thisarg)
-    globhits = glob.glob(globpattern)
-
+    globhits = glob.glob(globstr)
     if len(globhits) == 0:
         lg.critical("No files matching pattern: '%s' found", globpattern)
         exit(-1)
 
-    substart = thisarg.index(iterstring)
-    subtail = len(thisarg) - (substart + len(iterstring))
+    word_pre, word_post = matched_word.split(matched_str)
 
-    for g in globhits:
-        newcl = copy.copy(cl)
-        newcl[argi] = g
-        subrep = g[substart:]
-        if subtail > 0:
-            subrep = subrep[:-subtail]
-        for j, rarg in enumerate(newcl):
-            newcl[j] = map_info['rep_from'].sub(subrep, rarg)
+    for ghit in globhits:
+        lg.debug(' = hit: %s', ghit)
+        assert ghit.startswith(word_pre)
+        assert ghit.endswith(word_post)
+        rep_str = ghit[len(word_pre):-len(word_post)]
+        newcl = cl.replace(matched_word, ghit)
+        lg.debug('   - param: "%s"="%s"', name, rep_str)
+        newinfo = info.copy()
+        newinfo['cl'] = newcl.strip()
+        newinfo['param'][name] = rep_str
+        yield newinfo
 
-        new_pipes = []
-        for p in pipes:
-            if p is None:
-                new_pipes.append(None)
-            else:
-                new_pipes.append(map_info['rep_from'].sub(g, p))
-
-        yield newcl, new_pipes
-
-
-def map_iter(map_info):
-    for i in map_info['items']:
-        map_clean = copy.copy(map_info)
-        map_clean['item'] = i
-        yield map_clean
 
 
 def apply_map_info_to_cl(newcl, map_info):
@@ -149,6 +115,115 @@ def apply_map_info_to_cl(newcl, map_info):
     return newcl
 
 
+def process_targetfiles(info):
+    RE_FIND_FILETARGET = re.compile(r'{([\^<>!])([a-zA-Z_][a-zA-Z0-9_]*)}\s+')
+
+    cl = info['cl']
+    lg.debug('targets: %s', cl)
+    done = False
+
+    while True:
+        for m in RE_FIND_FILETARGET.finditer(cl):
+            fname = shlex.split(cl[m.end():])[0]
+            if '{' in fname:
+                # not good - not rendered (yet?)
+                # maybe in the next round
+                continue
+
+            ftype, name = m.groups()
+
+            cat = {'<': 'input',
+                   '>': 'output',
+                   '^': 'use',
+                   'x': 'executable'}[ftype]
+
+            newname = set_info_file(info, cat, name, fname)
+#            print("set info file: ", cat, name, fname, newname)
+            info['param'][newname] = fname
+            cl = cl[:m.start()] + cl[m.end():]
+            break
+        else:
+            done = True
+            break
+    info['cl'] = cl.strip()
+
+def render_parameters(s, param):
+    FIND_PARAM = re.compile(r'{([A-Za-z_][a-zA-Z0-9_]*)(?:\|([^}]+)?)?}')
+    search_start = 0
+
+    while True:
+        mtch = FIND_PARAM.search(s, search_start)
+        if not mtch:
+            break
+
+        name = mtch.groups()[0]
+        flags = mtch.groups()[1]
+        if not flags:
+            flags = ''
+
+        if '|' in flags:
+            flags, pattern = flags.split('|', 1)
+        else:
+            pattern = None
+
+        #lg.setLevel(logging.DEBUG)
+        lg.debug('cl render')
+        lg.debug(' -  string: %s', s)
+        lg.debug(' -    name: %s', name)
+        lg.debug(' -   flags: %s', flags)
+        lg.debug(' - pattern: %s' % pattern)
+
+        if not name in param:
+            # this value may yet be found as a redirect file
+            if re.search('{?' + name + '}', s):
+                search_start = mtch.end()
+                break
+            else:
+                lg.critical("invalid replacement: %s",
+                            s[mtch.start():mtch.end()])
+                lg.critical(s)
+                exit()
+
+        replace = str(param[name])
+        if '/' in  flags:
+            replace = os.path.basename(replace)
+        for _extcut in range(flags.count('.')):
+            if not '.' in replace:
+                break
+            replace = replace.rsplit('.')[0]
+
+        if pattern:
+            replace = pattern.replace('*', replace)
+
+        lg.debug(' - pattern: %s' % pattern)
+        lg.debug(' - replace: %s' % replace)
+        s = s[:mtch.start()] + replace + s[mtch.end():]
+    return s.strip()
+
+def iterate_cls(info):
+
+    yielded = 0
+
+    cl = info['cl']
+
+    RE_FIND_MAPINPUT = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)([\~\=])([^}]+)}')
+    mapins = RE_FIND_MAPINPUT.search(cl)
+
+    mtch = RE_FIND_MAPINPUT.search(cl)
+    if mtch is None:
+        yield info.copy()
+        return
+
+    name, operator, pattern = mtch.groups()
+    if operator == '~':
+        expand_function = map_glob_expand
+    elif operator == '=':
+        expand_function = map_num_expand
+
+    for info in expand_function(mtch, info.copy()):
+        for info in iterate_cls(info):
+            yield info
+
 
 def basic_command_line_generator(app):
     """
@@ -158,99 +233,43 @@ def basic_command_line_generator(app):
     info = OrderedDict()
 
     pipes = [app.args.stdout, app.args.stderr, app.args.stdin]
-#    pipes = [app.args.stdout, app.args.stderr]
 
-    cl = app.cl
-
-    cljoin = " ".join(cl)
+    info['param'] = info.get('param', {})
+    info['cl'] = app.conf['cl']
 
     #check if there are iterable arguments in here
     mapcount = 0
-    mapins = RE_FIND_MAPINPUT.search(cljoin)
+
     nojobstorun = app.defargs['jobstorun']
-    lg.debug('jobs to run %s', nojobstorun)
+    if nojobstorun:
+        lg.debug('jobs to run %s', nojobstorun)
 
     info['create'] = datetime.utcnow()
+    info['template_cl'] = info['cl']
     info['run'] = info.get('run', {})
+    info['run']['uid'] = get_uid(app)
     info['sys'] = info.get('sys', {})
 
-
-    # no map definitions found - then simply return the cl & execute
-    if mapins is None:
-        info['cl'] = cl
-        info['run']['no'] = 0
-        info['run']['uid'] = get_uid(app)
-
-        if pipes[0]:
-            set_info_file(info, 'output', 'stdout', pipes[0])
-        if pipes[1]:
-            set_info_file(info, 'output', 'stderr', pipes[1])
-        if pipes[2]:
-            set_info_file(info, 'input', 'stdin', pipes[2])
-
-        yield info
-        return
-
-    info['template_cl'] = cl
-    #define iterators for each of the definitions
-
-    #lg.setLevel(logging.DEBUG)
-
-    lg.debug("iterables found in: %s", cljoin)
-
-    def expander(cl, pipes):
-
-        for i, arg in enumerate(cl):
-            mima = RE_FIND_MAPINPUT.search(arg)
-            if mima:
-                break
-        else:
-            yield cl, pipes
-            return
-
-        map_info = {}
-        map_info['re_search'] = mima
-        map_info['name'], map_info['operator'], map_info['pattern'] = \
-                mima.groups()
-
-        map_info['iterstring'] = mima.group(0)
-        map_info['arg'] = arg
-
-
-        lg.debug("iterable name: {name} operator: {operator} pattern: {pattern}".format(**map_info))
-
-        map_info['re_from'] = re.compile(r'({' + map_info['name']
-                                         + r'[\~\=][^}]*})')
-        map_info['re_replace'] = re.compile(r'({' + map_info['name'] + r'})')
-        map_info['rep_from'] = re.compile(r'({' + map_info['name'] + '})')
-
-        map_info['start'] = mima.start()
-        map_info['tail'] = len(arg) - mima.end()
-
-        if map_info['operator'] == '~':
-            expand_function = map_glob_expand
-        elif map_info['operator'] == '=':
-            expand_function = map_range_expand
-
-        for ncl, pipes in  expand_function(map_info, cl, pipes):
-            for nncl, pipes in expander(ncl, pipes):
-                yield nncl, pipes
-
-    no = 0
-    for newcl, pipes in  expander(cl, pipes):
-        no += 1
-        if nojobstorun and no > nojobstorun:
-            lg.warning("exceeded jobs to run")
+    for i, info in enumerate(iterate_cls(info)):
+        if nojobstorun and i >= nojobstorun:
             break
-        newinfo = copy.deepcopy(info)
-        newinfo['run']['uid'] = get_uid(app, no)
 
-        newinfo['cl'] = newcl
-        newinfo['run']['no'] = no
+        #iterative rendering - fun!
+        lastcl = info['cl']
+        while True:
+            process_targetfiles(info)
+            info['cl'] = render_parameters(info['cl'], info['param'])
+            if lastcl == info['cl']:
+                break
+            lastcl = info['cl']
+#            else:
+#                print(info['cl'])
 
+        info['run']['no'] = i
         if pipes[0]:
-            set_info_file(newinfo, 'output', 'stdout', pipes[0])
+            set_info_file(info, 'output', 'stdout',
+                          render_parameters(pipes[0], info['param']))
         if pipes[1]:
-            set_info_file(newinfo, 'output', 'stderr', pipes[1])
-
-        yield newinfo
+            set_info_file(info, 'output', 'stderr',
+                          render_parameters(pipes[1], info['param']))
+        yield info

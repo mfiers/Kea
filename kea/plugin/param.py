@@ -9,41 +9,32 @@ import toMaKe.param
 @leip.hook('prepare')
 def harvest_params(app):
     app.param = toMaKe.param.get_recursive_param(os.getcwd(), 'kea.config')
-    
-    
+
+
 @leip.hook('pre_fire')
 def render_param(app, info):
     cl = info['cl']
     findpar = re.compile(r'{([a-zA-Z_][a-zA-Z0-9_]*)}')
 
-    for i, argument in enumerate(cl):
-        while True:
-            done = False
-            for fp in findpar.finditer(argument):
-                nm = fp.groups()[0]
-                repl = app.param[nm]
-                
-                if not repl:
-                    #do not have a value for this variable - continue
-                    continue
-                    
-                argument = findpar.sub(app.param[nm], argument)
-                #have  a value - restart, because 'argument' has changed
-                break
-            else:
-                #nothing new found, nothing to replace then, done
-                done=True
-                break
+    done = False
+    while True:
+        for fp in findpar.finditer(cl):
+            nm = fp.groups()[0]
+            repl = app.param[nm]
 
-            if done:
-                break
+            if not repl:
+                #do not have a value for this variable - continue
+                continue
 
-        #replace argument in commandline
-        cl[i] = argument
+            cl = findpar.sub(app.param[nm], cl)
+            #have  a value - restart, because 'argument' has changed
+            break
+        else:
+            #nothing new found, nothing to replace then, done
+            done=True
+            break
 
-    #replace command line
+        if done:
+            break
+
     info['cl'] = cl
-
-
-        
-#    print(cl)
