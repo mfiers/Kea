@@ -32,6 +32,7 @@ def logger_arg_define(app):
 
 
 def get_mongo_logcol(conf):
+
     try:
         mconf = conf['store.mongo']
     except KeyError:
@@ -110,6 +111,7 @@ def mng_ls(app, args):
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+
     if coll is None:
         return
 

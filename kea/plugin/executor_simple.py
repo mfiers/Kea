@@ -57,7 +57,8 @@ def non_block_read(stream, chunk_size=10000):
     fl = fcntl.fcntl(fd, fcntl.F_GETFL)
     fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
     try:
-        return stream.read()
+        rs = stream.read()
+        return rs
     except:
         return ""
 
@@ -90,7 +91,10 @@ def streamer(src, tar, dq, hsh=None):
 
     d_len = len(d)
     with outputlock:
-        tar.write(dd) #.encode('utf-8'))
+        tar.write(d) #d.encode('utf-8'))
+        # tar.write(dd) #.encode('utf-8'))
+        # print(src, tar, d_len)
+
     return d_len
 
 
@@ -179,7 +183,7 @@ def simple_runner(info, executor, defer_run=False):
     thisjob = MPJOBNO
     MPJOBNO += 1
 
-    lg.info("job %s started", MPJOBNO)
+    lg.debug("job %s started", MPJOBNO)
 
     #track system status (memory, etc)
     sysstatus = not executor.app.defargs['no_track_stat']
@@ -193,8 +197,11 @@ def simple_runner(info, executor, defer_run=False):
 
     stdout_handle = sys.stdout  # Unless redefined - do not capture stdout
     stderr_handle = sys.stderr  # Unless redefined - do not capture stderr
+    stdin_handle = sys.stdin  # Unless redefined - do not capture stdin
+
     stdout_file = info.get('output', {}).get('stdout_00', {}).get('path')
     stderr_file = info.get('output', {}).get('stderr_00', {}).get('path')
+    stdin_file = info.get('input', {}).get('stdin_00', {}).get('path')
 
     walltime = executor.walltime
 
@@ -238,10 +245,13 @@ def simple_runner(info, executor, defer_run=False):
     #capture output
     stdout_dq = deque(maxlen=100)
     stderr_dq = deque(maxlen=100)
+    stdin_dq = deque(maxlen=100)
     stdout_len = 0
     stderr_len = 0
+    stdin_len = 0
     stdout_sha = hashlib.sha1()
     stderr_sha = hashlib.sha1()
+    stdin_sha = hashlib.sha1()
 
 
     joberrors = []
@@ -249,6 +259,8 @@ def simple_runner(info, executor, defer_run=False):
     # in a try except to make sure that kea get's a chance to cleanly finish upon
     # an error
     try:
+        #lgx.debug("Popen: %s", mcl)
+        #P = psutil.Popen(mcl, shell=True, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
         lgx.debug("Popen: %s", cl)
         P = psutil.Popen(cl, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
 
@@ -307,6 +319,7 @@ def simple_runner(info, executor, defer_run=False):
 
 
             try:
+                stdin_len += streamer(stdin_handle, P.stdin, stdin_dq, stdin_sha)
                 stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
                 stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
             except IOError as e:
@@ -325,6 +338,7 @@ def simple_runner(info, executor, defer_run=False):
     finally:
         #clean the pipes
         try:
+            stdin_len += streamer(stdin_handle, P.stdin, stdin_dq, stdin_sha)
             stdout_len += streamer(P.stdout, stdout_handle, stdout_dq, stdout_sha)
             stderr_len += streamer(P.stderr, stderr_handle, stderr_dq, stderr_sha)
         except IOError as e:
@@ -348,6 +362,9 @@ def simple_runner(info, executor, defer_run=False):
     if stdout_file:
         lg.debug('closing stdout handle on %s', stdout_file)
         stdout_handle.close()
+    if stdin_file_file:
+        lg.debug('closing stdin handle on %s', stdin_file_file)
+        stdin_handle.close()
     if stderr_file:
         lg.debug('closing stderr handle on %s', stderr_file)
         stderr_handle.close()

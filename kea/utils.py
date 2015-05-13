@@ -316,7 +316,11 @@ def get_mongo_collection(conf, collection):
     if collection in MONGO_CLC_CACHE:
         return MONGO_CLC_CACHE[collection]
 
+    if not 'plugin.logger.mongo' in conf:
+        return None
+
     mconf = conf.get('store.mongo', {})
+
 
     host = mconf.get('host', 'localhost')
     port = int(mconf.get('port', 27017))

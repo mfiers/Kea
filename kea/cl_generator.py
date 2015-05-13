@@ -232,6 +232,7 @@ def basic_command_line_generator(app):
     """
 
     info = OrderedDict()
+
     if 'snippet_param' in app.conf:
         info['param'] = dict(copy.copy(app.conf['snippet_param']))
     else:
@@ -239,8 +240,10 @@ def basic_command_line_generator(app):
 
     info['cl'] = app.conf['cl']
 
-    lg.warning("rendering: %s", info['cl'])
+    lg.debug("rendering: %s", info['cl'])
     pipes = [app.args.stdout, app.args.stderr]
+    #pipes = [app.args.stdout, app.args.stderr, app.args.stdin]
+
 
     #check if there are iterable arguments in here
     mapcount = 0

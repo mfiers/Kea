@@ -8,7 +8,9 @@ import logging
 import os
 
 from bson.objectid import ObjectId
+
 #import gnupg
+
 import leip
 from termcolor import cprint
 import yaml
@@ -89,6 +91,11 @@ def get_coll_transaction(conf):
     tra_name = 'transaction'
 
     c2t = kea.utils.get_mongo_collection(conf, c2t_name)
+
+    if c2t is None:
+        #mongo is not configured
+        return None, None
+
     tra = kea.utils.get_mongo_collection(conf, tra_name)
 
     if tra is None or c2t is None:  #mongo not configured?
@@ -336,6 +343,9 @@ def create_transaction(app, jinf):
     if mc_tra is None:
         #no mongo database - return
         return
+
+    if mc_tra is None:
+        return #mongo is not configured
 
     tra_recid = str(mc_tra.insert(tra))
 
