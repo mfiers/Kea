@@ -170,7 +170,6 @@ def kea_argparse(app):
     P = sp.Popen(['which', executable], stdout=sp.PIPE)
     Pout, _ = P.communicate()
     executable = Pout.strip().decode('utf-8')
-    lg.debug("executable: %s", executable)
 
     app.conf['executable'] = executable
 
@@ -211,7 +210,7 @@ def run_kea(app):
         jinf['executable'] = app.conf['executable']
         jinf['executor'] = executor_name
         cl = jinf['cl']
-        lg.debug("command line arguments: %s", " ".join(cl))
+        lg.debug("command line arguments: %s", cl)
 
         jinf['args'] =app.conf['cl_args']
         jinf['cwd'] = os.getcwd()
