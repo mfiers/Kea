@@ -92,6 +92,7 @@ def main_arg_define(app):
     app.parser.add_argument('-x', '--executor', help='executor to use',
                             default=app.conf['default_executor'])
     app.parser.add_argument('-V', '--version', help='tool version')
+    app.parser.add_argument('-i', '--stdin', help='read stdin from')
     app.parser.add_argument('-o', '--stdout', help='save stdout to')
     app.parser.add_argument('-e', '--stderr', help='save stderr to')
     app.parser.add_argument('--deferred', action='store_true',

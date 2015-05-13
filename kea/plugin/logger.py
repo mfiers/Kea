@@ -32,6 +32,9 @@ def logger_arg_define(app):
 
 
 def get_mongo_logcol(conf):
+    if not 'plugin.logger.mongo' in conf:
+        return None
+
     mconf = conf['plugin.logger.mongo']
     colname = mconf.get('collection', 'log')
     collection = kea.utils.get_mongo_collection(conf, colname)
@@ -99,6 +102,11 @@ def mng_ls(app, args):
 @leip.hook('pre_fire')
 def prefire_mongo_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+
+    if coll is None:
+        #mongo is not configured?
+        return
+
     jinf_copy = copy.copy(jinf)
     try:
         del jinf_copy['run']['psutil_process']
@@ -116,6 +124,8 @@ def prefire_mongo_mongo(app, jinf):
 @leip.hook('post_fire', 10)
 def postfire_mongo(app, jinf):
     coll = get_mongo_logcol(app.conf)
+    if coll is None:
+        return
     mongo_id = jinf['mongo_id']
     coll.update({'_id' : mongo_id},
                 jinf)

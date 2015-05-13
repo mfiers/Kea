@@ -157,7 +157,8 @@ def basic_command_line_generator(app):
 
     info = OrderedDict()
 
-    pipes = [app.args.stdout, app.args.stderr]
+    pipes = [app.args.stdout, app.args.stderr, app.args.stdin]
+#    pipes = [app.args.stdout, app.args.stderr]
 
     cl = app.cl
 
@@ -184,6 +185,9 @@ def basic_command_line_generator(app):
             set_info_file(info, 'output', 'stdout', pipes[0])
         if pipes[1]:
             set_info_file(info, 'output', 'stderr', pipes[1])
+        if pipes[2]:
+            set_info_file(info, 'input', 'stdin', pipes[2])
+
         yield info
         return
 

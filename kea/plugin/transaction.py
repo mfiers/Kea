@@ -10,7 +10,9 @@ import logging
 import os
 
 from bson.objectid import ObjectId
-import gnupg
+
+#import gnupg
+
 import leip
 from termcolor import cprint
 import yaml
@@ -74,6 +76,9 @@ def get_coll_transaction(conf):
     tra_name = 'transaction'
 
     c2t = kea.utils.get_mongo_collection(conf, c2t_name)
+    if c2t is None:
+        #mongo is not configured
+        return None, None
 
     tra = kea.utils.get_mongo_collection(conf, tra_name)
 
@@ -249,6 +254,9 @@ def create_transaction(app, jinf):
             F.write(yaml.safe_dump(tra, default_flow_style=False))
 
     mc_tra, mc_c2t = get_coll_transaction(app.conf)
+
+    if mc_tra is None:
+        return #mongo is not configured
 
     tra_recid = str(mc_tra.insert(tra))
 
