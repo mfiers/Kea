@@ -83,9 +83,8 @@
     box.replaceChildren();
     if (state === "collecting") {
       box.append(indicator(status),
-        el("button", { class: "fb-implement", onclick: () => {
-          if (confirm("Freeze the site for review? Comments will be possible only on this plan until someone presses Implement or Unfreeze.")) post("freeze");
-        } }, "Freeze for review"),
+        el("button", { class: "fb-implement", onclick: () => post("freeze"),
+          title: "Comments only on this plan until Implement or Unfreeze" }, "Freeze for review"),
         el("span", { class: "fb-help" }, " Phase 1 of 2: comments everywhere; Claude folds them into this plan. "
           + "Freeze when you are done commenting: then only this plan can be commented on."));
     } else if (state === "frozen") {
