@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from kea.docsite import mode
 from kea.docsite.nodes import PROJECT_ROOT
 from kea.docsite.render import esc
 
@@ -98,23 +99,68 @@ def preview(path: Path) -> str:
     return "<p class='help'>No preview for this file type.</p>"
 
 
-def artefact_panel(relative: str, prefix: str) -> tuple[str, str | None]:
+def download_html(relative: str, prefix: str) -> tuple[str, str | None]:
+    """(' · download' link HTML, allow-list entry or None) for a project file, following the build mode."""
+    path = PROJECT_ROOT / relative
+    if not path.is_file() or path.name == ".env" or not path.resolve().is_relative_to(PROJECT_ROOT):
+        return "", None
+    href = mode.file_href(relative, prefix)
+    if href is None:
+        return "", None
+    if path.stat().st_size > DOWNLOAD_LIMIT:
+        return " · <span class='help'>too large to download here; use the path</span>", None
+    note = " <span class='help'>(needs the site server)</span>" if mode.MODE == "review" else ""
+    return f" · <a href='{esc(href)}' download>download</a>{note}", relative
+
+
+def file_rows(paths: list[str], prefix: str, downloads: set) -> str:
+    """Table rows (path, size, sha256, download) for project files."""
+    rows = []
+    for relative in paths:
+        path = PROJECT_ROOT / relative
+        if not path.is_file():
+            continue
+        link, entry = download_html(relative, prefix)
+        if entry:
+            downloads.add(entry)
+        rows.append(f"<tr><td><code>{esc(relative)}</code></td><td>{human_size(path.stat().st_size)}</td>"
+                    f"<td><code>{sha256_of(path)[:12]}…</code></td><td>{link.removeprefix(' · ')}</td></tr>")
+    return "".join(rows)
+
+
+def artefact_panel(relative: str, prefix: str, access: str | None = None,
+                   downloads: set | None = None) -> tuple[str, str | None]:
     """(HTML panel, download path or None) for an artefact at `relative` (path from the project root)."""
+    downloads = downloads if downloads is not None else set()
     path = PROJECT_ROOT / relative
     if not path.exists():
         return f"<div class='box'><b>File:</b> <code>{esc(relative)}</code> — <b>missing on disk</b></div>", None
     stat = path.stat()
     modified = dt.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-    downloadable = path.is_file() and stat.st_size <= DOWNLOAD_LIMIT
     checksum = sha256_of(path) if path.is_file() else ""
-    download = (f" · <a href='/files/{esc(relative)}' download>download</a> "
-                f"<span class='help'>(needs the site server)</span>" if downloadable else
-                " · <span class='help'>too large to download here; use the path</span>")
+    download, entry = download_html(relative, prefix)
+    if not mode.data_links():
+        download = " · <span class='help'>file not published with this site; ask the authors</span>"
     readme = path.parent / "README.md"
     readme_link = (f"<div><b>Folder manifest:</b> <code>{esc(readme.relative_to(PROJECT_ROOT))}</code></div>"
                    if readme.exists() else "")
+    if mode.preview_allowed(access):
+        preview_html = f"<h2>Preview</h2><div class='not-annotatable'>{preview(path)}</div>"
+    else:
+        mode.omit("preview", relative)
+        preview_html = ("<h2>Preview</h2><p class='help not-annotatable'>Not shown in this public copy (the file "
+                        "may contain controlled-access data).</p>")
+    siblings = ""
+    if mode.data_links() and path.is_file():
+        others = sorted(str(other.relative_to(PROJECT_ROOT)) for other in path.parent.iterdir()
+                        if other.is_file() and other != path and not other.name.startswith("."))
+        rows = file_rows(others, prefix, downloads)
+        if rows:
+            siblings = (f"<details class='not-annotatable'><summary>Other files in "
+                        f"<code>{esc(str(path.parent.relative_to(PROJECT_ROOT)))}</code> ({rows.count('<tr>')})</summary>"
+                        f"<table><tr><th>file</th><th>size</th><th>sha256</th><th></th></tr>{rows}</table></details>")
     panel = (f"<div class='box not-annotatable'><div><b>File:</b> <code>{esc(relative)}</code>{download}</div>"
              f"<div><b>Size:</b> {human_size(stat.st_size)} · <b>modified:</b> {modified}"
-             f"{' · <b>sha256:</b> <code>' + checksum[:16] + '…</code>' if checksum else ''}</div>{readme_link}</div>"
-             f"<h2>Preview</h2><div class='not-annotatable'>{preview(path)}</div>")
-    return panel, relative if downloadable else None
+             f"{' · <b>sha256:</b> <code>' + checksum[:16] + '…</code>' if checksum else ''}</div>{readme_link}"
+             f"{siblings}</div>{preview_html}")
+    return panel, entry

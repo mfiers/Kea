@@ -25,7 +25,17 @@ The tool does the work; this skill says when and how to use it. Never copy kea's
   panel take-home / Shows / Method / Statistics (`kea build` notes missing parts).
 - Terms (`aliases:`) are linked automatically from first use; reference pages carry the abstract fetched from
   Europe PMC / PubMed (never from memory) and why the paper is there.
+- Summary lines (`short:`) are written for the reader (e.g. biologists): one plain sentence with the finding and why
+  it matters; no internal labels (P1, H5, W2) or test names; numbers only where they carry the message. The
+  build notes summary lines with internal labels or more than ~45 words.
+- A date in the text always comes with its release: "written 2026-11-04 (v0.1.0)".
 - `make site` must report 0 problems.
+
+## Builds
+
+`kea build` (review, with comments), `kea build --mode local` (no comments, data links into the project folder,
+for reading from disk), `kea build --mode public --out DIR` (no comments, no data, no previews of controlled
+tables; for hosting elsewhere; check `_public_report.json`; run entries may quote comments, so read them first).
 
 ## Every agent run
 

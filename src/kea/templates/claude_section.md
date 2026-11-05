@@ -15,4 +15,5 @@
 - Figure captions: title, take-home, then per panel take-home / Shows / Method / Statistics, written by the figure
   script from the saved table.
 - Every number on a page comes from a file named in `sources:` or an artefact page.
+- Summary lines are written for the reader, without internal labels; dates in the text carry their version.
 <!-- kea:end -->

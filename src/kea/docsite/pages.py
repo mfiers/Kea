@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts, changes, codepages, comments, history, versions
+from kea.docsite import artefacts, changes, codepages, comments, history, mode, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_PLURALS, Node, Tree
 from kea.docsite.render import (LinkContext, card, crumbs, esc, node_link, page, prefix_for, render_markdown,
                             status_pill, type_badge)
@@ -82,6 +82,7 @@ class SiteRenderer:
     def __init__(self, tree: Tree, site: Path):
         self.tree, self.site = tree, site
         self.under_review: dict[str, int] = {}
+        self.data_files: set[str] = set()
         self.code = codepages.CodeIndex()
         self.pages: dict[str, tuple[str, Path | None]] = {}     # page path -> (thread key, source)
         self.downloads: set[str] = set()
@@ -168,8 +169,11 @@ class SiteRenderer:
                         if href else f"<b>Script:</b> <code>{esc(node.header['script'])}</code>")
         if node.header.get("table"):
             href, label = self.data_href(node.header["table"], prefix)
-            made.append(f"<b>Table:</b> <a href='{esc(href)}'><code>{esc(label)}</code></a>" if href else
-                        f"<b>Table:</b> <code>{esc(node.header['table'])}</code>")
+            link, entry = artefacts.download_html(str(node.header["table"]), prefix)
+            if entry:
+                self.downloads.add(entry)
+            made.append((f"<b>Table:</b> <a href='{esc(href)}'><code>{esc(label)}</code></a>" if href else
+                         f"<b>Table:</b> <code>{esc(node.header['table'])}</code>") + link)
         made.append(f"<b>Image:</b> <code>{esc(image)}</code> "
                     f"(<a href='{prefix}figures/{esc(copy.name)}'>full size</a>)")
         return (f"<figure><img src='{prefix}figures/{esc(copy.name)}' alt='{esc(node.title)}'>"
@@ -193,7 +197,12 @@ class SiteRenderer:
                     href, label = self.data_href(value.strip(), prefix)
                     exists = (PROJECT_ROOT / value.strip()).exists()
                     text = f"<code>{esc(label)}</code>" + ("" if exists else " <span class='ref-broken'>missing</span>")
-                    items.append(f"<li>data: <a href='{esc(href)}'>{text}</a></li>" if href else f"<li>data: {text}</li>")
+                    link, entry = artefacts.download_html(value.strip(), prefix)
+                    if entry:
+                        self.downloads.add(entry)
+                    self.data_files.add(value.strip())
+                    items.append((f"<li>data: <a href='{esc(href)}'>{text}</a>" if href else f"<li>data: {text}")
+                                 + link + "</li>")
         return (f"<div class='box not-annotatable'><b>Sources</b><ul>{''.join(items)}</ul></div>" if items else "")
 
     def relations_html(self, node: Node, prefix: str) -> str:
@@ -256,14 +265,16 @@ class SiteRenderer:
                  + self.stability_pill(node)
                  + (f" <span class='pill'>experiment {esc(self.experiment_version(node.project))}</span>"
                     if node.id == "home" and self.experiment_version(node.project) else "")
-                 + (" <span class='pill'>fixed before results</span>" if node.header.get("fixed_before_results") is True
+                 + (f" <span class='pill'>fixed before results{self.version_note(node)}</span>"
+                    if node.header.get("fixed_before_results") is True
                     else " <span class='pill s-exploratory'>written after results</span>"
                     if node.header.get("fixed_before_results") is False else "") + "</div>",
                  f"<h1>{esc(node.title)}</h1><div class='short'>{esc(node.short)}</div>"]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
         if node.type == "artefact":
-            panel, download = artefacts.artefact_panel(str(node.header["path"]), prefix)
+            panel, download = artefacts.artefact_panel(str(node.header["path"]), prefix, node.header.get("access"),
+                                                       self.downloads)
             if download:
                 self.downloads.add(download)
             parts.append(panel)
@@ -441,15 +452,16 @@ class SiteRenderer:
             f"<tr><td><b>{esc(release.label)}</b></td><td>{esc(release.date.replace('T', ' ')[:16])}</td>"
             f"<td>{esc(release.kind)}</td><td>"
             + (f"<a href='{esc(release.run)}.html'>{esc(release.run)}</a>" if release.run else "")
-            + f"</td><td>{('<a href=' + chr(39) + '../cycles/cycle-' + f'{int(release.cycle):03d}' + '.html' + chr(39) + '>cycle ' + esc(release.cycle) + '</a>') if release.cycle.isdigit() and int(release.cycle) > 0 else ''}</td>"
+            + f"</td><td>{('<a href=' + chr(39) + '../cycles/cycle-' + f'{int(release.cycle):03d}' + '.html' + chr(39) + '>cycle ' + esc(release.cycle) + '</a>') if release.cycle.isdigit() and int(release.cycle) > 0 and mode.MODE != 'public' else ''}</td>"
             f"<td><a href='../commits/{esc(release.short)}.html'><code>{esc(release.short)}</code></a></td>"
             f"<td>{esc(release.reason)}</td></tr>"
             for release in reversed(self.site_releases))
         versions_html = ("<h2>Versions</h2><p class='help'>Semantic versions chosen at each release (MAJOR: a "
                          "conclusion changes direction or is withdrawn; MINOR: new results or pages; PATCH: wording "
                          "only; before 1.0 a major change counts as minor). Each is a git tag: <code>git checkout "
-                         "v0.2.0 &amp;&amp; make site</code> rebuilds it. See also the <a href='../history.html'>"
-                         "history of review cycles</a>.</p><table class='not-annotatable'><tr><th>version</th>"
+                         "v0.2.0 &amp;&amp; make site</code> rebuilds it."
+                         + ("" if mode.MODE == "public" else " See also the <a href='../history.html'>history of review "
+                            "cycles</a>.") + "</p><table class='not-annotatable'><tr><th>version</th>"
                          "<th>released</th><th>kind</th><th>run</th><th>plan</th><th>commit</th><th>why</th></tr>"
                          f"{release_rows}</table>") if self.site_releases else ""
         body = (crumbs([("What changed", None)], prefix) + "<h1>What changed</h1>"
@@ -547,9 +559,13 @@ class SiteRenderer:
             if header.get("run"):
                 release = (f"<div class='box not-annotatable'>Implemented in run <a href='{prefix}changes/"
                            f"{esc(header['run'])}.html'>{esc(header['run'])}</a>.</div>")
+            shown = header.get("status", "open")
+            if number == current.cycle and shown != "implemented":     # the live state, not the file's
+                shown = current.state
             html_body = (f"<h1>{esc(header.get('title', f'Plan for cycle {number}'))}</h1>"
-                         f"<div class='not-annotatable'><span class='pill s-{esc(header.get('status', 'open'))}'>"
-                         f"{esc(header.get('status', ''))}</span> <span class='help'>cycle {number} · {items} item(s)"
+                         f"<div class='not-annotatable'><span class='pill s-{esc(shown)}'"
+                         f"{' id=' + chr(39) + 'fb-plan-state' + chr(39) if number == current.cycle else ''}>"
+                         f"{esc(shown)}</span> <span class='help'>cycle {number} · {items} item(s)"
                          f"{' · updated ' + esc(header['updated']) if header.get('updated') else ''}</span></div>"
                          f"{actions}{release}<article>{render_markdown(body, context)}</article>")
             self.broken += [f"plan {number}: [[{target}]]" for target in context.broken]
@@ -595,6 +611,11 @@ class SiteRenderer:
                 f"unchanged for {versions.SETTLED_AFTER}+ releases, amber = changed in the latest release or now.'>"
                 f"{esc(info.text)}</span>")
 
+    def version_note(self, node: Node) -> str:
+        """' (v0.2.0)': the site release in which the page first appeared, '' before its first release."""
+        created = self.stability.of(node.source).created_in
+        return f" ({created})" if created else " (next release)"
+
     def experiment_version(self, project: str) -> str:
         own = versions.releases(project)
         return own[-1].label if own else ""
@@ -611,12 +632,46 @@ class SiteRenderer:
             self.map_page(project)
             self.relations_page(project)
         self.code_pages()
-        runs = self.change_pages()
-        self.plan_pages()
+        runs = self.change_pages() if mode.WITH_CHANGELOG else []
+        if mode.MODE != "public":
+            self.plan_pages()
         self.site_listing = self.site_pages()
         self.home_page(runs)
-        self.feedback_page()
-        self.history_page()
+        if mode.MODE != "public":
+            self.feedback_page()
+            self.history_page()
+        self.data_page()
+
+    def data_page(self) -> None:
+        """Every artefact and every data file the documentation refers to, with size, checksum and download."""
+        prefix = ""
+        artefact_rows = []
+        for node in sorted((node for node in self.tree.nodes.values() if node.type == "artefact"),
+                           key=lambda item: (item.project, len(item.number), item.number)):
+            relative = str(node.header.get("path", ""))
+            path = PROJECT_ROOT / relative
+            size = artefacts.human_size(path.stat().st_size) if path.is_file() else ("folder" if path.is_dir() else "missing")
+            link, entry = artefacts.download_html(relative, prefix)
+            if entry:
+                self.downloads.add(entry)
+            artefact_rows.append(f"<tr><td>{node_link(node, prefix)}</td><td><a href='{prefix}{node.url}'>"
+                                 f"{esc(node.title)}</a></td><td><code>{esc(relative)}</code></td><td>{size}</td>"
+                                 f"<td>{link.removeprefix(' · ')}</td></tr>")
+        referenced = sorted(self.data_files - {str(node.header.get("path", "")) for node in self.tree.nodes.values()
+                                               if node.type == "artefact"})
+        other_rows = artefacts.file_rows(referenced, prefix, self.downloads)
+        note = {"review": "Downloads go through the site server (files up to 1 GB).",
+                "local": "Links open the files in the project folder.",
+                "public": "This public copy does not include the data files; ask the authors."}[mode.MODE]
+        body = (crumbs([("Data", None)], prefix) + "<h1>Data</h1><div class='short'>Every file the documentation "
+                f"refers to: the artefacts (each with its own page) and the other data files named as sources. {note}"
+                "</div>"
+                f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
+                f"<th>path</th><th>size</th><th></th></tr>{''.join(artefact_rows)}</table>"
+                + (f"<h2>Other data files named as sources</h2><table class='not-annotatable'><tr><th>file</th>"
+                   f"<th>size</th><th>sha256</th><th></th></tr>{other_rows}</table>"
+                   if other_rows and mode.data_links() else ""))
+        self.write("data.html", page("Data", body, prefix, None, self.tree))
 
     def history_page(self) -> None:
         key_to_href = {key: relative for relative, (key, _) in self.pages.items()}

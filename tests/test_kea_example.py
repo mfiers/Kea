@@ -36,3 +36,40 @@ def test_init_and_build_example_project(tmp_path):
                  "history.html", "feedback.html"):
         assert (site / page).exists(), page
     assert "Example" in (site / "index.html").read_text()
+
+
+def test_build_modes(tmp_path):
+    project = tmp_path / "example"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    run(["init", "--title", "Example", "--experiment", "first"], project)
+    (project / "data").mkdir(exist_ok=True)
+    (project / "data" / "table.tsv").write_text("donor\tvalue\nD1\t3\n")
+    (project / "doc" / "first" / "result").mkdir()
+    (project / "doc" / "first" / "artefact").mkdir()
+    (project / "doc" / "first" / "step").mkdir()
+    (project / "doc" / "first" / "step" / "s-one.md").write_text(
+        "---\nid: s-one\ntype: step\ntitle: A step\nshort: It ran.\nparent: home\nstatus: done\n---\n")
+    (project / "doc" / "first" / "artefact" / "a-table.md").write_text(
+        "---\nid: a-table\ntype: artefact\ntitle: The table\nshort: Per-donor values.\nparent: s-one\n"
+        "status: current\npath: data/table.tsv\nformat: tsv\naccess: controlled\nrelations:\n  made_by: [s-one]\n---\n")
+    (project / "doc" / "first" / "result" / "r-one.md").write_text(
+        "---\nid: r-one\ntype: result\ntitle: One result\nshort: It works.\nparent: home\nstatus: done\n"
+        "sources:\n  - data: data/table.tsv\n---\nSee [[a-table]].\n")
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "start"], cwd=project,
+                   check=True)
+    assert run(["build", "--mode", "local"], project).returncode == 0
+    local = (project / "report" / "site-local" / "first" / "r-one.html").read_text()
+    assert "../../../data/table.tsv" in local and "fb-script" not in local
+    outside = tmp_path / "public-copy"
+    assert run(["build", "--mode", "public", "--out", str(outside)], project).returncode == 0
+    pages = "".join(path.read_text() for path in outside.rglob("*.html"))
+    assert "data/table.tsv' download" not in pages and "/files/" not in pages and "fb-script" not in pages
+    assert "D1" not in pages                                                  # controlled preview left out
+    assert not (outside / "plan.html").exists() and not (outside / "feedback.html").exists()
+    assert (outside / "_public_report.json").exists()
+    refused = run(["build", "--mode", "local", "--out", str(outside)], project)
+    assert refused.returncode != 0                                            # local must stay inside the project
+    refused = run(["build", "--mode", "public", "--out", str(project / "data" / "site")], project)
+    assert refused.returncode != 0                                            # never into data/

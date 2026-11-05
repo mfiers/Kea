@@ -207,6 +207,12 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{where}: status {node.status!r} not in {statuses[node.type]}")
         if node.type == "hypothesis" and "fixed_before_results" not in node.header:
             tree.problems.append(f"{where}: hypothesis without fixed_before_results")
+        internal = re.findall(r"\b[PQHSRCDFAW]\d{1,2}\b", node.short)
+        if internal:
+            tree.notes.append(f"{where}: summary line uses internal labels {', '.join(sorted(set(internal)))} "
+                              "(write it for the reader)")
+        if len(node.short.split()) > 45:
+            tree.notes.append(f"{where}: summary line has {len(node.short.split())} words (aim for at most ~40)")
         if node.type == "caveat" and not node.relations.get("limits"):
             tree.problems.append(f"{where}: caveat without limits (say what it limits)")
         if node.type == "artefact" and not node.header.get("path"):

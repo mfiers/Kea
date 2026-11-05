@@ -43,6 +43,7 @@ a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decorati
 .s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
 .s-exploratory,.s-in_progress,.s-planned,.s-open,.s-inconclusive,.s-assumed,.s-questioned,.s-under_review{border-color:var(--amber);color:var(--amber)}
 .s-addressed{border-color:var(--ok);color:var(--ok)}
+.s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting{border-color:var(--accent);color:var(--accent)}
 .stab-flux{border-color:#f0a020;color:#8a5a00;background:#fff7e6}.stab-steady{color:var(--muted)}
 .stab-settled{border-color:var(--ok);color:var(--ok);background:#eefaf2}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px;vertical-align:middle;background:#c5cad3}
@@ -134,9 +135,14 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None) ->
                      f"title='{esc(tree.projects[project].title)}'>{esc(project)}</a>")
         right += [f"<a href='{prefix}{project}/map.html'>Map</a>",
                   f"<a href='{prefix}{project}/relations.html'>Relations</a>"]
-    right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
-              f"<a href='{prefix}changes/index.html'>What changed</a>",
-              f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
+    from kea.docsite import mode
+    if mode.MODE == "public":
+        right += ([f"<a href='{prefix}changes/index.html'>What changed</a>"] if mode.WITH_CHANGELOG else []) + [
+            f"<a href='{prefix}data.html'>Data</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
+    else:
+        right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
+                  f"<a href='{prefix}changes/index.html'>What changed</a>", f"<a href='{prefix}data.html'>Data</a>",
+                  f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
     right[0] = right[0].replace("<a ", "<a class='spacer' ", 1)
     right.append(f"<span class='kea-mark' title='Built with kea (Knowledge, Evidence, Argument)'>"
                  f"<img src='{prefix}_assets/kea-icon-64.png' alt='kea' width='22' height='22'></span>")

@@ -132,6 +132,11 @@
       hideBanner();
     }
     if (newBuild && cycle.state === "frozen" && onPlan && !typing()) { location.reload(); return; }
+    const pill = document.getElementById("fb-plan-state");
+    if (pill && pill.textContent !== "implemented") {
+      pill.textContent = cycle.state;
+      pill.className = "pill s-" + cycle.state;
+    }
     planActions(status);
     lastState = cycle.state;
   }

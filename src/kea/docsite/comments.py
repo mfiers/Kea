@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 
 from kea.docsite.nodes import PROJECT_ROOT
+from kea.docsite import mode
 from kea.docsite.render import esc, prefix_for
 from kea.feedback import states, store
 
@@ -65,7 +66,9 @@ def history_html(source: Path, prefix: str) -> str:
         from kea.docsite.versions import commit_labels
         release = commit_labels().get(commit[:7], "")
         badge = f"<span class='pill'>{esc(release)}</span> " if release else ""
-        items.append(f"<li><details><summary>{badge}<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(commit)}</code></a> "
+        commit_link = (f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(commit)}</code></a>"
+                       if mode.WITH_CHANGELOG else f"<code>{esc(commit)}</code>")
+        items.append(f"<li><details><summary>{badge}{commit_link} "
                      f"{esc(date)} · {esc(subject)} <span class='help'>({esc(author)})</span></summary>"
                      f"<pre class='diff'>{chr(10).join(shown)}</pre></details></li>")
     return ("<section class='fb-history not-annotatable' id='history'><h2>Changes to this page</h2>"
@@ -104,8 +107,9 @@ def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None 
 
 def version_box(version: str, prefix: str, source: Path | None, has_history: bool) -> str:
     commit = version.split("+")[0]
-    commit_html = (f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(version)}</code></a>"
-                   if commit and commit != "uncommitted" else f"<code>{esc(version)}</code>")
+    linked = mode.WITH_CHANGELOG and commit and commit != "uncommitted"
+    commit_html = (f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(version)}</code></a>" if linked
+                   else f"<code>{esc(version)}</code>")
     source_html = ""
     if source is not None:
         relative = source.relative_to(PROJECT_ROOT).as_posix()
@@ -117,7 +121,7 @@ def version_box(version: str, prefix: str, source: Path | None, has_history: boo
 
 
 def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_path: Path | None = None,
-           build_id: str = "") -> dict[str, int]:
+           build_id: str = "", with_comments: bool = True) -> dict[str, int]:
     """pages: page path (relative to site root) -> (thread key, source file or None). build_id: this build's id,
     compared by cycle.js with the server's current build to offer a reload."""
     assets = site_dir / "_feedback"
@@ -144,7 +148,7 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
         history = history_html(source, prefix) if source else ""
         counts["with_history"] += bool(history)
         extra = history
-        page_threads = sorted(by_key.get(key, []), key=states.sort_key)
+        page_threads = sorted(by_key.get(key, []), key=states.sort_key) if with_comments else []
         if page_threads:
             active = [thread for thread in page_threads if states.state_of(thread)[0] != "resolved"]
             resolved = [thread for thread in page_threads if states.state_of(thread)[0] == "resolved"]
@@ -157,14 +161,17 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
                          if resolved else "") + "</section>")
         text = text.replace("</main>", f"<div class='fb-versionline'>{version_box(version, prefix, source, bool(history))}"
                                        f"</div>{extra}</main>", 1)
-        text = text.replace("</body>",
-                            f"<link rel='stylesheet' href='{prefix}_feedback/{RECOGITO_CSS}'>"
-                            f"<link rel='stylesheet' href='{prefix}_feedback/feedback.css'>"
-                            f"<script src='{prefix}_feedback/{RECOGITO}'></script>"
-                            f"<script id='fb-script' src='{prefix}_feedback/feedback.js' data-page='{esc(key)}' "
-                            f"data-commit='{esc(version)}' data-title='{esc(title)}'></script>"
-                            f"<script id='fb-cycle' src='{prefix}_feedback/cycle.js' data-build='{esc(build_id)}' "
-                            f"data-prefix='{prefix}'></script></body>", 1)
+        if with_comments:
+            text = text.replace("</body>",
+                                f"<link rel='stylesheet' href='{prefix}_feedback/{RECOGITO_CSS}'>"
+                                f"<link rel='stylesheet' href='{prefix}_feedback/feedback.css'>"
+                                f"<script src='{prefix}_feedback/{RECOGITO}'></script>"
+                                f"<script id='fb-script' src='{prefix}_feedback/feedback.js' data-page='{esc(key)}' "
+                                f"data-commit='{esc(version)}' data-title='{esc(title)}'></script>"
+                                f"<script id='fb-cycle' src='{prefix}_feedback/cycle.js' data-build='{esc(build_id)}' "
+                                f"data-prefix='{prefix}'></script></body>", 1)
+        else:
+            text = text.replace("</body>", f"<link rel='stylesheet' href='{prefix}_feedback/feedback.css'></body>", 1)
         path.write_text(text, encoding="utf-8")
         counts["pages"] += 1
     return counts

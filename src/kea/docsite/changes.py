@@ -60,6 +60,9 @@ def all_commits() -> list[Commit]:
 
 
 def threads_answered(commit: Commit, threads: list[store.Thread]) -> list[store.Thread]:
+    from kea.docsite import mode
+    if mode.MODE == "public":                      # comment threads never leave in a public copy
+        return []
     return [thread for thread in threads
             if thread.thread_id in commit.answers
             or (thread.commit and thread.commit.split("+")[0] in (commit.short, commit.full))]
@@ -100,7 +103,12 @@ def commit_body(commit: Commit, tree: Tree, threads: list[store.Thread], code_hr
                              for thread in answered))
     run_html = (f"<div><b>Run:</b> <a href='{prefix}changes/{esc(commit.run)}.html'>{esc(commit.run)}</a></div>"
                 if commit.run else "")
-    diff = git("show", "--format=", "--unified=2", commit.full, "--", ".", ":(exclude)uv.lock")
+    from kea.config import SETTINGS
+    from kea.docsite import mode
+    excluded = [":(exclude)uv.lock"]
+    if mode.MODE == "public":                      # data files (and the comment logs) are never shown in a public copy
+        excluded += [":(exclude)data", f":(exclude){SETTINGS['feedback_dir']}", ":(exclude)doc/_cycles"]
+    diff = git("show", "--format=", "--unified=2", commit.full, "--", ".", *excluded)
     return (f"<h1>Commit <code>{esc(commit.short)}</code></h1><div class='short'>{esc(commit.subject)}</div>"
             f"<div class='box'><div><b>Date:</b> {esc(commit.date)} · <b>author:</b> {esc(commit.author)}</div>"
             f"{run_html}<div><b>Full id:</b> <code>{esc(commit.full)}</code></div></div>"
