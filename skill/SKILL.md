@@ -81,6 +81,21 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    Version rules: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages,
    PATCH for wording only. Before 1.0 a major change counts as minor.
 
+## Adapting Kea on request (in flight)
+
+Kea is small (about 4,000 lines of Python, no database, static HTML), and changing it at the reader's request is
+part of the job, not a detour:
+
+1. Decide where the wish belongs. If it is for this project only, use `kea.yaml` or the project's pages. If it
+   would help every project, change Kea itself, in its own checkout or submodule, not in a copy.
+2. Make the change with a test, run Kea's tests, and check the result in a browser at desktop and phone width.
+3. Commit and push in the Kea repository, then update the project to it. A new tagged version is needed when
+   other projects should get the change.
+4. Rebuild the site and restart `kea serve` if server code changed (stop the old process by its exact PID). Add a
+   line to the project's change log.
+5. During a review cycle: a fix to something just delivered may be done at once. A new feature goes into the plan,
+   unless the owner asks for it in chat.
+
 ## Scientific rules that the site makes visible
 
 Label exploratory versus fixed tests; report null results like positive ones; state method, n, effect size,

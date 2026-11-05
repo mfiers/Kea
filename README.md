@@ -27,6 +27,28 @@ comments, review cycles run by an agent, and semantic versions.
        thread with its commit and releases a semantic version (`kea cycle release`, git tags).
     4. A History page shows comments → plan items → commits → pages per version.
 
+## Small enough to change while you use it
+
+Kea is deliberately lightweight:
+- about 4,000 lines of Python and 700 lines of its own JavaScript and CSS;
+- nine Python dependencies, with three JavaScript libraries copied in at fixed versions;
+- no database: the pages are Markdown in git, and comments and review-cycle state are append-only JSON-lines
+  files;
+- the site is plain static HTML, rebuilt in seconds.
+
+This means the agent that runs the review cycle can also change the tool **during the session**, when a reader
+asks for it. In the project where Kea was built, these all came from reader requests and were added within the
+same session, most within minutes:
+- the menu bar;
+- comment states per version;
+- a "freeze" phase;
+- static builds for public hosting;
+- the in-page editor;
+- the History page.
+
+A wish for one project goes into `kea.yaml` or the project's own pages. A wish that would help every project goes
+into Kea, with a test, as a new tagged version.
+
 ## Use in a project
 
 ```
