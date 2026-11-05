@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kea</title>
+<meta name="description" content="Kea turns a data analysis into a navigable, commentable website of linked claims and evidence, reviewed in cycles by people and an AI agent.">
+<link rel="icon" href="favicon.ico">
+<style>
+:root{--fg:#1d2330;--muted:#5b6475;--line:#d9dde5;--bg:#ffffff;--soft:#f5f7fa;--accent:#4f6b1f;--accent2:#d9822b;--code:#f3f5f8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#e6e9ef;--muted:#a3abba;--line:#323a48;--bg:#14181f;--soft:#1b212b;--accent:#a8c46a;--accent2:#f0a050;--code:#1f2632}}
+:root[data-theme="dark"]{--fg:#e6e9ef;--muted:#a3abba;--line:#323a48;--bg:#14181f;--soft:#1b212b;--accent:#a8c46a;--accent2:#f0a050;--code:#1f2632}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:880px;margin:0 auto;padding:28px 16px 70px}
+a{color:var(--accent)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin:10px 0 30px}
+.hero img{width:min(420px,90%);height:auto;background:#fff;border-radius:14px;padding:14px 18px}
+.hero p{font-size:19px;color:var(--muted);max-width:640px;margin:6px 0 0}
+h2{font-size:22px;margin:38px 0 10px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+h3{font-size:17px;margin:22px 0 6px}
+pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;position:relative}
+code{background:var(--code);padding:1px 4px;border-radius:4px}
+pre code{background:none;padding:0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:2px 8px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--soft)}
+.card b{display:block;margin-bottom:4px}
+ol.cycle{padding-left:20px}ol.cycle li{margin:4px 0}
+.note{border-left:4px solid var(--accent2);background:var(--soft);padding:8px 12px;border-radius:0 8px 8px 0;color:var(--fg)}
+details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--soft)}
+details summary{cursor:pointer;font-weight:600}
+#skill-text{max-height:520px;overflow:auto;white-space:pre-wrap;font-size:12.5px}
+footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <img src="logo.png" alt="kea">
+    <p>Kea turns a data analysis into a website of linked claims and evidence that readers comment on, and that an
+      AI agent revises in review cycles, release by release.</p>
+  </div>
+
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><b>Typed pages</b>Questions, premises, hypotheses (stated before or after the results), steps,
+      results, conclusions, caveats, figures, data files, glossary terms and references, each on its own page and
+      linked by typed relations: supports, opposes, tests, limits.</div>
+    <div class="card"><b>Evidence attached</b>Every number points to the file it comes from. Code pages have line
+      anchors. Data files have checksums and downloads. Every figure has a full caption and links to its table and
+      script.</div>
+    <div class="card"><b>Review cycles</b>Readers select text and comment, or suggest an edit. The agent folds the
+      comments into a plan. Readers freeze the site and press Implement. The agent makes the changes and releases a
+      new semantic version.</div>
+    <div class="card"><b>What changed, and how settled</b>A change log per agent run. A history of every review
+      cycle. Each page shows when it last changed and whether its claim changed, so settled parts stand out from
+      parts in flux.</div>
+  </div>
+
+  <h2>Install the skill (Claude Code)</h2>
+  <p>The skill tells Claude how to set up Kea in a project and how to run the review cycle. Install it once, and
+    it is available in every project:</p>
+  <pre><code>mkdir -p ~/.claude/skills/kea
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.0.1/skill/SKILL.md \
+     -o ~/.claude/skills/kea/SKILL.md</code></pre>
+  <p>Then, in any project, ask Claude something like <i>"set up a kea site for this analysis"</i>. Claude
+    installs the tool, runs <code>kea init</code>, writes the first pages and starts the comment server and the
+    watcher.</p>
+  <details><summary>Read the skill</summary>
+    <p><a href="https://github.com/mfiers/Kea/blob/main/skill/SKILL.md">skill/SKILL.md on GitHub</a> ·
+      <a href="https://raw.githubusercontent.com/mfiers/Kea/main/skill/SKILL.md" download="SKILL.md">download</a></p>
+    <pre id="skill-text">Loading the current skill from GitHub…</pre>
+  </details>
+
+  <h2>Install the tool</h2>
+  <h3>A Python project (uv)</h3>
+  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.1"</code></pre>
+  <h3>Any other project (R, a plain folder)</h3>
+  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.0.1</code></pre>
+  <h3>Start</h3>
+  <pre><code>kea init --title "My analysis" --experiment first-experiment --question "What do we ask?"
+make site       # build the site from doc/
+make serve      # serve it with comments; the password is in .env</code></pre>
+  <p class="note">Install a <b>tagged</b> version, so a project does not change when Kea does. The newest tags are
+    on the <a href="https://github.com/mfiers/Kea/tags">tags page</a>.</p>
+
+  <h2>The review cycle</h2>
+  <ol class="cycle">
+    <li><b>Comment.</b> Readers select text and comment, or suggest an edit. The agent's watcher picks the comments
+      up and folds them into one plan. It is token-free while waiting.</li>
+    <li><b>Freeze.</b> A reader freezes the site. Comments are then possible only on the plan, which shows whether
+      every comment is in it.</li>
+    <li><b>Implement.</b> A reader presses Implement. The agent makes the changes and records them in a change
+      log. It answers every comment with the commit that dealt with it.</li>
+    <li><b>Release.</b> The agent tags a semantic version: major when a conclusion changes direction, minor for new
+      results, patch for wording. Open pages reload, and comments reopen.</li>
+  </ol>
+
+  <h2>Small enough to change while you use it</h2>
+  <p>Kea is about 4,000 lines of Python and 700 lines of its own JavaScript and CSS, with nine Python dependencies.
+    It has no database: pages are Markdown in git, and comments are an append-only log. The site is static HTML,
+    rebuilt in seconds. So the agent running your review cycle can also change the tool during the session when
+    you ask: a new page type, a different menu, a public build. Most of Kea's features were added that way, at a
+    reader's request.</p>
+
+  <h2>Builds</h2>
+  <p><code>kea build</code> builds the review site with comments. <code>kea build --mode local</code> builds a
+    static copy without comments, with links into the project's data, to read from disk. <code>kea build --mode
+    public --out DIR</code> builds a copy for any web host. It contains no comments, no data files and no previews
+    of controlled tables, and it lists what it left out.</p>
+
+  <h2>About</h2>
+  <p class="note" id="disclaimer"><b>Written with an AI assistant.</b> Kea was developed by Mark Fiers together
+    with Claude (Anthropic), an AI coding assistant. Mark directed the design and tested it in use; much of the code
+    and text was written by Claude. Treat Kea as research software: check what it builds before you rely on it.</p>
+
+  <footer>Kea: Knowledge, Evidence, Argument · <a href="https://github.com/mfiers/Kea">github.com/mfiers/Kea</a></footer>
+</main>
+<script>
+(function () {
+  document.querySelectorAll("pre > code").forEach(function (code) {
+    var button = document.createElement("button");
+    button.className = "copy"; button.textContent = "copy";
+    button.addEventListener("click", function () {
+      navigator.clipboard.writeText(code.textContent).then(function () {
+        button.textContent = "copied"; setTimeout(function () { button.textContent = "copy"; }, 1500);
+      });
+    });
+    code.parentElement.appendChild(button);
+  });
+  var target = document.getElementById("skill-text");
+  fetch("https://raw.githubusercontent.com/mfiers/Kea/main/skill/SKILL.md")
+    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.text(); })
+    .then(function (text) { target.textContent = text; })
+    .catch(function () { target.textContent = "Could not load the skill here; use the links above."; });
+})();
+</script>
+</body>
+</html>

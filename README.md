@@ -2,6 +2,8 @@
 
 # Kea: Knowledge, Evidence, Argument
 
+Website: https://mfiers.github.io/Kea/ (what Kea is, and how to install the tool and the Claude Code skill).
+
 A documentation site for a data analysis, built from typed Markdown pages, with
 comments, review cycles run by an agent, and semantic versions.
 
@@ -52,8 +54,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.0.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.1"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.0.1
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -83,3 +85,9 @@ branches `master` and `prefix_mode`.
 ## Tests
 
 `uv run pytest` (unit tests, the comment server, the review cycle, and an example project built from scratch).
+
+## About
+
+Kea was developed by Mark Fiers together with Claude (Anthropic), an AI coding assistant. Mark directed the
+design and tested it in use; much of the code and text was written by Claude. Treat Kea as research software:
+check what it builds before you rely on it.

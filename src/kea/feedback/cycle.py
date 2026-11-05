@@ -21,6 +21,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -180,11 +181,11 @@ def needs_planning(threads: list, current: CycleState) -> list:
             and (not current.plan_updated_at or last_activity(thread) > current.plan_updated_at)]
 
 
-CLAUDE_TRAILER = "Co-Authored-By: Claude"
+AGENT_TRAILER = re.compile(r"^Run:\s*\S+", flags=re.M)   # every agent commit names its run (see the skill)
 
 
 def direct_edits(since_iso: str) -> list[dict]:
-    """Commits after ``since_iso`` that change doc/ and were not made by Claude (no Claude co-author trailer):
+    """Commits after ``since_iso`` that change doc/ and were not made by the agent (no ``Run:`` trailer):
     a reader's own edits (e.g. in Obsidian), to be checked and listed in the plan like a comment."""
     import subprocess
     from kea.feedback import store
@@ -204,7 +205,7 @@ def direct_edits(since_iso: str) -> list[dict]:
             continue
         fields = record.strip("\n").split("\x1f")
         body_and_files = fields[5] if len(fields) > 5 else ""
-        if CLAUDE_TRAILER.lower() in record.lower():
+        if AGENT_TRAILER.search(fields[4] if len(fields) > 4 else ""):
             continue
         files = [line for line in body_and_files.splitlines() if line.startswith("doc/")]
         edits.append({"commit": fields[0].strip(), "author": fields[1], "date": fields[2], "subject": fields[3],
