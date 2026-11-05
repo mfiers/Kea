@@ -30,17 +30,20 @@ comments, review cycles run by an agent, and semantic versions.
 ## Use in a project
 
 ```
-uv add --editable path/to/kea      # or: uv add git+https://…/kea@vX.Y.Z
-uv run kea init --title "My project" --experiment first-experiment
-make site && make serve            # the password is in .env
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.0.0
+kea init --title "My project" --experiment first-experiment
+make site && make serve                                       # the password is in .env
+kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
 ```
 
 `kea init` never overwrites a file; it adds `kea.yaml`, `doc/_schema.yaml`, a first experiment, `.env`, Makefile
-targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skill/SKILL.md`).
+targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skill/SKILL.md`); copy that folder to
+`~/.claude/skills/kea/` to make it available in every project.
 
 ## Commands
 
-`kea init | build [--strict] | serve | check | list [--unplanned] | show | reply | status | cycle
+`kea init | build [--strict] [--mode review|local|public] [--out DIR] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
 
 ## Third-party files (copied, pinned)

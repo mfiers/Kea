@@ -8,11 +8,25 @@ The tool does the work; this skill says when and how to use it. Never copy kea's
 
 ## Set up (once per project)
 
-1. `uv add --editable <path to kea>` (or `uv add git+<repo>@vX.Y.Z`), then `uv run kea init --title "<title>"
-   --experiment <first-experiment> --question "<question>"`. It never overwrites files; read what it reports.
-2. Tell the user the password is in `.env` (`SITE_PASSWORD`); never print it, never commit `.env`.
-3. Serving to others: `make serve HOST=0.0.0.0` (plain http, trusted network only); open the port in the
-   firewall the user names, after asking.
+Kea lives at https://github.com/mfiers/Kea (public). Install a **tagged** version, never an untagged branch, so
+a project does not change when Kea does. Check the newest tag with `git ls-remote --tags https://github.com/mfiers/Kea.git`.
+
+1. Install:
+   - Python project with `pyproject.toml` (uv): `uv add "kea @ git+https://github.com/mfiers/Kea.git@vX.Y.Z"`.
+   - Any other project (R, plain folder): `uv tool install git+https://github.com/mfiers/Kea.git@vX.Y.Z` once on
+     the machine; the Makefile then calls `kea` directly (`kea init` detects this).
+2. `kea init --title "<title>" --experiment <first-experiment> --question "<question>"` in the project root. It
+   never overwrites files; read what it reports. It adds `kea.yaml`, `doc/_schema.yaml`, `.env` with a random
+   password, Makefile targets and a section in CLAUDE.md.
+3. Tell the user the password is in `.env` (`SITE_PASSWORD`); never print it, never commit `.env`.
+4. Serving:
+   - `make site`, then `make serve` (localhost only, by default port 8210 from `kea.yaml`; pick a free port
+     per project).
+   - For other people: `make serve HOST=<ip>`. It is plain http, so use a trusted network or VPN, and ask before
+     opening firewall ports.
+   - To keep it running after the session ends: `kea serve --install-service --host <ip> --port <port>
+     --enable` writes and starts a systemd user service `kea-<project>.service`. Logins survive logout only with
+     `loginctl enable-linger`.
 
 ## Writing pages
 

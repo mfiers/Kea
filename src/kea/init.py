@@ -58,7 +58,11 @@ def main(argv: list[str] | None = None) -> int:
                    (TEMPLATES / "home.md").read_text().replace("{question}", args.question.replace('"', "'")), done)
     _write_new(root / ".env", f"SITE_PASSWORD={secrets.token_urlsafe(12)}\n", done)
     _append_once(root / "CLAUDE.md", "<!-- kea:start -->", (TEMPLATES / "claude_section.md").read_text(), done)
-    _append_once(root / "Makefile", "# --- kea:", (TEMPLATES / "makefile_section.mk").read_text(), done)
+    python_project = (root / "pyproject.toml").exists()
+    makefile = (TEMPLATES / "makefile_section.mk").read_text()
+    if not python_project:          # e.g. an R project: kea installed as a tool (uv tool install), not a dependency
+        makefile = makefile.replace("uv run --locked kea", "kea")
+    _append_once(root / "Makefile", "# --- kea:", makefile, done)
     gitignore = root / ".gitignore"
     lines = gitignore.read_text().splitlines() if gitignore.exists() else []
     missing = [line for line in GITIGNORE_LINES if line not in lines]
@@ -66,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
         gitignore.write_text("\n".join(lines + missing) + "\n")
         done.append(f"added    {len(missing)} line(s) to {gitignore}")
     print("\n".join(done))
+    if not python_project:
+        print("\nNo pyproject.toml here: the Makefile calls `kea` directly. Install it once with\n"
+              "  uv tool install git+https://github.com/mfiers/Kea.git@<version>")
     print("\nNext: write pages under doc/<experiment>/ (see doc/_schema.yaml), then `make site` and `make serve`. "
           "The password is in .env (SITE_PASSWORD); share it, never commit it.")
     return 0

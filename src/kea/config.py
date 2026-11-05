@@ -11,6 +11,8 @@ kea.yaml (all keys optional):
     host: 127.0.0.1
     site_dir: report/site                   # built site (never edited by hand)
     feedback_dir: data/feedback             # events.jsonl, cycle.jsonl (in git), server log, watcher heartbeat
+    cookie_salt: <text>                     # optional; default "kea-site:<project folder name>"
+    code_paths: [src/, tests/]              # optional; folders that get code pages
 """
 from __future__ import annotations
 

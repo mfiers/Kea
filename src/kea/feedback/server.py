@@ -67,7 +67,8 @@ READER_STATUSES = ("resolved", "open")
 
 def auth_token(password: str) -> str:
     """Cookie value proving the password was entered; changes when the password changes."""
-    return hmac.new(password.encode(), b"trajectories-site-v1", hashlib.sha256).hexdigest()
+    salt = str(SETTINGS.get("cookie_salt") or f"kea-site:{PROJECT_ROOT.name}").encode()   # per site, kea.yaml
+    return hmac.new(password.encode(), salt, hashlib.sha256).hexdigest()
 
 
 def reader_name(request: Request) -> str:
@@ -316,6 +317,40 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
     return Starlette(routes=routes, middleware=[Middleware(PasswordGate, password=password)])
 
 
+def service_name() -> str:
+    slug = "".join(char if char.isalnum() or char in "-_" else "-" for char in PROJECT.name.lower())
+    return f"kea-{slug}.service"
+
+
+def install_service(args) -> int:
+    """Write ~/.config/systemd/user/kea-<project>.service running `kea serve` with this interpreter."""
+    import shlex
+    import subprocess
+    import sys
+    unit_dir = Path.home() / ".config" / "systemd" / "user"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    log = PROJECT / str(SETTINGS["feedback_dir"]) / "server.log"
+    command = " ".join(shlex.quote(part) for part in [sys.executable, "-m", "kea.cli", "serve", "--host", args.host,
+                                                       "--port", str(args.port)])
+    unit = (f"[Unit]\nDescription=Kea site {SETTINGS['title']} ({PROJECT})\nAfter=network-online.target\n\n"
+            f"[Service]\nWorkingDirectory={PROJECT}\nEnvironment=KEA_PROJECT={PROJECT}\nExecStart={command}\n"
+            f"Restart=on-failure\nRestartSec=5\nStandardOutput=append:{log}\nStandardError=append:{log}\n\n"
+            "[Install]\nWantedBy=default.target\n")
+    target = unit_dir / service_name()
+    target.write_text(unit)
+    print(f"wrote {target}")
+    steps = [["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", "--now", service_name()]]
+    if args.enable:
+        for step in steps:
+            result = subprocess.run(step, capture_output=True, text=True)
+            print(" ".join(step), "->", "ok" if result.returncode == 0 else result.stderr.strip())
+    else:
+        print("start it with:\n  " + "\n  ".join(" ".join(step) for step in steps))
+    print(f"logs: {log}; status: systemctl --user status {service_name()}\n"
+          "Without 'loginctl enable-linger' the service stops when you log out.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--host", default=str(SETTINGS["host"]))
@@ -324,7 +359,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--events", type=Path, default=store.default_path())
     parser.add_argument("--cycle", type=Path, default=cycle.default_path())
     parser.add_argument("--no-password", action="store_true", help="serve without the password (local testing only)")
+    parser.add_argument("--install-service", action="store_true",
+                        help="write a systemd user unit that runs this server (survives logout and reboot)")
+    parser.add_argument("--enable", action="store_true", help="with --install-service: enable and start it now")
     args = parser.parse_args(argv)
+    if args.install_service:
+        return install_service(args)
     load_dotenv(PROJECT / ".env")
     password = "" if args.no_password else os.environ.get("SITE_PASSWORD", "")
     if not password and not args.no_password:
