@@ -1,3 +1,0 @@
-include VERSION
-include DESCRIPTION
-recursive-include kea/etc *.config

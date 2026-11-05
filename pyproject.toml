@@ -1,0 +1,34 @@
+[project]
+name = "kea"
+version = "1.0.0.dev0"
+description = "Kea (Knowledge, Evidence, Argument): a documentation site for an analysis, with typed pages, comments, review cycles and semantic versions"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Mark Fiers" }]
+dependencies = [
+    "markdown>=3.5",
+    "pyyaml>=6",
+    "pygments>=2.17",
+    "starlette>=0.37",
+    "uvicorn>=0.29",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
+    "pandas>=2.0",
+    "pyarrow>=14",
+]
+
+[project.scripts]
+kea = "kea.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kea"]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

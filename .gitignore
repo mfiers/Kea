@@ -1,8 +1,5 @@
-*.pyc
+__pycache__/
 *.egg-info/
-*~
-*#
-.#*
-kea.log
-dist
-*.bak
+.venv/
+dist/
+.pytest_cache/

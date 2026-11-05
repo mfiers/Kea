@@ -1,0 +1,58 @@
+[
+ {
+  "file": "kea_graph_gemini.png",
+  "model": "google/gemini-3-pro-image",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A minimalist flat vector logo: a stylised kea (New Zealand alpine parrot: olive-green body, a flash of orange under the wing, long curved grey beak) perched on three small connected circles that form a tiny network graph. Geometric shapes, at most four colours, no gradients, no text, centred on a plain white background, square, crisp edges, recognisable at 32 pixels.",
+  "status": "ok",
+  "date": "2026-11-05T10:50:56"
+ },
+ {
+  "file": "kea_graph_gpt.png",
+  "model": "openai/gpt-5.4-image-2",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A minimalist flat vector logo: a stylised kea (New Zealand alpine parrot: olive-green body, a flash of orange under the wing, long curved grey beak) perched on three small connected circles that form a tiny network graph. Geometric shapes, at most four colours, no gradients, no text, centred on a plain white background, square, crisp edges, recognisable at 32 pixels.",
+  "status": "failed: 'choices'",
+  "date": "2026-11-05T10:51:00"
+ },
+ {
+  "file": "kea_head_gemini.png",
+  "model": "google/gemini-3-pro-image",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A minimalist flat vector icon of a kea parrot's head in profile, olive green with an orange accent, the strong curved beak forming the letter K negative space. Bold geometric shapes, no gradients, no text, centred on plain white, square app-icon style, readable at 16 pixels.",
+  "status": "ok",
+  "date": "2026-11-05T10:51:17"
+ },
+ {
+  "file": "kea_head_gpt.png",
+  "model": "openai/gpt-5.4-image-2",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A minimalist flat vector icon of a kea parrot's head in profile, olive green with an orange accent, the strong curved beak forming the letter K negative space. Bold geometric shapes, no gradients, no text, centred on plain white, square app-icon style, readable at 16 pixels.",
+  "status": "failed: 'choices'",
+  "date": "2026-11-05T10:51:20"
+ },
+ {
+  "file": "kea_wordmark_gemini.png",
+  "model": "google/gemini-3-pro-image",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A clean horizontal logo: on the left a simple geometric kea parrot icon (olive green, orange underwing, curved beak) and on the right the lowercase wordmark 'kea' in a modern sans-serif, dark slate colour. Below the wordmark in small letters: 'Keep Evidence Attached'. Flat vector, white background, no other text.",
+  "status": "ok",
+  "date": "2026-11-05T10:51:40"
+ },
+ {
+  "file": "kea_wordmark_gpt.png",
+  "model": "openai/gpt-5.4-image-2",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A clean horizontal logo: on the left a simple geometric kea parrot icon (olive green, orange underwing, curved beak) and on the right the lowercase wordmark 'kea' in a modern sans-serif, dark slate colour. Below the wordmark in small letters: 'Keep Evidence Attached'. Flat vector, white background, no other text.",
+  "status": "failed: 'choices'",
+  "date": "2026-11-05T10:51:43"
+ },
+ {
+  "file": "kea_icon_gemini.png",
+  "model": "google/gemini-3-pro-image",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A square app icon in a faceted low-poly origami style: a kea parrot seen from the side, olive-green facets with a few warm orange facets on the wing, a strong hooked olive beak, small dark eye. Only the bird, centred, filling most of the square, plain white background, flat colours without gradients or shadows, no text. Must stay recognisable at 32 pixels.",
+  "status": "ok",
+  "date": "2026-11-05T10:52:22"
+ },
+ {
+  "file": "kea_wordmark2_gemini.png",
+  "model": "google/gemini-3-pro-image",
+  "prompt": "Logo for 'Kea', an open-source research tool that turns a scientific data analysis into a navigable website of linked claims and evidence, reviewed by people and an AI agent. A clean horizontal logo: on the left a faceted low-poly origami-style kea parrot (olive-green facets, warm orange facets on the underside of the raised wing, strong hooked beak, small dark eye); on the right the lowercase wordmark 'kea' in a modern geometric sans-serif, dark slate colour; below it, small and letter-spaced, 'KEEP EVIDENCE ATTACHED'. Flat colours, white background, no other text or elements.",
+  "status": "ok",
+  "date": "2026-11-05T10:52:42"
+ }
+]
