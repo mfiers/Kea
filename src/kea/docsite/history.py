@@ -109,6 +109,14 @@ def bands(tree: Tree) -> list[Band]:
     return list(reversed(result))
 
 
+def thread_href(thread: store.Thread, key_to_href: dict[str, str], prefix: str) -> str:
+    """The thread opened in the comment panel of its page (#fb-<id>); the comments overview if the page is gone."""
+    page = key_to_href.get(thread.page)
+    if page:
+        return f"{prefix}{page}#fb-{thread.thread_id}"
+    return f"{prefix}feedback.html#fbs-{thread.thread_id}"
+
+
 def body(tree: Tree, prefix: str, key_to_href: dict[str, str]) -> str:
     sections = []
     for band in bands(tree):
@@ -130,7 +138,7 @@ def body(tree: Tree, prefix: str, key_to_href: dict[str, str]) -> str:
         comments_html = "".join(
             f"<li id='c-{esc(thread.thread_id)}' class='hx'><span class='hdot' style='background:"
             f"{STATUS_COLOURS.get(thread.status, '#888')}' title='{esc(thread.status)}'></span>"
-            f"<a href='{esc(key_to_href.get(thread.page, ''))}#fbs-{esc(thread.thread_id)}'>{esc(thread.author)}: "
+            f"<a href='{esc(thread_href(thread, key_to_href, prefix))}'>{esc(thread.author)}: "
             f"{esc(thread.text[:70])}{'…' if len(thread.text) > 70 else ''}</a>"
             + (f" <span class='help'>→ {esc(band.short_label)} #{item_of_thread[thread.thread_id]}</span>"
                if thread.thread_id in item_of_thread and band.short_label else "") + "</li>"
