@@ -299,7 +299,8 @@ class SiteRenderer:
             parts.append(self.project_index_html(node.project, prefix))
         self.broken += [f"{node.key}: [[{target}]]" for target in context.broken]
         title = f"{node.number} {node.title}" if node.number else node.title
-        self.write(node.url, page(title, "".join(parts), prefix, node.project, self.tree), node.key, node.source)
+        self.write(node.url, page(title, "".join(parts), prefix, node.project, self.tree, node=node), node.key,
+                   node.source)
 
     def map_page(self, project: str) -> None:
         relative = f"{project}/map.html"
@@ -323,7 +324,7 @@ class SiteRenderer:
                   ".forEach(d=>d.open=true);return false\">expand all</a> · <a href='#' onclick=\"document"
                   ".querySelectorAll('details.tree').forEach(d=>d.open=false);return false\">collapse all</a></p>"
                 + f"<ul class='tree not-annotatable'>{branch(home)}</ul>")
-        self.write(relative, page(f"Map · {project}", body, prefix, project, self.tree))
+        self.write(relative, page(f"Map · {project}", body, prefix, project, self.tree, here="Map"))
 
 
     # columns of the relations graph, left to right (question → hypothesis → result → conclusion)
@@ -405,7 +406,7 @@ class SiteRenderer:
                 f"<script src='{prefix}_assets/cytoscape.min.js'></script>"
                 f"<script>const GRAPH = {json.dumps(elements)};</script>"
                 "<script>" + RELATIONS_JS + "</script>")
-        self.write(relative, page(f"Relations · {project}", body, prefix, project, self.tree))
+        self.write(relative, page(f"Relations · {project}", body, prefix, project, self.tree, here="Relations"))
 
     # ------------------------------------------------------------------ other pages
     def code_pages(self) -> None:

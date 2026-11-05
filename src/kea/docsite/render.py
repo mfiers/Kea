@@ -24,9 +24,24 @@ CSS = """
 body{margin:0;font:15.5px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);background:var(--bg)}
 main{max-width:980px;margin:0 auto;padding:12px 18px 60px}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:16px;flex-wrap:nowrap;
+align-items:center;position:relative}
+.topbar .trail{display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden}
+.topbar .sep{color:#6f7a8e}.topbar .kea{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#fff}
+.topbar .kea img{background:#f4f1e8;border-radius:4px;padding:1px}.topbar .project{color:#fff;font-weight:600}
+.topbar .here{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.topbar .here .badge{margin:0}.topbar .here-title{color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;max-width:34ch}
+.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}
+.topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
+cursor:pointer;flex:0 0 auto}
+.topbar .links{overflow:hidden}.topbar.folded .links{display:none}
+.topbar.folded.open .links{display:flex;flex-direction:column;gap:8px;position:absolute;right:12px;top:100%;
+background:#1d2330;padding:10px 16px;border-radius:0 0 8px 8px;z-index:2000;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .topbar a{color:#dfe6f2}.topbar .brand{font-weight:600;color:#fff}
-.topbar .experiment{background:#f0b429;color:#1d2330;font-weight:700;border-radius:4px;padding:1px 10px}
+.topbar .experiment{background:#f0b429;color:#1d2330;font-weight:700;border-radius:4px;padding:1px 10px;flex:0 1 auto;
+min-width:0;overflow:hidden;text-overflow:ellipsis}
+.topbar .here-group{display:inline-flex;align-items:center;gap:7px;min-width:0}
+@media (max-width:560px){.topbar{padding:7px 12px;gap:10px}.topbar .kea-word,.topbar .here-group{display:none}}
 .topbar .experiment:hover{text-decoration:none;background:#f7c948}.topbar .kind{color:#9aa6ba;font-size:12px;margin-right:-10px}
 .topbar .spacer{margin-left:auto}.topbar .kea-mark img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
@@ -126,15 +141,26 @@ def card(node: Node, prefix: str) -> str:
             f"<div class='cs'>{esc(node.short)}</div></div>")
 
 
-def topbar(prefix: str, project: str | None = None, tree: Tree | None = None) -> str:
-    """Site name and, inside an experiment, its name as a highlighted label; navigation on the right."""
-    items = [f"<a class='brand' href='{prefix}index.html'>{esc(SITE_TITLE)}</a>"]
+def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, node: Node | None = None,
+           here: str | None = None) -> str:
+    """Path on the left: Kea / project / experiment / [badge] page; navigation on the right, folded into a menu
+    button only when it does not fit (see TOPBAR_JS)."""
+    trail = [f"<a class='kea' href='{prefix}index.html' title='Kea: the documentation tool'>"
+             f"<img src='{prefix}_assets/kea-icon-64.png' alt='' width='20' height='20'><span class='kea-word'>Kea</span></a>",
+             f"<a class='project' href='{prefix}index.html'>{esc(SITE_TITLE)}</a>"]
     right = []
     if project and tree and project in tree.projects:
-        items.append(f"<span class='kind'>experiment</span><a class='experiment' href='{prefix}{project}/home.html' "
-                     f"title='{esc(tree.projects[project].title)}'>{esc(project)}</a>")
+        home = tree.projects[project]
+        trail.append(f"<a class='experiment' href='{prefix}{project}/home.html' title='{esc(home.title)}'>"
+                     f"{esc(project)}</a>")
         right += [f"<a href='{prefix}{project}/map.html'>Map</a>",
                   f"<a href='{prefix}{project}/relations.html'>Relations</a>"]
+        if node is not None and node.id != "home":
+            label = f"{node.number}" if node.number else TYPE_LABELS.get(node.type, node.type)
+            trail.append(f"<span class='here'><span class='badge t-{esc(node.type)}'>{esc(label)}</span>"
+                         f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
+    if here:
+        trail.append(f"<span class='here'><span class='here-title'>{esc(here)}</span></span>")
     from kea.docsite import mode
     if mode.MODE == "public":
         right += ([f"<a href='{prefix}changes/index.html'>What changed</a>"] if mode.WITH_CHANGELOG else []) + [
@@ -143,10 +169,21 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None) ->
         right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
                   f"<a href='{prefix}changes/index.html'>What changed</a>", f"<a href='{prefix}data.html'>Data</a>",
                   f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
-    right[0] = right[0].replace("<a ", "<a class='spacer' ", 1)
-    right.append(f"<span class='kea-mark' title='Built with kea (Knowledge, Evidence, Argument)'>"
-                 f"<img src='{prefix}_assets/kea-icon-64.png' alt='kea' width='22' height='22'></span>")
-    return f"<nav class='topbar not-annotatable'>{''.join(items + right)}</nav>"
+    joined = trail[0] + "".join(
+        (f"<span class='here-group'><span class='sep'>/</span>{item}</span>" if "class='here'" in item
+         else f"<span class='sep'>/</span>{item}") for item in trail[1:])
+    return (f"<nav class='topbar not-annotatable'><div class='trail'>{joined}</div>"
+            f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
+            f"<div class='links'>{''.join(right)}</div></nav><script>{TOPBAR_JS}</script>")
+
+
+TOPBAR_JS = """(function(){var nav=document.currentScript.previousElementSibling;var button=nav.querySelector('.menu-button');
+function fit(){nav.classList.remove('folded','open');button.hidden=true;var links=nav.querySelector('.links');
+var trail=nav.querySelector('.trail');
+if(links.scrollWidth>links.clientWidth+1||trail.scrollWidth>trail.clientWidth+1&&trail.clientWidth<260){
+nav.classList.add('folded');button.hidden=false;}}
+button.addEventListener('click',function(){nav.classList.toggle('open');});
+window.addEventListener('resize',fit);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();}})();"""
 
 
 def crumbs(trail: list[tuple[str, str | None]], prefix: str) -> str:
@@ -157,11 +194,12 @@ def crumbs(trail: list[tuple[str, str | None]], prefix: str) -> str:
     return f"<nav class='crumbs not-annotatable'>{' › '.join(parts)}</nav>"
 
 
-def page(title: str, body: str, prefix: str, project: str | None = None, tree: Tree | None = None) -> str:
+def page(title: str, body: str, prefix: str, project: str | None = None, tree: Tree | None = None,
+         node: Node | None = None, here: str | None = None) -> str:
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{esc(title)}</title>"
             f"<link rel='icon' href='{prefix}_assets/favicon.ico'>"
-            f"<style>{CSS}</style></head><body>{topbar(prefix, project, tree)}<main>{body}</main></body></html>")
+            f"<style>{CSS}</style></head><body>{topbar(prefix, project, tree, node, here)}<main>{body}</main></body></html>")
 
 
 class LinkContext:
