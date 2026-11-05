@@ -18,7 +18,7 @@ from pathlib import Path
 
 from kea.docsite.nodes import PROJECT_ROOT
 from kea.docsite.render import esc, prefix_for
-from kea.feedback import store
+from kea.feedback import states, store
 
 STATIC = Path(__file__).resolve().parents[1] / "feedback" / "static"
 RECOGITO = "recogito-text-annotator-4.3.7.umd.js"
@@ -96,8 +96,9 @@ def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None 
                   f"{(': ' + esc(thread.status_note)) if thread.status_note else ''}</div>")
     where = (f"<div class='fb-meta'><a href='{esc(page_href)}'>{esc(thread.page_title or thread.page)}</a></div>"
              if page_href else "")
-    return (f"<div class='fb-thread' id='fbs-{esc(thread.thread_id)}'>{where}<div class='fb-thread-head'>"
-            f"<span class='fb-pill fb-s-{esc(thread.status)}'>{esc(STATUS_TEXT.get(thread.status, thread.status))}"
+    state, label = states.state_of(thread)
+    return (f"<div class='fb-thread fb-thread-{state}' id='fbs-{esc(thread.thread_id)}'>{where}<div class='fb-thread-head'>"
+            f"<span class='fb-pill fb-state-{state}'>{esc(label)}"
             f"</span></div>{quote}{body}{status}</div>")
 
 
@@ -143,12 +144,17 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
         history = history_html(source, prefix) if source else ""
         counts["with_history"] += bool(history)
         extra = history
-        page_threads = by_key.get(key, [])
+        page_threads = sorted(by_key.get(key, []), key=states.sort_key)
         if page_threads:
+            active = [thread for thread in page_threads if states.state_of(thread)[0] != "resolved"]
+            resolved = [thread for thread in page_threads if states.state_of(thread)[0] == "resolved"]
             extra += ("<section class='fb-static not-annotatable'><h2>Comments on this page</h2>"
                       "<p class='help'>Copy made when the site was built; with the server running, live comments are in "
-                      "the Comments panel.</p>" + "".join(thread_static_html(thread, prefix) for thread in page_threads)
-                      + "</section>")
+                      "the Comments panel. Open comments first, then those in a plan, those addressed in a version, "
+                      "and the resolved ones.</p>" + "".join(thread_static_html(thread, prefix) for thread in active)
+                      + (f"<details class='fb-resolved'><summary>{len(resolved)} resolved comment(s)</summary>"
+                         + "".join(thread_static_html(thread, prefix) for thread in resolved) + "</details>"
+                         if resolved else "") + "</section>")
         text = text.replace("</main>", f"<div class='fb-versionline'>{version_box(version, prefix, source, bool(history))}"
                                        f"</div>{extra}</main>", 1)
         text = text.replace("</body>",
@@ -186,8 +192,7 @@ def overview_body(key_to_href: dict[str, str], experiments=(), events_path: Path
         groups.setdefault(experiment_of(thread.page, experiments), []).append(thread)
     sections = []
     for experiment in sorted(groups, key=lambda name: (name == "", name)):
-        members = sorted(groups[experiment], key=lambda thread: (order.get(thread.status, 9), thread.page,
-                                                                 thread.created_at))
+        members = sorted(groups[experiment], key=states.sort_key)
         open_count = sum(thread.status in ("open", "planned") for thread in members)
         heading = (f"Experiment <a href='{esc(experiment)}/home.html'>{esc(experiment)}</a>" if experiment
                    else "Whole site (plan, home, change log, code)")

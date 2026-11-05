@@ -116,12 +116,16 @@
   }
 
   // ---------- highlights ----------
+  function stateOf(thread) {
+    return thread.state || ({ open: "open", planned: "planned", resolved: "resolved" }[thread.status] || "addressed");
+  }
   function highlightStyle(annotation) {
     const thread = threads.find(item => item.thread_id === annotation.id);
-    const status = thread ? thread.status : "open";
-    if (status === "open") return { fill: "#ffd54f", fillOpacity: 0.45, underlineColor: "#e0a800", underlineThickness: 2 };
-    if (status === "resolved" || status === "wont-fix") return { fill: "#bdbdbd", fillOpacity: 0.25 };
-    return { fill: "#81c784", fillOpacity: 0.35, underlineColor: "#2e7d32", underlineThickness: 2 };
+    const state = thread ? stateOf(thread) : "open";
+    if (state === "open") return { fill: "#ffd54f", fillOpacity: 0.45, underlineColor: "#e0a800", underlineThickness: 2 };
+    if (state === "planned") return { fill: "#ffb74d", fillOpacity: 0.3, underlineColor: "#c77800", underlineThickness: 1 };
+    if (state === "addressed") return { fill: "#bdbdbd", fillOpacity: 0.18 };
+    return { fill: "#ffffff", fillOpacity: 0 };
   }
   function drawHighlights() {
     if (!annotator) return;
@@ -141,7 +145,8 @@
   }
 
   // ---------- panel ----------
-  function statusPill(status) {
+  function statusPill(status, thread) {
+    if (thread && thread.state_label) return el("span", { class: "fb-pill fb-state-" + stateOf(thread) }, thread.state_label);
     return el("span", { class: "fb-pill fb-s-" + status }, STATUS_TEXT[status] || status);
   }
   function messageView(author, text, createdAt, isQuestion) {
@@ -219,8 +224,8 @@
   }
 
   function threadView(thread) {
-    const box = el("div", { class: "fb-thread", id: "fb-" + thread.thread_id });
-    const head = el("div", { class: "fb-thread-head" }, statusPill(thread.status));
+    const box = el("div", { class: "fb-thread fb-thread-" + stateOf(thread), id: "fb-" + thread.thread_id });
+    const head = el("div", { class: "fb-thread-head" }, statusPill(thread.status, thread));
     if (thread.quote) {
       const quote = el("blockquote", { class: "fb-quote", title: "Show in the text" }, thread.quote);
       if (thread._anchored) {
@@ -273,13 +278,19 @@
     const orphaned = threads.filter(thread => thread.quote && !thread._anchored);
     if (!threads.length) listEl.append(el("p", { class: "fb-empty" },
       "No comments on this page yet. Select any text to ask about it, or write about the whole page below."));
-    for (const thread of anchored) listEl.append(threadView(thread));
+    const resolved = anchored.filter(thread => stateOf(thread) === "resolved");
+    for (const thread of anchored) if (stateOf(thread) !== "resolved") listEl.append(threadView(thread));
+    if (resolved.length) {
+      const fold = el("details", { class: "fb-resolved" }, el("summary", {}, resolved.length + " resolved comment(s)"));
+      for (const thread of resolved) fold.append(threadView(thread));
+      listEl.append(fold);
+    }
     if (orphaned.length) {
       orphanEl.append(el("h3", {}, "Comments on earlier wording"),
         el("p", { class: "fb-help" }, "The text these comments point at is no longer on the page, usually because the page was rewritten after the comment."));
       for (const thread of orphaned) orphanEl.append(threadView(thread));
     }
-    const open = threads.filter(thread => thread.status === "open").length;
+    const open = threads.filter(thread => ["open", "planned"].includes(stateOf(thread))).length;
     toggleBtn.textContent = "Comments" + (threads.length ? " (" + threads.length + (open ? ", " + open + " open" : "") + ")" : "");
     renderName();
   }

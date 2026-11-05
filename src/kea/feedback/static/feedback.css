@@ -89,3 +89,12 @@ body.fb-frozen .fb-select,body.fb-frozen .fb-new,body.fb-frozen .fb-thread .fb-a
 .fb-editor-preview table{border-collapse:collapse}.fb-editor-preview td,.fb-editor-preview th{border:1px solid #d9dde5;padding:2px 6px}
 .fb-front{font-size:11.5px;background:#f5f7fa;padding:6px;white-space:pre-wrap}
 @media (max-width:760px){.fb-editor-panes{grid-template-columns:1fr}.fb-editor-preview{display:none}}
+
+/* comment states (open / in plan / addressed in vX / resolved) */
+.fb-pill.fb-state-open{background:#fff3c4;color:#7a5a00}
+.fb-pill.fb-state-planned{background:#ffe7c2;color:#7a4300;text-transform:none}
+.fb-pill.fb-state-addressed{background:#eceff1;color:#455a64;text-transform:none}
+.fb-pill.fb-state-resolved{background:#f4f5f6;color:#8a949e;text-transform:none}
+.fb-thread-addressed{opacity:.72;background:#fafbfc}
+.fb-thread-resolved{opacity:.5;background:#fafbfc}
+details.fb-resolved>summary{cursor:pointer;color:#6b7280;font-size:13px;margin:8px 0}

@@ -56,7 +56,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from kea.config import PROJECT_ROOT, SETTINGS, SITE_DIR
-from kea.feedback import cycle, store
+from kea.feedback import cycle, states, store
 
 PROJECT = PROJECT_ROOT
 AUTH_COOKIE = "fb_auth"
@@ -224,7 +224,14 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
 
     async def list_threads(request: Request) -> Response:
         page = request.query_params.get("page")
-        items = [thread.to_dict() for thread in store.threads(events_path) if page is None or thread.page == page]
+        info = states.context()
+        items = []
+        for thread in store.threads(events_path):
+            if page is None or thread.page == page:
+                item = thread.to_dict()
+                item["state"], item["state_label"] = states.state_of(thread, info)
+                items.append(item)
+        items.sort(key=lambda item: states.sort_key(item, info))
         return JSONResponse({"threads": items, "you": reader_name(request)})
 
     async def _body(request: Request) -> dict:
