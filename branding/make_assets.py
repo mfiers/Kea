@@ -2,7 +2,7 @@
 
 Chosen 2026-11-05: candidates/kea_wordmark2_gemini.png (wordmark) and candidates/kea_icon_gemini.png (icon), both
 from google/gemini-3-pro-image (prompts in candidates/record.json).
-Output: logo.png (wordmark, 1200 px wide), icon-512.png, icon-64.png, favicon.ico (16/32/48), and copies of
+Output: logo.png (wordmark without the tagline, 1200 px wide), icon-512.png, icon-64.png, favicon.ico (16/32/48), and copies of
 icon-64.png and favicon.ico in ../src/kea/docsite/static/ (used by the site).
 """
 from pathlib import Path
@@ -41,7 +41,22 @@ def square(image: Image.Image) -> Image.Image:
     return canvas
 
 
-wordmark = trimmed(transparent(Image.open(HERE / "candidates" / "kea_wordmark2_gemini.png")), 24)
+def without_tagline(image: Image.Image, text_left: int = 560) -> Image.Image:
+    """Remove the tagline line under the wordmark (dropped 2026-11-05): the lowest run of rows with dark pixels
+    right of the bird, separated from the wordmark by blank rows, is made white."""
+    pixels = np.asarray(image.convert("RGB")).astype(int)
+    dark_rows = (pixels[:, text_left:].min(axis=2) < 150).any(axis=1)
+    rows = np.flatnonzero(dark_rows)
+    runs = np.split(rows, np.flatnonzero(np.diff(rows) > 8) + 1)
+    if len(runs) < 2:
+        raise ValueError("no separate tagline found")
+    tagline = runs[-1]
+    cleaned = pixels.copy()
+    cleaned[tagline[0] - 4:tagline[-1] + 5, text_left:] = 255
+    return Image.fromarray(cleaned.astype(np.uint8), "RGB")
+
+
+wordmark = trimmed(transparent(without_tagline(Image.open(HERE / "candidates" / "kea_wordmark2_gemini.png"))), 24)
 wordmark.resize((1200, round(1200 * wordmark.height / wordmark.width)), Image.LANCZOS).save(HERE / "logo.png")
 icon = square(trimmed(transparent(Image.open(HERE / "candidates" / "kea_icon_gemini.png")), 16))
 icon.resize((512, 512), Image.LANCZOS).save(HERE / "icon-512.png")

@@ -1,8 +1,8 @@
-<p align='center'><img src='branding/logo.png' alt='kea: Keep Evidence Attached' width='520'></p>
+<p align='center'><img src='branding/logo.png' alt='kea' width='520'></p>
 
 # Kea: Knowledge, Evidence, Argument
 
-*Keep Evidence Attached.* A documentation site for a data analysis, built from typed Markdown pages, with
+A documentation site for a data analysis, built from typed Markdown pages, with
 comments, review cycles run by an agent, and semantic versions.
 
 - **Typed pages** in `doc/<experiment>/<type>/<id>.md`: goal, premise, question, hypothesis (written before or
