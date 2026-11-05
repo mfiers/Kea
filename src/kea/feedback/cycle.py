@@ -187,7 +187,13 @@ def direct_edits(since_iso: str) -> list[dict]:
     """Commits after ``since_iso`` that change doc/ and were not made by Claude (no Claude co-author trailer):
     a reader's own edits (e.g. in Obsidian), to be checked and listed in the plan like a comment."""
     import subprocess
+    from kea.feedback import store
     repository = PROJECT_ROOT
+    if not since_iso:       # no plan yet: only commits after the first comment can be reactions to the site
+        events = store.load_events()
+        if not events:
+            return []
+        since_iso = min(event.get("created_at", "") for event in events)
     arguments = ["git", "log", "--format=%x1e%h%x1f%an%x1f%aI%x1f%s%x1f%b%x1f", "--name-only"]
     if since_iso:
         arguments.append(f"--since={since_iso}")
