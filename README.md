@@ -54,8 +54,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.2.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.2.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.3.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.3.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -67,22 +67,32 @@ targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skil
 
 ## Commands
 
-`kea init | build [--strict] [--mode review|local|public] [--out DIR] | pdf [--rules public|internal] [--out FILE] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
+`kea init | build [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
 
 ## PDF
 
-`kea pdf` (or `make pdf`) puts every page into one PDF: a chapter per experiment in the tree's reading order,
-figures with their full captions, a glossary and a reference list, and every `[[link]]` as a link inside the PDF.
-It leaves out comments, plans, the review history, the change log, code listings and the relations graph. It needs
-[Typst](https://github.com/typst/typst/releases) (a single binary; or `typst:` in `kea.yaml`). Without it the `.typ`
-source is still written. Output goes to `report/pdf/<project>_<date>_<version>_<commit>.pdf` and is never overwritten.
-`--rules public` (default) shows table previews only for files declared public or aggregate; `--rules internal`
-shows them all.
+`kea pdf` (or `make pdf`) puts every page into one PDF, ordered for a reader on paper. Each experiment is a
+chapter:
 
-`kea build` also puts the PDF into the site, linked from the home page, when Typst is installed: public rules
-for `--mode public`, otherwise internal rules (the review site shows those previews already). It is recompiled
-only when the pages changed (cache in `report/pdf/_cache/`); `--no-pdf` skips it.
+- *At a glance* (every conclusion's summary) and *Key terms*;
+- background and premises;
+- methods (steps, each followed by its decisions);
+- one part per question: a table of its hypotheses, then the results with their figures;
+- conclusions and caveats;
+- an appendix: hypotheses in full, data and figure files, the glossary, and the references without abstracts.
+
+A standard closing chapter, *About this document*, explains the page types (in the site's colours), the numbers,
+the statuses and the page references. Every link to a page shows its page number.
+
+It leaves out comments, plans, the review history, the change log, code listings, the relations graph and the
+contents of data files, so no donor-level rows reach the PDF. It needs
+[Typst](https://github.com/typst/typst/releases) (a single binary; or `typst:` in `kea.yaml`). Without it the
+`.typ` source is still written. Output goes to `report/pdf/<title>_<date>_<version>_<commit>.pdf` and is never
+overwritten. A figure page may set `pdf_width:` (`100%`, `12cm`) to override the automatic size.
+
+`kea build` also puts the PDF into the site, linked from the home page, when Typst is installed. It is recompiled
+only when the pages change (cache in `report/pdf/_cache/`); `--no-pdf` skips it.
 
 ## Third-party files (copied, pinned)
 

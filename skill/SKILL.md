@@ -54,11 +54,21 @@ for reading from disk), `kea build --mode public --out DIR` (no comments, no dat
 tables; for hosting elsewhere; check `_public_report.json`; run entries may quote comments, so read them first).
 
 `kea pdf` (`make pdf`): one PDF of every page, typeset with Typst, into `report/pdf/` under a new name each time
-(project, date, site version, commit). Default `--rules public` (previews only of tables declared public or
-aggregate); `--rules internal` adds every preview, so only for readers allowed to see the data. Without Typst the
-`.typ` source is still written and the command exits 3 with install instructions; offer to install Typst rather
-than working around it. `kea build` adds the PDF to the site (home page link; public rules for
-`--mode public`, internal otherwise; recompiled only when the pages changed; `--no-pdf` skips it). Look at a few rendered pages (figures, tables) after a large change to the pages.
+(title, date, site version, commit).
+
+- **Order of each chapter:** at a glance (conclusions), key terms, background, premises, methods, then per
+  question a hypothesis table and the results with their figures, then conclusions and caveats.
+- **Appendix:** hypotheses in full, data and figure files, the glossary, the references; then a standard
+  "About this document".
+- **No data-file contents.**
+- **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
+  to install Typst rather than working around it.
+- **`kea build` adds the PDF to the site** with a home page link. It is recompiled only when the pages change;
+  `--no-pdf` skips it.
+
+The PDF is read on paper by people outside the review cycle. Keep review-process notes ("plan v0.4 #2", "Mark's
+comment", thread ids) out of page bodies and summaries, or confine them to one short closing section; keep
+hypothesis numbers in captions and titles current after renumbering. Look at a few rendered pages (figures, tables) after a large change to the pages.
 
 ## Every agent run
 

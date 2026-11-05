@@ -6,9 +6,9 @@ site:
 # serve: the site with comments (SITE_PASSWORD in .env); HOST and PORT default to kea.yaml
 serve:
 	uv run --locked kea serve $(if $(HOST),--host $(HOST)) $(if $(PORT),--port $(PORT))
-# pdf: one PDF of all pages in report/pdf/ (needs Typst; RULES=internal adds previews of every data table)
+# pdf: one PDF of all pages in report/pdf/ (needs Typst; no data-file contents)
 pdf:
-	uv run --locked kea pdf --rules $(or $(RULES),public)
+	uv run --locked kea pdf
 # feedback: comments that need attention
 feedback:
 	uv run --locked kea list

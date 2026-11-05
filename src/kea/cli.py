@@ -5,7 +5,7 @@
     kea serve [--host H --port P]     serve it with comments (password in .env: SITE_PASSWORD)
     kea list | show | reply | status | cycle | watch | apply-suggestion …
                                       the review cycle (see `kea list --help` etc.)
-    kea pdf [--rules public|internal] one PDF of all pages (needs Typst; writes the .typ source without it)
+    kea pdf [--out FILE]               one PDF of all pages (needs Typst; writes the .typ source without it)
     kea check                         validate doc/ against doc/_schema.yaml without building
 """
 from __future__ import annotations

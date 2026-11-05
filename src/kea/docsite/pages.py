@@ -266,7 +266,7 @@ class SiteRenderer:
                  + self.stability_pill(node)
                  + (f" <span class='pill'>experiment {esc(self.experiment_version(node.project))}</span>"
                     if node.id == "home" and self.experiment_version(node.project) else "")
-                 + (f" <span class='pill'>fixed before results{self.version_note(node)}</span>"
+                 + (f" <span class='pill' title='The claim, test and expectation were fixed before this test was run (possibly after other results had been seen)'>written before its test{self.version_note(node)}</span>"
                     if node.header.get("fixed_before_results") is True
                     else " <span class='pill s-exploratory'>written after results</span>"
                     if node.header.get("fixed_before_results") is False else "") + "</div>",
@@ -511,11 +511,9 @@ class SiteRenderer:
     def pdf_line(self) -> str:
         if not self.pdf:
             return ""
-        rules = ("public rules: no previews of controlled tables" if self.pdf["rules"] == "public" else
-                 "includes previews of data tables: for readers allowed to see the data")
         return (f"<p class='not-annotatable'><a href='{esc(self.pdf['file'])}'><b>PDF of all pages</b></a> "
                 f"<span class='help'>site version {esc(self.pdf['version'])}, commit {esc(self.pdf['commit'])}, "
-                f"made {esc(self.pdf['built'])}; {rules}. Without comments, plans, history and code.</span></p>")
+                f"made {esc(self.pdf['built'])}: conclusions first, then methods, questions with results and figures, caveats; without comments, plans, history, code or data-file contents.</span></p>")
 
     def site_pages(self) -> list[tuple[str, str, str]]:
         """Site-wide pages from doc/_site/*.md (title, short in front matter) into site/<name>.html.
