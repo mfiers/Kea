@@ -291,7 +291,8 @@
       for (const thread of orphaned) orphanEl.append(threadView(thread));
     }
     const open = threads.filter(thread => ["open", "planned"].includes(stateOf(thread))).length;
-    toggleBtn.textContent = "Comments" + (threads.length ? " (" + threads.length + (open ? ", " + open + " open" : "") + ")" : "");
+    toggleBtn.textContent = "Comments " + open + "/" + threads.length;
+    toggleBtn.title = open + " open (new or in the plan) of " + threads.length + " comments on this page";
     renderName();
   }
   function renderName() {
