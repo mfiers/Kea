@@ -11,7 +11,8 @@ Usage: kea build [--strict]   (`make site`)
 
 Input: doc/**, doc/_schema.yaml, doc/_cycles/cycle-NNN.md (plans), artefact and figure files named in the pages,
 git, data/feedback/events.jsonl and cycle.jsonl.
-Output: report/site/ (HTML, copied figure images, _feedback/ and _assets/ files, _files.json download allow-list).
+Output: report/site/ (HTML, copied figure images, _feedback/ and _assets/ files, _files.json download allow-list,
+        <title>-<version>.pdf of all pages when Typst is installed: docsite.pdf.site_pdf; --no-pdf skips it).
 """
 from __future__ import annotations
 
@@ -30,7 +31,8 @@ from kea.docsite.pages import ASSETS, SiteRenderer
 SITE = SITE_DIR
 
 
-def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelog: bool = False) -> tuple[dict, list[str]]:
+def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelog: bool = False,
+               with_pdf: bool = True) -> tuple[dict, list[str]]:
     """Render all pages into an empty ``site`` folder and add the comment layer (review mode). Returns
     (summary, problems)."""
     mode.configure(build_mode, site, with_changelog)
@@ -41,6 +43,9 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     for asset in [*ASSETS.glob("*.js"), *ASSETS.glob("*.png"), *ASSETS.glob("*.ico")]:
         shutil.copy2(asset, site / "_assets" / asset.name)
     renderer = SiteRenderer(tree, site)
+    if with_pdf:
+        from kea.docsite import pdf
+        renderer.pdf = pdf.site_pdf(tree, site)
     renderer.render_all()
     commit = comments.source_version(None)
     build_id = f"{dt.datetime.now().strftime('%Y%m%dT%H%M%S')}-{commit}"
@@ -63,7 +68,9 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
                                                   "built_at": dt.datetime.now().isoformat(timespec="seconds")}))
     summary = {"pages": len(renderer.pages), "injected": counts["pages"], "with_history": counts["with_history"],
                "downloads": len(renderer.downloads), "problems": len(tree.problems) + len(renderer.broken),
-               "notes": len(tree.notes)}
+               "notes": len(tree.notes),
+               "pdf": (renderer.pdf or {}).get("file", "none (typst not installed)" if with_pdf else "skipped")
+               + (" (reused)" if (renderer.pdf or {}).get("reused") else "")}
     return summary, tree.problems + renderer.broken
 
 
@@ -76,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", "--site", dest="site", type=Path, default=None,
                         help="output folder (default: kea.yaml site_dir; local: report/site-local; public: "
                              "report/site-public)")
+    parser.add_argument("--no-pdf", action="store_true", help="skip the PDF of all pages (built with Typst "
+                        "when installed, recompiled only when the pages changed)")
     parser.add_argument("--with-changelog", action="store_true",
                         help="public: include run and commit pages (run entries may quote comments)")
     args = parser.parse_args(argv)
@@ -87,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     if site.is_relative_to(PROJECT_ROOT / "data") or site == PROJECT_ROOT or site in PROJECT_ROOT.parents:
         parser.error(f"refusing to build into {site}: it is the project, a parent of it, or inside data/")
     tree = load_tree()
-    summary, problems = build_site(tree, site, args.mode, args.with_changelog)
+    summary, problems = build_site(tree, site, args.mode, args.with_changelog, not args.no_pdf)
     for problem in problems:
         print(f"PROBLEM {problem}")
     for note in sorted(set(tree.notes)):

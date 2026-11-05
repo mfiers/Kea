@@ -57,7 +57,8 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 (project, date, site version, commit). Default `--rules public` (previews only of tables declared public or
 aggregate); `--rules internal` adds every preview, so only for readers allowed to see the data. Without Typst the
 `.typ` source is still written and the command exits 3 with install instructions; offer to install Typst rather
-than working around it. Look at a few rendered pages (figures, tables) after a large change to the pages.
+than working around it. `kea build` adds the PDF to the site (home page link; public rules for
+`--mode public`, internal otherwise; recompiled only when the pages changed; `--no-pdf` skips it). Look at a few rendered pages (figures, tables) after a large change to the pages.
 
 ## Every agent run
 

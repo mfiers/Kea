@@ -54,8 +54,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.1.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.1.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.2.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.2.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -79,6 +79,10 @@ It leaves out comments, plans, the review history, the change log, code listings
 source is still written. Output goes to `report/pdf/<project>_<date>_<version>_<commit>.pdf` and is never overwritten.
 `--rules public` (default) shows table previews only for files declared public or aggregate; `--rules internal`
 shows them all.
+
+`kea build` also puts the PDF into the site, linked from the home page, when Typst is installed: public rules
+for `--mode public`, otherwise internal rules (the review site shows those previews already). It is recompiled
+only when the pages changed (cache in `report/pdf/_cache/`); `--no-pdf` skips it.
 
 ## Third-party files (copied, pinned)
 

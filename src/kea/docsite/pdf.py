@@ -498,6 +498,8 @@ class PdfWriter:
         commit = comments.source_version(None)
         today = dt.date.today().isoformat()
         chapters = [self.chapter(project) for project in sorted(self.tree.projects)]
+        self.content = "\n\n".join(chapters) + f"|{self.rules}|{len(self.omitted_previews)}"   # what the cache keys on
+        self.stamp = {"version": version, "commit": commit, "built": today}
         rules_note = ("Public rules: previews of data tables appear only for files declared public or aggregate."
                       if self.rules == "public" else
                       "Internal rules: previews of all data tables are included. Do not pass this PDF to readers "
@@ -519,6 +521,51 @@ class PdfWriter:
         preamble = PREAMBLE.format(title=string(title), title_markup=text(title),
                                    version_markup=text(f"{version} · {commit}"))
         return preamble + "\n" + "\n\n".join(front + chapters) + "\n"
+
+
+CACHE_KEEP = 6
+
+
+def site_pdf(tree: Tree, site: Path) -> dict | None:
+    """The PDF for a site build (`kea build`), or None when Typst is not installed or the compile fails.
+
+    Rules follow the build mode set by `mode.configure`: public builds get public rules, review and local builds
+    (password-protected or on disk, already showing previews) internal rules. The PDF is compiled only when its
+    content changed: compiled files are kept in report/pdf/_cache/<content hash>.pdf (the last CACHE_KEEP), so a
+    reused PDF carries the version and commit of the build that compiled it. Returns {"file", "version",
+    "commit", "built", "rules", "reused"}; the PDF is copied to <site>/<file>.
+    """
+    import hashlib
+    import json
+    command = typst_command()
+    if command is None:
+        return None
+    rules = "public" if mode.MODE == "public" else "internal"
+    writer = PdfWriter(tree, rules)
+    source = writer.document()
+    digest = hashlib.sha256(writer.content.encode()).hexdigest()[:16]
+    cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    cached, meta_path = cache / f"{digest}.pdf", cache / f"{digest}.json"
+    reused = cached.exists() and meta_path.exists()
+    if not reused:
+        typ_path = cache / f"{digest}.typ"
+        typ_path.write_text(source, encoding="utf-8")
+        result = subprocess.run([command, "compile", "--root", str(PROJECT_ROOT), str(typ_path), str(cached)],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"note    PDF not built (typst failed; source {typ_path.relative_to(PROJECT_ROOT)}):\n"
+                  f"{result.stderr.strip()[:2000]}", file=sys.stderr)
+            return None
+        meta_path.write_text(json.dumps({**writer.stamp, "rules": rules}))
+        for old in sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime)[:-CACHE_KEEP]:
+            for suffix in (".pdf", ".json", ".typ"):
+                old.with_suffix(suffix).unlink(missing_ok=True)
+    meta = json.loads(meta_path.read_text())
+    title = re.sub(r"[^a-z0-9]+", "-", str(SETTINGS.get("title") or PROJECT_ROOT.name).lower()).strip("-")
+    name = f"{title}-{meta['version']}.pdf"
+    shutil.copy2(cached, site / name)
+    return {"file": name, **meta, "reused": reused}
 
 
 def default_output() -> Path:

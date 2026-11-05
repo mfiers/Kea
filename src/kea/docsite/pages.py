@@ -82,6 +82,7 @@ class SiteRenderer:
     def __init__(self, tree: Tree, site: Path):
         self.tree, self.site = tree, site
         self.under_review: dict[str, int] = {}
+        self.pdf: dict | None = None             # the PDF of all pages (docsite.pdf.site_pdf), if built
         self.data_files: set[str] = set()
         self.code = codepages.CodeIndex()
         self.pages: dict[str, tuple[str, Path | None]] = {}     # page path -> (thread key, source)
@@ -488,6 +489,7 @@ class SiteRenderer:
                 "the question, "
                 "what we take as given (premises), what we expected (hypotheses), what we did (steps), what came out "
                 "(results), what we conclude, and the files behind it (artefacts). Select any text to comment.</div>"
+                + self.pdf_line() +
                 "<h2>How to read this site</h2><ul>"
                 "<li>Start at an experiment's home page; the coloured badge says what kind of page you are on, the pill "
                 "its status (green settled, amber exploratory or open, red rejected). An experiment with comments "
@@ -505,6 +507,15 @@ class SiteRenderer:
                     for href, title, short in getattr(self, "site_listing", [])) + "</ul>"
                    if getattr(self, "site_listing", None) else ""))
         self.write("index.html", page(SETTINGS["title"], body, "", None, self.tree))
+
+    def pdf_line(self) -> str:
+        if not self.pdf:
+            return ""
+        rules = ("public rules: no previews of controlled tables" if self.pdf["rules"] == "public" else
+                 "includes previews of data tables: for readers allowed to see the data")
+        return (f"<p class='not-annotatable'><a href='{esc(self.pdf['file'])}'><b>PDF of all pages</b></a> "
+                f"<span class='help'>site version {esc(self.pdf['version'])}, commit {esc(self.pdf['commit'])}, "
+                f"made {esc(self.pdf['built'])}; {rules}. Without comments, plans, history and code.</span></p>")
 
     def site_pages(self) -> list[tuple[str, str, str]]:
         """Site-wide pages from doc/_site/*.md (title, short in front matter) into site/<name>.html.
