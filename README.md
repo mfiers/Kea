@@ -54,8 +54,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.1"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.0.1
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.1.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.1.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -67,8 +67,18 @@ targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skil
 
 ## Commands
 
-`kea init | build [--strict] [--mode review|local|public] [--out DIR] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
+`kea init | build [--strict] [--mode review|local|public] [--out DIR] | pdf [--rules public|internal] [--out FILE] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
+
+## PDF
+
+`kea pdf` (or `make pdf`) puts every page into one PDF: a chapter per experiment in the tree's reading order,
+figures with their full captions, a glossary and a reference list, and every `[[link]]` as a link inside the PDF.
+It leaves out comments, plans, the review history, the change log, code listings and the relations graph. It needs
+[Typst](https://github.com/typst/typst/releases) (a single binary; or `typst:` in `kea.yaml`). Without it the `.typ`
+source is still written. Output goes to `report/pdf/<project>_<date>_<version>_<commit>.pdf` and is never overwritten.
+`--rules public` (default) shows table previews only for files declared public or aggregate; `--rules internal`
+shows them all.
 
 ## Third-party files (copied, pinned)
 

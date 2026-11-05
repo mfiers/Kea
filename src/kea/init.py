@@ -13,7 +13,7 @@ from pathlib import Path
 from kea.config import PACKAGE_DIR
 
 TEMPLATES = PACKAGE_DIR / "templates"
-GITIGNORE_LINES = ["report/site/", ".env", "data/feedback/server.log", "data/feedback/watch_heartbeat.json",
+GITIGNORE_LINES = ["report/site/", "report/pdf/", ".env", "data/feedback/server.log", "data/feedback/watch_heartbeat.json",
                    "data/feedback/watch_heartbeat.tmp"]
 
 

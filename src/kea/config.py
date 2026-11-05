@@ -13,6 +13,7 @@ kea.yaml (all keys optional):
     feedback_dir: data/feedback             # events.jsonl, cycle.jsonl (in git), server log, watcher heartbeat
     cookie_salt: <text>                     # optional; default "kea-site:<project folder name>"
     code_paths: [src/, tests/]              # optional; folders that get code pages
+    typst: /path/to/typst                   # optional; kea pdf uses `typst` on PATH otherwise
 """
 from __future__ import annotations
 

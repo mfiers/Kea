@@ -63,7 +63,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
   <p>The skill tells Claude how to set up Kea in a project and how to run the review cycle. Install it once, and
     it is available in every project:</p>
   <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.0.1/skill/SKILL.md \
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.1.0/skill/SKILL.md \
      -o ~/.claude/skills/kea/SKILL.md</code></pre>
   <p>Then, in any project, ask Claude something like <i>"set up a kea site for this analysis"</i>. Claude
     installs the tool, runs <code>kea init</code>, writes the first pages and starts the comment server and the
@@ -76,9 +76,9 @@ curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.0.1/skill/SKILL.md \
 
   <h2>Install the tool</h2>
   <h3>A Python project (uv)</h3>
-  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.0.1"</code></pre>
+  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.1.0"</code></pre>
   <h3>Any other project (R, a plain folder)</h3>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.0.1</code></pre>
+  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.1.0</code></pre>
   <h3>Start</h3>
   <pre><code>kea init --title "My analysis" --experiment first-experiment --question "What do we ask?"
 make site       # build the site from doc/
@@ -110,6 +110,9 @@ make serve      # serve it with comments; the password is in .env</code></pre>
     static copy without comments, with links into the project's data, to read from disk. <code>kea build --mode
     public --out DIR</code> builds a copy for any web host. It contains no comments, no data files and no previews
     of controlled tables, and it lists what it left out.</p>
+  <p><code>kea pdf</code> puts every page into one PDF, typeset with <a href="https://typst.app">Typst</a>: a chapter
+    per experiment, figures with their full captions, a glossary and a reference list, and every cross-reference as
+    a link. Typst is optional; without it Kea writes the source file and says how to install it.</p>
 
   <h2>About</h2>
   <p class="note" id="disclaimer"><b>Written with an AI assistant.</b> Kea was developed by Mark Fiers together

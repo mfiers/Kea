@@ -1,11 +1,14 @@
 # --- kea: documentation site and review cycle (kea init) ---
-.PHONY: site serve feedback watch-comments cycle-status
+.PHONY: site serve feedback watch-comments cycle-status pdf
 # site: build report/site/ from doc/ (fails on broken links or schema violations)
 site:
 	uv run --locked kea build --strict
 # serve: the site with comments (SITE_PASSWORD in .env); HOST and PORT default to kea.yaml
 serve:
 	uv run --locked kea serve $(if $(HOST),--host $(HOST)) $(if $(PORT),--port $(PORT))
+# pdf: one PDF of all pages in report/pdf/ (needs Typst; RULES=internal adds previews of every data table)
+pdf:
+	uv run --locked kea pdf --rules $(or $(RULES),public)
 # feedback: comments that need attention
 feedback:
 	uv run --locked kea list

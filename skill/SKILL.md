@@ -53,6 +53,12 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 for reading from disk), `kea build --mode public --out DIR` (no comments, no data, no previews of controlled
 tables; for hosting elsewhere; check `_public_report.json`; run entries may quote comments, so read them first).
 
+`kea pdf` (`make pdf`): one PDF of every page, typeset with Typst, into `report/pdf/` under a new name each time
+(project, date, site version, commit). Default `--rules public` (previews only of tables declared public or
+aggregate); `--rules internal` adds every preview, so only for readers allowed to see the data. Without Typst the
+`.typ` source is still written and the command exits 3 with install instructions; offer to install Typst rather
+than working around it. Look at a few rendered pages (figures, tables) after a large change to the pages.
+
 ## Every agent run
 
 Pick a run id `YYYY-MM-DD-<letter>`; put `Run: <id>` in every commit; `Answers-comment: <thread>` when a commit
