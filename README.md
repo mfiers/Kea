@@ -1,6 +1,6 @@
 <p align='center'><img src='branding/logo.png' alt='kea' width='520'></p>
 
-# Kea: Knowledge, Evidence, Argument
+# Kea
 
 Website: https://mfiers.github.io/Kea/ (what Kea is, and how to install the tool and the Claude Code skill).
 

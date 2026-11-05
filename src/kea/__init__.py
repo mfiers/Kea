@@ -1,4 +1,4 @@
-"""Kea: Knowledge, Evidence, Argument. A documentation site for an analysis, with review cycles.
+"""Kea: a documentation site for an analysis, with review cycles.
 
 Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures,
 artefacts, terms, references) become a static site with code and data pages, a change log per agent run, a

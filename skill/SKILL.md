@@ -1,6 +1,6 @@
 ---
 name: kea
-description: Set up and run a Kea site for a data analysis (Kea = Knowledge, Evidence, Argument). Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user wants an explained, commentable project site, wants to review or discuss an analysis with others, or asks to set up kea in a project.
+description: Set up and run a Kea site for a data analysis. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user wants an explained, commentable project site, wants to review or discuss an analysis with others, or asks to set up kea in a project.
 ---
 # Kea
 
