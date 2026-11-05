@@ -24,9 +24,11 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
      per project).
    - For other people: `make serve HOST=<ip>`. It is plain http, so use a trusted network or VPN, and ask before
      opening firewall ports.
-   - To keep it running after the session ends: `kea serve --install-service --host <ip> --port <port>
-     --enable` writes and starts a systemd user service `kea-<project>.service`. Logins survive logout only with
-     `loginctl enable-linger`.
+   - Default for a project under active work: run `kea serve` (and `kea watch`) as background processes of the
+     Claude session; the site is up while the session runs. Do not install a service unless the owner asks.
+   - Only on request, for a site that must stay up without a session: `kea serve --install-service --host <ip>
+     --port <port> --enable` writes and starts a systemd user service `kea-<project>.service` (needs
+     `loginctl enable-linger` to survive logout).
 
 ## Writing pages
 
