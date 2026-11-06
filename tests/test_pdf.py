@@ -139,3 +139,11 @@ def test_nature_citation():
     assert cite.nature(record) == "Smith, A. B. & Jones, C. A study. *Nat Med* **13**, 1042–1049 (2007)."
     many = dict(record, authorList={"author": [{"lastName": f"N{i}", "initials": "X"} for i in range(7)]})
     assert cite.nature(many).startswith("N0, X. et al. A study.")
+
+
+def test_resource_body_reaches_the_pdf(toy_doc):
+    write_page(toy_doc, "proj/resource/o-db.md", "id: o-db\ntype: resource\ntitle: Server\nshort: Data.\nparent: home\n"
+               "status: current\nkind: database\nversion: '3'\nretrieved: 2026-11-06",
+               "| dataset | version |\n|---|---|\n| X1 | 2 |")
+    source = pdf.PdfWriter(nodes.load_tree(toy_doc)).document({"version": "-", "commit": "-", "built": "-"})
+    assert "== Data and resources" in source and "[X1]" in source

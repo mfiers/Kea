@@ -1018,6 +1018,9 @@ class PdfWriter:
                           f"#text(size: 9pt)[{text(item.short)}]\n\n"
                           f"#block[#set text(size: 8.5pt); #set par(justify: false)\n#grid(columns: (auto, 1fr), "
                           f"column-gutter: 10pt, row-gutter: 5pt, {', '.join(cells)})]]")
+            body = self.body(item, 4)            # the page's own text (e.g. a table of the datasets used)
+            if body.strip():
+                blocks.append(f"#block(inset: (left: 12pt), above: 0.6em)[#set text(size: 9pt)\n{body}]")
         return ["=== Resources",
                 "#intro[What the analysis takes from outside, with what is needed to get the same input again; the "
                 "website has a page for each.]"] + blocks
