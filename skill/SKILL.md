@@ -1,10 +1,78 @@
 ---
 name: kea
-description: Set up and run a Kea site for a data analysis. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user wants an explained, commentable project site, wants to review or discuss an analysis with others, or asks to set up kea in a project.
+description: Set up and run a Kea site for a data analysis, and run the analysis through it. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user says "use Kea", wants an explained, commentable project site, wants to review or discuss an analysis with others, asks to set up kea in a project, or works on a question in a project that has kea.yaml (read its context with kea context first).
 ---
 # Kea
 
 The tool does the work; this skill says when and how to use it. Never copy kea's code into a project.
+
+## When the user says "use Kea" (start-up routine)
+
+When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start analysing before step 5:
+
+1. **Outline.** Read what the project already says (README, CLAUDE.md, reports, the conversation). Ask only for
+   what is still unclear, in one short round: the project's title and aim in a sentence or two; who will read the
+   site (e.g. biologists, collaborators); the first experiment (a short folder name and its main question); the
+   data it starts from; what is taken as given (premises); the author name(s) for the PDF.
+2. **Structure.** Install and run `kea init` (below) with `--author`. Write the first pages: `doc/_summary.md`
+   (the project's summary), the experiment's home page (its summary before the first `##`, then `## Scope`), one
+   page per question (`question/`) and per premise (`premise/`). `make site` must report 0 problems.
+3. **Hosting.** Ask how readers will reach the site, unless that is clear:
+   - only the user on this machine: `localhost`;
+   - colleagues on a trusted network or VPN: `make serve HOST=<ip>` (plain http; ask before opening firewall
+     ports);
+   - outside readers: `kea build --mode public --out DIR` on any static host (no comments).
+
+   If in doubt, run `kea serve` on `127.0.0.1` and a free port (`kea.yaml` `port:`) as a background process of the
+   session.
+4. **Hand over.** Give the user the link and say that the password is `SITE_PASSWORD` in `.env` (never print it).
+   Say what they can do on the site: read, select text to comment, or edit a section.
+5. **Watch.** Start `kea watch --deadline 3d` in the background at once, and respond when it exits (see Review
+   cycle). Tell the user it is running, and until when.
+
+Then work on the first question (below).
+
+## Working on a question (each analysis run)
+
+The tree holds what earlier runs established. Read it before adding to it:
+
+1. **Choose.** `kea context <experiment>` lists every question with its state, the open caveats, the decisions in
+   force, open comments and gaps. If the user did not name a question, propose one from this list.
+2. **Read the context.** `kea context <question>` prints the question's answer so far, its conclusions, results and
+   hypotheses, the premises, the decisions in force, every caveat on these pages and on the method, open comments,
+   and gaps. Then act on each part:
+   - **Premises:** take them as given, or question one explicitly on its own page.
+   - **Decisions:** use the method as it stands. To change it, write a new decision page that says what it
+     replaces and why.
+   - **Open caveats:** for each, decide whether this run addresses it (plan the check) or whether it limits the new
+     result. In the second case, add the new result to its `limits:`.
+   - **Addressed caveats:** make sure the new work does not reopen them.
+   - **Earlier results:** compare with them; do not redo them silently.
+   - **Comments:** answer, or take them into the plan.
+3. **Fix the test before running it.** Write hypothesis pages with the test, the yardstick and the expectation, and
+   `fixed_before_results: true`, and commit them before the test runs; the commit time is the record. Work that
+   was not fixed in advance is labelled exploratory.
+4. **Do the work reproducibly.** Write step and decision pages. Code goes in scripts with Makefile targets (one per
+   step), with seeds and versions, and new versioned output files. Never analyse in the chat.
+5. **Write what came out.**
+   - **Result pages:** every number comes from a file named in `sources:`. Null results get pages too.
+   - **Figures:** made by scripts, with full captions.
+6. **Check the caveats again.**
+   - A caveat this run dealt with: set it to `addressed` and link the step.
+   - A new weakness: give it a new caveat page with `limits:`.
+7. **Conclude.**
+   - Write conclusions with `supported_by` / `opposed_by`.
+   - Set each hypothesis's status and outcome.
+   - Update the question's `answer:`, the experiment's summary and `doc/_summary.md` in the same commit.
+8. **Check.**
+   - Run `kea context <question>` again: every gap is closed, or explained on a page.
+   - Let an independent reviewer (a subagent given the context and the new pages, not your conclusions) check every
+     number against its source file.
+   - `make site` must report 0 problems.
+   - Write the run entry and commit with `Run:`.
+
+One question per run where possible. A result that also bears on another question gets a relation (`answers:`),
+not a copy.
 
 ## Set up (once per project)
 

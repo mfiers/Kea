@@ -59,8 +59,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.4.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.4.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.5.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.5.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -72,8 +72,12 @@ targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skil
 
 ## Commands
 
-`kea init | build [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
+`kea init | build | context <question|experiment> [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
+
+`kea context <question>` prints what an analysis run on that question must take into account: its answer so far,
+conclusions, results and hypotheses, the premises, the decisions in force, every caveat on these pages and on the
+method, open comments and gaps. `kea context <experiment>` lists the open work of an experiment.
 
 `kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when there are comments to plan, 20
 when a reader pressed Implement and 30 at the deadline; it prints a status line every hour (`--report-every`).

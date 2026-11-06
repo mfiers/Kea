@@ -6,6 +6,9 @@
   answer comments carry `Answers-comment: <thread>`.
 - `make site` (`kea build --strict`) builds the site; `make serve` (`kea serve`) serves it with comments
   (`SITE_PASSWORD` in `.env`, never printed or committed).
+- Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
+  open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
+  the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.
 - Review cycle: `kea watch` → fold comments into `doc/_cycles/cycle-NNN.md` (`kea reply … --status planned`,
   `kea cycle plan-updated --commit …`) → readers Freeze, then Implement → `kea cycle start`, implement, run entry,
   replies with commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a

@@ -64,7 +64,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
   <p>The skill tells Claude how to set up Kea in a project and how to run the review cycle. Install it once, and
     it is available in every project:</p>
   <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.4.0/skill/SKILL.md \
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.5.0/skill/SKILL.md \
      -o ~/.claude/skills/kea/SKILL.md</code></pre>
   <p>Then, in any project, ask Claude something like <i>"set up a kea site for this analysis"</i>. Claude
     installs the tool, runs <code>kea init</code>, writes the first pages and starts the comment server and the
@@ -77,9 +77,9 @@ curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.4.0/skill/SKILL.md \
 
   <h2>Install the tool</h2>
   <h3>A Python project (uv)</h3>
-  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.4.0"</code></pre>
+  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.5.0"</code></pre>
   <h3>Any other project (R, a plain folder)</h3>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.4.0</code></pre>
+  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.5.0</code></pre>
   <h3>Start</h3>
   <pre><code>kea init --title "My analysis" --experiment first-experiment --question "What do we ask?"
 make site       # build the site from doc/
@@ -121,6 +121,17 @@ make serve      # serve it with comments; the password is in .env</code></pre>
     <li><b>Versions.</b> The project's version belongs to its set of pages. The site and the PDF are two views of the
       same version; the PDF carries it on its title page.</li>
   </ul>
+
+  <h2>Analysis runs that build on what is known</h2>
+  <p>Before the agent works on a question, <code>kea context &lt;question&gt;</code> prints the part of the
+    knowledge tree it has to take into account: the answer so far, earlier results and hypotheses, the premises,
+    the decisions in force, every caveat on those pages and on the method, open comments, and what is still missing.
+    The skill makes this the first step of every run. The agent then fixes and commits its hypotheses before the
+    test, runs the analysis from scripts, writes results with their source files, checks the caveats again, and
+    updates the answer and the summaries.</p>
+  <p>Saying <i>use Kea</i> to the agent starts it in order. It asks for an outline of the project and the first
+    experiment, sets up the pages and builds the site. It then agrees on hosting (localhost unless you need more),
+    sends you the link and starts watching for comments.</p>
 
   <h2>The review cycle</h2>
   <ol class="cycle">

@@ -125,3 +125,16 @@ def test_callouts_render_as_boxes():
     out = callouts("before\n> [!warning] Mind this\n> body line\nafter")
     assert "<div class='callout callout-warning' markdown='1'>" in out and "**Mind this**" in out
     assert "body line" in out and out.strip().endswith("after")
+
+
+def test_context_lists_evidence_caveats_and_gaps(toy_doc):
+    from kea.docsite import context
+    write_page(toy_doc, "proj/caveat/w-a.md", "id: w-a\ntype: caveat\ntitle: A limit\nshort: Limits R.\nparent: home\n"
+               "status: open\nrelations:\n  limits: [r-a]")
+    tree = nodes.load_tree(toy_doc)
+    text = context.question_context(tree, tree.nodes["proj:q-a"])
+    assert "## Results" in text and "R1 R" in text                      # the result that answers it
+    assert "W1 A limit [open] limits R1" in text                        # its caveat, with what it limits
+    assert "has no hypothesis" in text                                  # a gap
+    overview = context.experiment_context(tree, "proj")
+    assert "## Open caveats" in overview and "W1 A limit" in overview

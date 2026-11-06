@@ -7,6 +7,8 @@
     kea list | show | reply | status | cycle | watch | apply-suggestion …
                                       the review cycle (see `kea list --help` etc.)
     kea pdf [--out FILE]               one PDF of all pages (needs Typst; writes the .typ source without it)
+    kea context <question|experiment> what to take into account before working on it (premises, decisions,
+                                      caveats, evidence so far, open comments, gaps)
     kea check                         validate doc/ against doc/_schema.yaml without building
 """
 from __future__ import annotations
@@ -31,6 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == "pdf":
         from kea.docsite import pdf
         return pdf.main(rest)
+    if command == "context":
+        from kea.docsite import context
+        return context.main(rest)
     if command == "serve":
         from kea.feedback import server
         return server.main(rest)
