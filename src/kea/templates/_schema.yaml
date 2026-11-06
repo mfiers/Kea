@@ -56,6 +56,9 @@ relations:
 
 # Terms (type term) may list `aliases:`; the first use of the title or an alias on every page of the same
 # experiment links to the term page automatically (not inside links, code, headings or tables of numbers).
+# `link: every` links every use instead of the first (for gene names and other terms a reader looks up
+# anywhere on a page), matched with the case as written (APP does not link "app"); `link: first` is the
+# default.
 
 # Resources (type resource, numbered O1, O2 …): what the analysis takes from outside, so that it can be
 # reproduced. Front matter: kind (database | api | mcp_server | file | software | dataset), url, version,

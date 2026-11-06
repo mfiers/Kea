@@ -64,14 +64,14 @@ Kea does.
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.10.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.10.1
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.1"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.10.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.10.1 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again).
@@ -82,7 +82,7 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.10.0 kea --help
   for the PDF (see [PDF](#pdf)).
 - The agent skill is separate: copy `skill/SKILL.md` to `~/.claude/skills/kea/SKILL.md` (Claude Code), from the
   same tag:
-  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.10.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
+  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.10.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
 
 ## Use in a project
 
@@ -93,8 +93,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.10.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.1"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.10.1
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)

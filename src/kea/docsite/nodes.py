@@ -246,6 +246,8 @@ def _validate(tree: Tree) -> None:
         where = node.source.relative_to(DOC) if node.source.is_relative_to(DOC) else node.source
         if node.type not in TYPE_LABELS:
             tree.problems.append(f"{where}: unknown type {node.type!r}")
+        if node.type == "term" and str(node.header.get("link") or "first").strip().lower() not in ("first", "every"):
+            tree.problems.append(f"{where}: link: {node.header.get('link')!r} (use first or every)")
         if node.id != "home" and node.parent and f"{node.project}:{node.parent}" not in tree.nodes:
             tree.problems.append(f"{where}: parent {node.parent!r} does not exist")
         if node.id != "home" and not node.parent:

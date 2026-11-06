@@ -230,3 +230,22 @@ def test_rrid_none_means_searched(toy_doc):
                "status: current\nkind: software\nversion: '1'\nretrieved: 2026-11-06\nrrid: none")
     tree = nodes.load_tree(toy_doc)
     assert not any("o-f.md" in item for item in tree.notes + tree.problems)
+
+
+def test_term_with_link_every_is_linked_at_every_use(toy_doc):
+    write_page(toy_doc, "proj/term/t-gene.md", "id: t-gene\ntype: term\ntitle: APP\nshort: A gene.\nparent: home\n"
+               "link: every")
+    write_page(toy_doc, "proj/term/t-once.md", "id: t-once\ntype: term\ntitle: Thing\nshort: Once.\nparent: home")
+    tree = nodes.load_tree(toy_doc)
+    assert not tree.problems
+    context = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: (None, target))
+    html = render_markdown("APP and Thing; again APP, Thing and an app.\n\nAPP once more. `APP` in code.", context)
+    assert html.count("class='term'") == 4                       # APP three times, Thing once
+    assert html.count(">APP</a>") == 3 and html.count(">Thing</a>") == 1 and ">app</a>" not in html
+    assert "<code>APP</code>" in html
+    on_own_page = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: (None, target),
+                              current="proj:t-gene")
+    assert ">APP</a>" not in render_markdown("APP here.", on_own_page)
+    write_page(toy_doc, "proj/term/t-bad.md", "id: t-bad\ntype: term\ntitle: Bad\nshort: B.\nparent: home\n"
+               "link: always")
+    assert any("link: 'always'" in problem for problem in nodes.load_tree(toy_doc).problems)

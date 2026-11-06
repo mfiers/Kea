@@ -359,14 +359,16 @@ def term_patterns(tree: Tree, project: str) -> list[tuple[re.Pattern, Node]]:
         if node.type != "term" or node.project != project:
             continue
         names = [node.title] + [str(alias) for alias in node.header.get("aliases") or []]
-        for name in names:
-            entries.append((len(name), re.compile(r"(?<![\w-])(" + re.escape(name) + r")(?![\w-])", re.IGNORECASE),
-                            node))
+        every = str(node.header.get("link") or "first").strip().lower() == "every"
+        for name in names:      # link: every matches the case as written, so a gene APP does not link "app"
+            entries.append((len(name), re.compile(r"(?<![\w-])(" + re.escape(name) + r")(?![\w-])",
+                                                  0 if every else re.IGNORECASE), node))
     return [(pattern, node) for _, pattern, node in sorted(entries, key=lambda entry: -entry[0])]
 
 
 def link_terms(html_text: str, context: LinkContext) -> str:
-    """Link the first use of each term on the page (outside links, code, headings and tables)."""
+    """Link the first use of each term on the page (outside links, code, headings and tables); a term with
+    ``link: every`` in its front matter (gene names, say) is linked at every use."""
     if not context.terms:
         return html_text
     tokens = re.split(r"(<[^>]+>)", html_text)
@@ -382,20 +384,25 @@ def link_terms(html_text: str, context: LinkContext) -> str:
             continue
         pieces: list[tuple[str, bool]] = [(token, False)]     # (text, already a link)
         for pattern, node in context.terms:
-            if node.key in context.linked_terms or node.key == context.current:
+            every = str(node.header.get("link") or "first").strip().lower() == "every"
+            if node.key == context.current or (node.key in context.linked_terms and not every):
                 continue
-            for position, (text, is_link) in enumerate(pieces):
-                if is_link:
-                    continue
-                found = pattern.search(text)
+            anchor_start = (f"<a class='term' href='{esc(node_href(node, context.prefix))}' "
+                            f"title='{esc(node.title)}: {esc(node.short)}'>")
+            position = 0
+            while position < len(pieces):
+                text, is_link = pieces[position]
+                found = None if is_link else pattern.search(text)
                 if not found:
+                    position += 1
                     continue
-                anchor = (f"<a class='term' href='{esc(node_href(node, context.prefix))}' "
-                          f"title='{esc(node.title)}: {esc(node.short)}'>{found.group(1)}</a>")
-                pieces[position:position + 1] = [(text[:found.start()], False), (anchor, True),
+                pieces[position:position + 1] = [(text[:found.start()], False),
+                                                  (anchor_start + found.group(1) + "</a>", True),
                                                   (text[found.end():], False)]
-                context.linked_terms.add(node.key)
-                break
+                if not every:
+                    context.linked_terms.add(node.key)
+                    break
+                position += 2                                    # go on in the text after this link
         tokens[index] = "".join(text for text, _ in pieces)
     return "".join(tokens)
 

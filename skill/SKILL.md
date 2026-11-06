@@ -124,6 +124,8 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - Terms (`aliases:`) are linked automatically from first use and numbered T1, T2 … in glossary order. Terms that
   name entities (genes, proteins, cell types) get `group: Genes` (etc.); the glossary lists each group after the
   key terms (titles that look like gene symbols go under Genes without it).
+  `link: every` links every use of a term on a page instead of the first (genes a reader looks up anywhere);
+  it matches the case as written, so a gene APP does not link "app".
 - **Resources** (`resource/`, numbered O1, O2 …): everything the analysis takes from outside: a database or API, an
   MCP server, a dataset on a server, an uploaded or downloaded file, software with its version. Front matter:
   `kind` (database | api | mcp_server | dataset | file | software), `url`, `version`, `retrieved` (ISO date),
