@@ -343,10 +343,6 @@ class Converter:
 
     def inlines(self, children: list) -> str:
         pieces = [self.inline(child) for child in children]
-        for index in range(1, len(pieces) - 1):   # "(B1)": a lone citation mark needs no brackets of its own
-            if pieces[index].startswith("#cite(") and pieces[index - 1].endswith("\\(") and pieces[index + 1].startswith(")"):
-                pieces[index - 1] = pieces[index - 1][:-2].rstrip()
-                pieces[index + 1] = pieces[index + 1][1:]
         return "".join(pieces)
 
     def inline(self, node) -> str:
@@ -465,9 +461,6 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
 #let entry(target, head, body, status) = grid(columns: (1fr, auto), column-gutter: 0.6em,
   link(target, { head; h(0.35em); text(fill: ink, body) }),
   align(right + top, box({ status; h(3pt); pagenum(target) })))
-#let cite(target, colour, icon, number) = box(baseline: -0.42em, link(target, box(fill: rgb(colour), inset: (x: 1.6pt), outset: (y: 1pt), radius: 2.5pt,
-  text(font: sans, fill: white, size: 5.2pt, weight: "bold", top-edge: "cap-height", bottom-edge: "baseline",
-    { box(height: 0.92em, baseline: 0.02em, image(bytes(icon), format: "svg")); h(0.8pt); number }))))
 #let icode(body) = { h(1.2pt); highlight(fill: luma(240), extent: 0.6pt, text(font: "DejaVu Sans Mono", size: 0.84em, body)); h(1.2pt) }
 #let badge(colour, body) = box(fill: rgb(colour), inset: (x: 4.5pt, y: 2.2pt), outset: (y: 0.5pt), radius: 2.5pt, text(font: sans, fill: white, size: 7.5pt, weight: "bold", body))
 #let pill(colour, body) = box(stroke: 0.6pt + rgb(colour), fill: rgb(colour).lighten(92%), inset: (x: 4.5pt, y: 1.8pt), outset: (y: 0.5pt), radius: 7pt, text(font: sans, size: 7.5pt, fill: rgb(colour).darken(10%), body))
@@ -586,14 +579,14 @@ class PdfWriter:
         return self.reference_numbers[key]
 
     def cite(self, key: str, link_text: str) -> str | None:
-        """A link to a reference page as a numbered citation mark (superscript tag B1, numbered in order of first
-        citation, Nature style); text given with the link ([[ref-x|Smith 2020]]) stays in front of the mark."""
+        """A link to a reference page as an ordinary tag in the line ([B1], the same size as every other tag, with
+        the page number), numbered in order of first citation; text given with the link ([[ref-x|Smith 2020]])
+        stays in front of the tag."""
         node = self.tree.nodes.get(key)
         if node is None or node.type != "reference":
             return None
-        mark = (f"#cite({label(key)}, {string(TYPE_COLOURS['reference'])}, {icon_bytes('reference')}, "
-                f"[{self.reference_number(key)}])")
-        return mark if not link_text or link_text == node.title else f"{text(link_text)}{mark}"
+        mark = f"#nlink({label(key)})[{tag_markup('reference', self.reference_number(key))}]"
+        return mark if not link_text or link_text == node.title else f"{text(link_text)} {mark}"
 
     def data_href(self, target: str, prefix: str) -> tuple[str | None, str]:
         node = self.artefact_by_path.get(target.rstrip("/"))
@@ -719,9 +712,49 @@ class PdfWriter:
             lines.append(f"#strong[Limited by:] {self.links(node.incoming['Limited by'])}")
         if node.type == "caveat" and node.relations.get("limits"):
             lines.append(f"#strong[Limits:] {self.links(node.relations['limits'])}")
+        if node.type == "step":                  # methods: what the step served and what follows from it
+            used_for, results, conclusions = self.step_outcomes(node)
+            tools = [self.tree.nodes[key] for key in node.relations.get("uses", []) if key in self.tree.nodes]
+            if tools:
+                lines.append("#strong[Uses:] " + ", ".join(
+                    f"{self.link(tool)} {text(tool.title)}" + (f" ({text(str(tool.header['rrid']))})"
+                                                              if tool.header.get("rrid") else "") for tool in tools))
+            for name, keys in (("Used for", used_for), ("Results", results), ("Conclusions", conclusions)):
+                if keys:
+                    lines.append(f"#strong[{name}:] {self.links(keys)}")
         if lines:
             parts.append(f"#meta[{' #h(0.6em)·#h(0.6em) '.join(lines)}]")
         return "\n\n".join(part for part in parts if part.strip())
+
+    def step_outcomes(self, step: Node) -> tuple[list[str], list[str], list[str]]:
+        """(questions, results, conclusions) of a step: results it made (children, made_by), that test the
+        hypotheses it tests, or that read files it made (directly or through files made from them); the questions
+        those results and hypotheses belong to; conclusions resting on them."""
+        tested = set(step.relations.get("tests", []))
+        members = [node for node in self.tree.nodes.values() if node.project == step.project]
+
+        def made_here(node: Node) -> bool:
+            return node.parent == step.id or step.key in node.relations.get("made_by", [])
+        files = {node.key for node in members if node.type == "artefact" and made_here(node)}
+        while True:                              # files made from this step's files, and so on
+            more = {node.key for node in members if node.type == "artefact" and node.key not in files
+                    and files & set(node.relations.get("derived_from", []))}
+            if not more:
+                break
+            files |= more
+        results = [node.key for node in members if node.type == "result"
+                   and (made_here(node) or tested & set(node.relations.get("tests", []))
+                        or files & set(node.relations.get("from_artefact", [])))]
+        owners = self.owners_cache.setdefault(step.project, self.question_keys(step.project))
+        questions_of = [key for item in results + sorted(tested) for key in owners.get(item, [])]
+        for hypothesis in tested:
+            parent = self.tree.nodes.get(hypothesis)
+            if parent and parent.parent and self.tree.nodes.get(f"{parent.project}:{parent.parent}", parent).type == "question":
+                questions_of.append(f"{parent.project}:{parent.parent}")
+        found = set(results)
+        conclusions = [node.key for node in self.tree.nodes.values() if node.type == "conclusion"
+                       and found & set(self.supporting(node) + self.opposing(node))]
+        return list(dict.fromkeys(questions_of)), results, conclusions
 
     @staticmethod
     def source_paths(node: Node) -> list[str]:
@@ -998,7 +1031,8 @@ class PdfWriter:
         resources = self.of_type(project, "resource")
         if not resources:
             return []
-        fields = (("kind", "Kind"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
+        fields = (("kind", "Kind"), ("rrid", "RRID"), ("url", "Where"), ("dataset_id", "Dataset id"),
+                  ("accession", "Accession"),
                   ("version", "Version"),
                   ("deposit", "Deposit"), ("retrieved", "Retrieved"), ("sha256", "SHA-256"), ("size", "Size"),
                   ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
@@ -1172,7 +1206,7 @@ class PdfWriter:
             cells += [f"[{tag_markup('reference', self.reference_numbers[node.key])} {label(node.key)}]",
                       f"[{self.citation_markup(node)} #linebreak() #text(size: 8pt, fill: muted)[{text(node.short)}]]"]
         return ["== References",
-                "#intro[Numbered in the order they are first cited; the small superscript tags in the text "
+                "#intro[Numbered in the order they are first cited; the tags in the text "
                 "(" + tag_markup("reference", REFERENCE_PREFIX + "1") + ") point here. Under each: why the paper "
                 "is cited.]",
                 "#block[#set text(size: 9pt); #set par(justify: false)\n#grid(columns: (auto, 1fr), column-gutter: "
@@ -1329,6 +1363,7 @@ evidence, reviewed in cycles by readers and an AI agent.]
         self.placed = set()                      # document() may run twice (the site cache hashes a fixed-stamp copy)
         self.reference_numbers, self.glance_seen, self.section_names, self.notes = {}, set(), [], []
         self.closing_names: list[str] = []
+        self.owners_cache: dict[str, dict[str, list[str]]] = {}
         self.part_seen: set[str] = set()
         title = str(SETTINGS.get("title") or PROJECT_ROOT.name)
         heading = str(SETTINGS.get("heading") or "")

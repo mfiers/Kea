@@ -122,6 +122,7 @@ class Tree:
                       key=lambda child: (child.order, child.number, child.id))
 
 
+RRID_PATTERN = re.compile(r"RRID:[A-Za-z]+_[A-Za-z0-9_:.-]+")
 RESOURCE_FIELDS = ("kind", "version", "retrieved")     # what makes a resource reproducible (sha256 for files)
 
 
@@ -272,6 +273,11 @@ def _validate(tree: Tree) -> None:
                 missing.append("sha256")
             if missing:
                 tree.notes.append(f"{where}: resource without {', '.join(missing)} (needed to reproduce the analysis)")
+            rrid = str(node.header.get("rrid") or "")
+            if rrid and not RRID_PATTERN.fullmatch(rrid):
+                tree.problems.append(f"{where}: rrid {rrid!r} is not of the form RRID:SCR_0000000")
+            if not rrid and node.header.get("kind") in ("software", "database"):
+                tree.notes.append(f"{where}: no rrid (look it up on scicrunch.org/resources; `kea rrid` checks it)")
         if node.type == "artefact" and not node.header.get("path"):
             tree.problems.append(f"{where}: artefact without path")
         for relation, targets in node.relations.items():

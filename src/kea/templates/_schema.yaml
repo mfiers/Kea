@@ -59,7 +59,8 @@ relations:
 
 # Resources (type resource, numbered O1, O2 …): what the analysis takes from outside, so that it can be
 # reproduced. Front matter: kind (database | api | mcp_server | file | software | dataset), url, version,
-# retrieved (ISO date), sha256 (files and datasets), size, local (path of the local copy), access, licence;
+# retrieved (ISO date), sha256 (files and datasets), size, local (path of the local copy), access, licence,
+# rrid (Research Resource Identifier, e.g. RRID:SCR_008633, checked with `kea rrid`);
 # for a record on a server also accession or dataset_id (and deposit for Anthive). A source (catalog, database,
 # API, MCP server) is one resource; each record taken from it (a dataset, a GWAS study, an accession, a release
 # file) is a resource of its own, `part_of:` the source, citing (`cites:`) the paper behind it. Steps, results

@@ -172,3 +172,24 @@ def test_crossref_fallback_shapes_a_record(monkeypatch):
                         "issued": {"date-parts": [[2002, 8]]}}}
     monkeypatch.setattr(cite.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(json.dumps(work).encode()))
     assert cite.nature(cite.fetch_crossref("10.1/x")) == "Storey, J. D. A direct approach. *J R Stat Soc B* **64**, 479–498 (2002)."
+
+
+def test_citations_are_inline_tags_not_superscript(toy_doc):
+    write_page(toy_doc, "proj/reference/ref-a.md", "id: ref-a\ntype: reference\ntitle: Smith 2020\nshort: A paper.\n"
+               "parent: home")
+    write_page(toy_doc, "proj/result/r-c.md", "id: r-c\ntype: result\ntitle: R\nshort: A result.\nparent: home\n"
+               "status: done\nsources:\n  - data: x.tsv", "As shown before ([[ref-a]]).")
+    source = pdf.PdfWriter(nodes.load_tree(toy_doc)).document({"version": "-", "commit": "-", "built": "-"})
+    assert "#nlink(<proj:ref-a>)[#tag(" in source and "#cite(" not in source and "baseline: -0.42em" not in source
+
+
+def test_methods_steps_name_their_questions_results_and_conclusions(toy_doc):
+    write_page(toy_doc, "proj/step/s-a.md", "id: s-a\ntype: step\ntitle: Do it\nshort: A step.\nparent: home\nstatus: done")
+    write_page(toy_doc, "proj/result/r-s.md", "id: r-s\ntype: result\ntitle: Out\nshort: A result.\nparent: s-a\n"
+               "status: done\nrelations:\n  answers: [q-a]\nsources:\n  - data: x.tsv")
+    write_page(toy_doc, "proj/conclusion/c-s.md", "id: c-s\ntype: conclusion\ntitle: So\nshort: Hence.\nparent: home\n"
+               "status: supported\nrelations:\n  supported_by: [r-s]")
+    writer = pdf.PdfWriter(nodes.load_tree(toy_doc))
+    source = writer.document({"version": "-", "commit": "-", "built": "-"})
+    methods = source.split("== Methods")[1]
+    assert "#strong[Used for:]" in methods and "#strong[Results:]" in methods and "#strong[Conclusions:]" in methods

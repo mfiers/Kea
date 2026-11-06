@@ -8,6 +8,7 @@
                                       the review cycle (see `kea list --help` etc.)
     kea pdf [--out FILE]               one PDF of all pages (needs Typst; writes the .typ source without it)
     kea cite [--write] [ID …]         full citations (Nature style) for reference pages, from Europe PMC
+    kea rrid                          check every resource's RRID against the SciCrunch resolver
     kea context <question|experiment> what to take into account before working on it (premises, decisions,
                                       caveats, evidence so far, open comments, gaps)
     kea check                         validate doc/ against doc/_schema.yaml without building
@@ -37,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == "cite":
         from kea.docsite import cite
         return cite.main(rest)
+    if command == "rrid":
+        from kea.docsite import rrid
+        return rrid.main(rest)
     if command == "context":
         from kea.docsite import context
         return context.main(rest)

@@ -22,7 +22,7 @@ from kea.docsite import icons
 
 CHILD_ORDER = ["goal", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
                "artefact", "resource", "caveat", "term", "reference", "dataset", "page"]
-RESOURCE_LABELS = (("kind", "Kind"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
+RESOURCE_LABELS = (("kind", "Kind"), ("rrid", "RRID"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
                    ("version", "Version"),
                    ("deposit", "Deposit"), ("retrieved", "Retrieved"), ("sha256", "SHA-256"), ("size", "Size"),
                    ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
@@ -43,6 +43,8 @@ def resource_panel(node: Node) -> str:
             shown = f"<a href='{esc(value)}'>{esc(value)}</a>"
         elif key in ("sha256", "local"):
             shown = f"<code>{esc(value)}</code>"
+        elif key == "rrid":
+            shown = f"<a href='https://scicrunch.org/resolver/{esc(value)}'>{esc(value)}</a>"
         rows.append(f"<tr><th>{label}</th><td>{shown}</td></tr>")
     return f"<table class='resource-facts not-annotatable'>{''.join(rows)}</table>"
 
@@ -813,7 +815,8 @@ class SiteRenderer:
                 "public": "This public copy does not include the data files; ask the authors."}[mode.MODE]
         resource_rows = "".join(
             f"<tr><td>{node_link(node, prefix)}</td><td><a href='{prefix}{node.url}'>{esc(node.title)}</a></td>"
-            f"<td>{esc(node.header.get('kind', ''))}</td><td>{esc(node.header.get('version', ''))}</td>"
+            f"<td>{esc(node.header.get('kind', ''))}</td><td>{esc(node.header.get('rrid', ''))}</td>"
+            f"<td>{esc(node.header.get('version', ''))}</td>"
             f"<td>{esc(node.header.get('retrieved', ''))}</td>"
             f"<td><code>{esc(str(node.header.get('sha256', ''))[:12])}</code></td></tr>"
             for node in sorted((node for node in self.tree.nodes.values() if node.type == "resource"),
@@ -829,7 +832,7 @@ class SiteRenderer:
                 f"refers to: the resources it takes from outside, the artefacts it made (each with its own page), "
                 f"the figure files and the other data files named as sources. {note}</div>"
                 + (f"<h2>Resources</h2><table class='not-annotatable'><tr><th></th><th>what</th><th>kind</th>"
-                   f"<th>version</th><th>retrieved</th><th>sha256</th></tr>{resource_rows}</table>"
+                   f"<th>RRID</th><th>version</th><th>retrieved</th><th>sha256</th></tr>{resource_rows}</table>"
                    if resource_rows else "")
                 + f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
                 f"<th>path</th><th>size</th><th></th></tr>{''.join(artefact_rows)}</table>"

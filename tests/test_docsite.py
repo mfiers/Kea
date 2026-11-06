@@ -199,3 +199,27 @@ def test_a_submit_sent_twice_is_stored_once(tmp_path):
     client.post(f"/api/threads/{thread_id}/reply", json={"text": "more"}, headers={"X-Kea-Request": "load2-b"})
     replies = [event for event in store.load_events(events) if event["type"] == "reply"]
     assert len(store.load_events(events)) == 3 and len(replies) == 2   # one create, the reply once per key
+
+
+def test_rrid_is_checked_for_form_and_missing_on_software(toy_doc):
+    write_page(toy_doc, "proj/resource/o-np.md", "id: o-np\ntype: resource\ntitle: NumPy\nshort: Arrays.\nparent: home\n"
+               "status: current\nkind: software\nversion: '2.4'\nretrieved: 2026-11-06\nrrid: RRID:SCR_008633")
+    write_page(toy_doc, "proj/resource/o-x.md", "id: o-x\ntype: resource\ntitle: X\nshort: A tool.\nparent: home\n"
+               "status: current\nkind: software\nversion: '1'\nretrieved: 2026-11-06")
+    write_page(toy_doc, "proj/resource/o-bad.md", "id: o-bad\ntype: resource\ntitle: Bad\nshort: A tool.\nparent: home\n"
+               "status: current\nkind: software\nversion: '1'\nretrieved: 2026-11-06\nrrid: SCR-1")
+    tree = nodes.load_tree(toy_doc)
+    assert any("o-bad.md: rrid 'SCR-1'" in problem for problem in tree.problems)
+    assert any("o-x.md: no rrid" in note for note in tree.notes)
+    assert not any("o-np.md" in item for item in tree.notes + tree.problems)
+
+
+def test_rrid_resolver(monkeypatch):
+    import io
+    from kea.docsite import rrid
+    found = {"hits": {"hits": [{"_source": {"item": {"name": "NumPy"}}}]}}
+    monkeypatch.setattr(rrid.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(json.dumps(found).encode()))
+    assert rrid.resolve("RRID:SCR_008633") == "NumPy"
+    monkeypatch.setattr(rrid.urllib.request, "urlopen",
+                        lambda *args, **kwargs: io.BytesIO(json.dumps({"hits": {"hits": []}}).encode()))
+    assert rrid.resolve("RRID:SCR_000000") is None

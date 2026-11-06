@@ -65,8 +65,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.8.7"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.8.7
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.9.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.9.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -107,7 +107,7 @@ Then:
   data files; figure files), the glossary (terms T1 …, then groups such as *Genes*), the references and what
   changed (releases with kind, plan and commit; runs with their commits).
 
-References are numbered B1, B2 … in order of first citation, shown in the text as small superscript tags, and listed
+References are numbered B1, B2 … in order of first citation, shown in the text as tags like every other page (not superscript), and listed
 like a journal's reference list from each page's `citation:` (`kea cite --write` fills it from Europe PMC, Nature
 style). Full names read as the kind in its colour followed by the tag (Question [Q1]); lists of pages carry the
 status and page number at the end of each line. Figures are printed at their own size (from the PNG's dpi), at most
@@ -120,7 +120,9 @@ It leaves out comments, plans, code listings, the relations graph (the overview 
 the contents of data files, so no donor-level rows reach the PDF. It needs
 [Typst](https://github.com/typst/typst/releases) (a single binary; or `typst:` in `kea.yaml`). Without it the
 `.typ` source is still written. Output goes to `report/pdf/<title>_<date>_<version>_<commit>.pdf` and is never
-overwritten. A figure page may set `pdf_width:` (`100%`, `12cm`) to override the automatic size.
+overwritten. Resources may carry an `rrid:` (Research Resource Identifier); `kea rrid` checks each against the SciCrunch
+resolver, and the PDF's Methods list the tools each step uses with their RRIDs, plus the questions, results and
+conclusions that follow from the step. A figure page may set `pdf_width:` (`100%`, `12cm`) to override the automatic size.
 
 `kea build` also puts the PDF into the site, linked from the home page, when Typst is installed. It is recompiled
 only when something in it changes: the cache key (`report/pdf/_cache/`) covers the whole Typst source, every image

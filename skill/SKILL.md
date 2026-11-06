@@ -120,8 +120,13 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - **Resources** (`resource/`, numbered O1, O2 …): everything the analysis takes from outside: a database or API, an
   MCP server, a dataset on a server, an uploaded or downloaded file, software with its version. Front matter:
   `kind` (database | api | mcp_server | dataset | file | software), `url`, `version`, `retrieved` (ISO date),
-  `sha256` (files), `local` (path of the local copy), `access`, `licence`. Steps, results and figures point to
-  them with `uses:`. The build notes resources without kind, version, retrieved date or (files, datasets)
+  `sha256` (files), `local` (path of the local copy), `access`, `licence`, and `rrid` (Research Resource
+  Identifier) where one exists. Steps, results and figures point to them with `uses:`.
+- **Tools are resources too, with RRIDs.** Every tool a step runs (language, packages, command-line tools) gets a
+  `kind: software` resource with the exact version from the lock file, `part_of:` a resource for the environment
+  (the lock file with its sha256), and its RRID: find it on scicrunch.org/resources (never from memory) and run
+  `kea rrid`, which checks every RRID against the SciCrunch resolver. Each step `uses:` the tools its scripts
+  import; the PDF's Methods list them with their RRIDs. A tool without an RRID keeps its version and URL. The build notes resources without kind, version, retrieved date or (files, datasets)
   checksum. Keep them apart from references (papers): a resource is what you need to rerun the analysis.
 - **A source and each record taken from it are separate resources.** A website, catalog, database, API or MCP
   server is one resource (its URL, release or version, the date it was queried, the client and its version). Each
@@ -139,7 +144,7 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   file that is not on the server is a `kind: file` resource of its own, and the mismatch is a caveat.
 - Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
   the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
-  PMC, or Crossref for DOIs Europe PMC does not index); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.
+  PMC, or Crossref for DOIs Europe PMC does not index); the PDF numbers references B1, B2 … in order of first citation, shows them in the text as ordinary tags (never superscript) and lists them like a journal.
 - **Name pages by their link**, never as "conclusion 2" or "step 3": `[[c-x]]` shows the kind and tag
   (Conclusion C2) exactly as everywhere else; the build notes spelled-out names.
 - **Executive summaries**, written for a biologist (or whoever the reader is) who has five minutes:
