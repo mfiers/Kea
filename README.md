@@ -8,7 +8,7 @@ A documentation site for a data analysis, built from typed Markdown pages, with
 comments, review cycles run by an agent, and semantic versions.
 
 - **Typed pages** in `doc/<experiment>/<type>/<id>.md`: goal, premise, question, hypothesis (written before or
-  after the results), step, result, conclusion, decision, figure, artefact, resource (a data source, server or file from outside, with version and checksum), caveat, term, reference. Typed
+  after the results), step, result, conclusion, decision, figure, artefact, resource (a data source, server or file from outside, with version and checksum; each record taken from a source, such as a dataset or a GWAS study, is a resource of its own, part of the source), caveat, term, reference. Typed
   relations live in the front matter (supports, opposes, answers, tests, limits, …) and are checked against
   `doc/_schema.yaml`.
 - **The site** (`kea build`) shows:
@@ -65,8 +65,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.8.4"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.8.4
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.8.5"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.8.5
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)

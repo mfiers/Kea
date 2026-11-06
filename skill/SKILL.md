@@ -121,8 +121,22 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   MCP server, a dataset on a server, an uploaded or downloaded file, software with its version. Front matter:
   `kind` (database | api | mcp_server | dataset | file | software), `url`, `version`, `retrieved` (ISO date),
   `sha256` (files), `local` (path of the local copy), `access`, `licence`. Steps, results and figures point to
-  them with `uses:`. The build notes resources without kind, version, retrieved date or (files) checksum. Keep
-  them apart from references (papers): a resource is what you need to rerun the analysis.
+  them with `uses:`. The build notes resources without kind, version, retrieved date or (files, datasets)
+  checksum. Keep them apart from references (papers): a resource is what you need to rerun the analysis.
+- **A source and each record taken from it are separate resources.** A website, catalog, database, API or MCP
+  server is one resource (its URL, release or version, the date it was queried, the client and its version). Each
+  record the analysis uses from it (a dataset, a study, an accession, a release file) is a resource of its own:
+  its `accession` or `dataset_id`, its own `version`/release, the `retrieved` date, the `sha256` and `size` of the
+  local copy, `part_of:` the source's page, and `cites:` the reference page of the paper behind it (fetched, with
+  `kea cite`). Examples: the GWAS Catalog is one resource and each GWAS study used (GCST accession, its summary
+  statistics file) is another, citing its paper; Open Targets (platform release) and each target or credible set
+  used; Europe PMC and a saved search result.
+- **Anthive** follows the same rule: one resource for the server (`kind: database`, URL, Anthive version, vark
+  version), one per Anthive dataset read (`kind: dataset`, `dataset_id` such as F26/PFC, the dataset `version` and
+  `deposit` id from `vark datasets status <deposit> --json`, the h5ad's `sha256` and `size`, cells, genes, the
+  datasets it reanalyses, access, licence, `cites:` its source paper), `part_of:` the server. When the analysis
+  reads a local copy, compare its checksum with the deposit's and say on the page whether they match; a local
+  file that is not on the server is a `kind: file` resource of its own, and the mismatch is a caveat.
 - Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
   the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
   PMC); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.

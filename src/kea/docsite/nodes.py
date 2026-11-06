@@ -31,12 +31,13 @@ REVERSE_LABELS = {"answers": "Answered by", "tests": "Tested by", "supports": "S
                   "opposes": "Opposed by", "supported_by": "Supports", "opposed_by": "Opposes",
                   "relies_on": "Used by", "shown_in": "Shows", "made_by": "Makes", "from_artefact": "Used in",
                   "derived_from": "Used to make", "decided_in": "Applies to", "supersedes": "Superseded by",
-                  "limits": "Limited by", "addressed_by": "Addresses", "cites": "Cited by", "uses": "Used in"}
+                  "limits": "Limited by", "addressed_by": "Addresses", "cites": "Cited by", "uses": "Used in",
+                  "part_of": "Contains"}
 FORWARD_LABELS = {"answers": "Answers", "tests": "Tests", "supports": "Supports", "opposes": "Opposes",
                   "supported_by": "Supported by", "opposed_by": "Opposed by", "relies_on": "Builds on",
                   "shown_in": "Shown in", "made_by": "Made by", "from_artefact": "From", "derived_from": "Made from",
                   "decided_in": "Decided in", "supersedes": "Supersedes", "limits": "Limits",
-                  "addressed_by": "Addressed by", "cites": "Cites", "uses": "Uses"}
+                  "addressed_by": "Addressed by", "cites": "Cites", "uses": "Uses", "part_of": "Part of"}
 # merge equivalent edges written from either side, so reverse lists don't duplicate
 EQUIVALENT = {"supported_by": "supports", "opposed_by": "opposes"}
 
@@ -267,7 +268,7 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{where}: caveat without limits (say what it limits)")
         if node.type == "resource":
             missing = [name for name in RESOURCE_FIELDS if not node.header.get(name)]
-            if node.header.get("kind") == "file" and not node.header.get("sha256"):
+            if node.header.get("kind") in ("file", "dataset") and not node.header.get("sha256"):
                 missing.append("sha256")
             if missing:
                 tree.notes.append(f"{where}: resource without {', '.join(missing)} (needed to reproduce the analysis)")

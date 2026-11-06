@@ -52,14 +52,18 @@ relations:
   addressed_by:   {from: [caveat], to: [step, result, decision, conclusion]}
   cites:          {from: [any], to: [reference]}
   uses:           {from: [step, result, figure, artefact, decision, premise], to: [resource]}
+  part_of:        {from: [resource], to: [resource]}            # a dataset on a server, a file of a release
 
 # Terms (type term) may list `aliases:`; the first use of the title or an alias on every page of the same
 # experiment links to the term page automatically (not inside links, code, headings or tables of numbers).
 
 # Resources (type resource, numbered O1, O2 …): what the analysis takes from outside, so that it can be
 # reproduced. Front matter: kind (database | api | mcp_server | file | software | dataset), url, version,
-# retrieved (ISO date), sha256 (files), local (path of the local copy), access, licence. Steps, results and
-# figures point to them with `uses:`.
+# retrieved (ISO date), sha256 (files and datasets), size, local (path of the local copy), access, licence;
+# for a record on a server also accession or dataset_id (and deposit for Anthive). A source (catalog, database,
+# API, MCP server) is one resource; each record taken from it (a dataset, a GWAS study, an accession, a release
+# file) is a resource of its own, `part_of:` the source, citing (`cites:`) the paper behind it. Steps, results
+# and figures point to them with `uses:`.
 
 required:
   conclusion: [relations.supports_or_opposes_from_results]   # a conclusion needs at least one result behind it

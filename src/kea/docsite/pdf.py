@@ -10,7 +10,7 @@ The PDF tells each experiment as a story for a reader who is not on the site (a 
                      answer it or test its hypotheses, each followed by the figures that show it
     Conclusions, Caveats, Methods (steps, each with its decisions), Other pages (anything not placed above)
     closing chapters overview of all pages (one table per kind), hypotheses in full, data and resources
-                     (resources O, data files, figure files), glossary (terms T, then groups such as Genes),
+                     (resources O, data files), figure files, glossary (terms T, then groups such as Genes),
                      references (numbered B in order of citation, Nature style), what changed (document)
 
 At the end a standard chapter "About this document" explains the page types (with the site's colours), numbers,
@@ -600,7 +600,10 @@ class PdfWriter:
         return (f"{prefix}{node.url}", f"{node.number} {target}") if node else (None, target)
 
     def link(self, node: Node) -> str:
-        """The tag is the link (as on the site); pages without a number are linked by their title."""
+        """The tag is the link (as on the site); references by their citation number (B1); other pages without a
+        number by their title."""
+        if node.type == "reference":
+            return f"#nlink({label(node.key)})[{tag_markup('reference', self.reference_number(node.key))}]"
         if node.number:
             return f"#nlink({label(node.key)})[{tag_markup(node.type, node.number)}]"
         return f"#nlink({label(node.key)})[{text(node.title)}]"
@@ -947,7 +950,7 @@ class PdfWriter:
             parts += [f"== Hypotheses in full",
                       "#intro[As written, with the test and the expectation. Whether each was written before its test "
                       "is shown on its pill.]"] + [self.section(node, 3) for node in hypotheses]
-        data_parts = self.resources_table(project)
+        data_parts, figure_parts = self.resources_table(project), []
         data = self.of_type(project, "artefact")
         if data:
             cells = []
@@ -974,7 +977,7 @@ class PdfWriter:
                           f"[#mono[{text(str(figure.header.get('image', '')), breakable=True)}]]",
                           f"[#mono[{text(str(figure.header.get('script', '')), breakable=True)}]]",
                           f"[#mono[{text(str(figure.header.get('table', '')), breakable=True)}]]"]
-            data_parts += ["=== Figure files",
+            figure_parts += ["== Figure files",
                       "#intro[Each figure is made by a script from a saved table; the image, script and table are "
                       "kept in the project folder.]",
                       f"#datatable(4, 7.5pt, 1, table.header([Figure], [Image], [Script], [Table]), " + ", ".join(cells) + ")"]
@@ -982,7 +985,8 @@ class PdfWriter:
             parts += ["== Data and resources",
                       "#intro[What the analysis takes from outside (resources: databases, servers, files, with the "
                       "version, date and checksum needed to get the same input again), then the files it made and "
-                      "the figure files.]"] + data_parts
+                      "figure files are in the next chapter.]"] + data_parts
+        parts += figure_parts
         parts += self.glossary(project)
         parts += self.bibliography(project)
         return parts
@@ -993,8 +997,10 @@ class PdfWriter:
         resources = self.of_type(project, "resource")
         if not resources:
             return []
-        fields = (("kind", "Kind"), ("url", "Where"), ("version", "Version"), ("retrieved", "Retrieved"),
-                  ("sha256", "SHA-256"), ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
+        fields = (("kind", "Kind"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
+                  ("version", "Version"),
+                  ("deposit", "Deposit"), ("retrieved", "Retrieved"), ("sha256", "SHA-256"), ("size", "Size"),
+                  ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
         blocks = []
         for item in resources:
             self.placed.add(item.key)
@@ -1012,6 +1018,13 @@ class PdfWriter:
                 else:
                     shown = text(value)
                 cells += [f"[#text(fill: muted)[{name}]]", f"[{shown}]"]
+            for relation, name in (("part_of", "Part of"), ("cites", "Paper")):
+                linked = [key for key in item.relations.get(relation, []) if key in self.tree.nodes]
+                if linked:
+                    cells += [f"[#text(fill: muted)[{name}]]", f"[{self.links(linked)}]"]
+            contains = item.incoming.get("Contains", [])
+            if contains:
+                cells += ["[#text(fill: muted)[Contains]]", f"[{self.links(contains)}]"]
             blocks.append(f"#block(breakable: false, stroke: (left: 3pt + rgb({string(TYPE_COLOURS['resource'])})), "
                           f"inset: (left: 9pt, y: 4pt), above: 1em)[{self.full_name(item)} #h(0.3em) "
                           f"#strong[{text(item.title)}] {label(item.key)} #h(1fr) {status_pill(item.status)}\n\n"

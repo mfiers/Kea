@@ -147,3 +147,17 @@ def test_resource_body_reaches_the_pdf(toy_doc):
                "| dataset | version |\n|---|---|\n| X1 | 2 |")
     source = pdf.PdfWriter(nodes.load_tree(toy_doc)).document({"version": "-", "commit": "-", "built": "-"})
     assert "== Data and resources" in source and "[X1]" in source
+
+
+def test_a_record_from_a_source_is_its_own_resource(toy_doc):
+    write_page(toy_doc, "proj/reference/ref-study.md", "id: ref-study\ntype: reference\ntitle: Smith 2020\n"
+               "short: The study.\nparent: home")
+    write_page(toy_doc, "proj/resource/o-gwas.md", "id: o-gwas\ntype: resource\ntitle: GWAS Catalog\nshort: Catalog.\n"
+               "parent: home\nstatus: current\nkind: database\nversion: '2026-10'\nretrieved: 2026-11-06")
+    write_page(toy_doc, "proj/resource/o-gcst.md", "id: o-gcst\ntype: resource\ntitle: A GWAS study\nshort: Study.\n"
+               "parent: home\nstatus: current\nkind: dataset\naccession: GCST90027158\nversion: '1'\n"
+               "retrieved: 2026-11-06\nsha256: abc\nrelations:\n  part_of: [o-gwas]\n  cites: [ref-study]")
+    tree = nodes.load_tree(toy_doc)
+    assert tree.problems == [] and tree.nodes["proj:o-gwas"].incoming["Contains"] == ["proj:o-gcst"]
+    source = pdf.PdfWriter(tree).document({"version": "-", "commit": "-", "built": "-"})
+    assert "GCST90027158" in source and "[Part of]" in source and "[Paper]" in source and "[Contains]" in source

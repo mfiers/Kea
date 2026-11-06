@@ -22,8 +22,10 @@ from kea.docsite import icons
 
 CHILD_ORDER = ["goal", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
                "artefact", "resource", "caveat", "term", "reference", "dataset", "page"]
-RESOURCE_LABELS = (("kind", "Kind"), ("url", "Where"), ("version", "Version"), ("retrieved", "Retrieved"),
-                   ("sha256", "SHA-256"), ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
+RESOURCE_LABELS = (("kind", "Kind"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
+                   ("version", "Version"),
+                   ("deposit", "Deposit"), ("retrieved", "Retrieved"), ("sha256", "SHA-256"), ("size", "Size"),
+                   ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
 
 
 def resource_panel(node: Node) -> str:
@@ -33,7 +35,7 @@ def resource_panel(node: Node) -> str:
     for key, label in RESOURCE_LABELS:
         value = node.header.get(key)
         if value is None or value == "":
-            if key in RESOURCE_FIELDS or (key == "sha256" and node.header.get("kind") == "file"):
+            if key in RESOURCE_FIELDS or (key == "sha256" and node.header.get("kind") in ("file", "dataset")):
                 rows.append(f"<tr><th>{label}</th><td class='missing'>not recorded</td></tr>")
             continue
         shown = esc(value)
@@ -809,14 +811,33 @@ class SiteRenderer:
         note = {"review": "Downloads go through the site server (files up to 1 GB).",
                 "local": "Links open the files in the project folder.",
                 "public": "This public copy does not include the data files; ask the authors."}[mode.MODE]
+        resource_rows = "".join(
+            f"<tr><td>{node_link(node, prefix)}</td><td><a href='{prefix}{node.url}'>{esc(node.title)}</a></td>"
+            f"<td>{esc(node.header.get('kind', ''))}</td><td>{esc(node.header.get('version', ''))}</td>"
+            f"<td>{esc(node.header.get('retrieved', ''))}</td>"
+            f"<td><code>{esc(str(node.header.get('sha256', ''))[:12])}</code></td></tr>"
+            for node in sorted((node for node in self.tree.nodes.values() if node.type == "resource"),
+                               key=lambda item: (item.project, natural(item.number))))
+        figure_rows = "".join(
+            f"<tr><td>{node_link(node, prefix)}</td><td><a href='{prefix}{node.url}'>{esc(node.title)}</a></td>"
+            f"<td><code>{esc(node.header.get('image', ''))}</code></td><td><code>{esc(node.header.get('script', ''))}"
+            f"</code></td><td><code>{esc(node.header.get('table', ''))}</code></td></tr>"
+            for node in sorted((node for node in self.tree.nodes.values()
+                                if node.type == "figure" and node.header.get("image")),
+                               key=lambda item: (item.project, natural(item.number))))
         body = (crumbs([("Data", None)], prefix) + "<h1>Data</h1><div class='short'>Every file the documentation "
-                f"refers to: the artefacts (each with its own page) and the other data files named as sources. {note}"
-                "</div>"
-                f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
+                f"refers to: the resources it takes from outside, the artefacts it made (each with its own page), "
+                f"the figure files and the other data files named as sources. {note}</div>"
+                + (f"<h2>Resources</h2><table class='not-annotatable'><tr><th></th><th>what</th><th>kind</th>"
+                   f"<th>version</th><th>retrieved</th><th>sha256</th></tr>{resource_rows}</table>"
+                   if resource_rows else "")
+                + f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
                 f"<th>path</th><th>size</th><th></th></tr>{''.join(artefact_rows)}</table>"
                 + (f"<h2>Other data files named as sources</h2><table class='not-annotatable'><tr><th>file</th>"
                    f"<th>size</th><th>sha256</th><th></th></tr>{other_rows}</table>"
-                   if other_rows and mode.data_links() else ""))
+                   if other_rows and mode.data_links() else "")
+                + (f"<h2>Figure files</h2><table class='not-annotatable'><tr><th></th><th>figure</th><th>image</th>"
+                   f"<th>script</th><th>table</th></tr>{figure_rows}</table>" if figure_rows else ""))
         self.write("data.html", page("Data", body, prefix, None, self.tree))
 
     def history_page(self) -> None:
