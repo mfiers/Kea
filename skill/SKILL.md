@@ -88,7 +88,8 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 1. Install:
    - Python project with `pyproject.toml` (uv): `uv add "kea @ git+https://github.com/mfiers/Kea.git@vX.Y.Z"`.
    - Any other project (R, plain folder): `uv tool install git+https://github.com/mfiers/Kea.git@vX.Y.Z` once on
-     the machine; the Makefile then calls `kea` directly (`kea init` detects this).
+     the machine; the Makefile then calls `kea` directly (`kea init` detects this). To upgrade, run it again
+     with `--force` and the new tag (`uv tool upgrade` does not move a pinned tag).
 2. Ask the owner for the author name(s) for the PDF's title page unless you already know them, then run
    `kea init --title "<title>" --author "<name>" --experiment <first-experiment> --question "<question>"` in the project root. It
    never overwrites files; read what it reports. It adds `kea.yaml`, `doc/_schema.yaml`, `.env` with a random

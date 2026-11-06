@@ -56,6 +56,34 @@ same session, most within minutes:
 A wish for one project goes into `kea.yaml` or the project's own pages. A wish that would help every project goes
 into Kea, with a test, as a new tagged version.
 
+## Install
+
+Kea is not on PyPI; install it from this repository with [uv](https://docs.astral.sh/uv/) (it fetches Python ≥ 3.11
+if needed). Always name a tag (see [tags](https://github.com/mfiers/Kea/tags)), so a project does not change when
+Kea does.
+
+```
+# as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
+uv tool install git+https://github.com/mfiers/Kea.git@v1.10.0
+kea --help
+
+# or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.0"
+
+# or once, without installing
+uvx --from git+https://github.com/mfiers/Kea.git@v1.10.0 kea --help
+```
+
+- Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again).
+  `uv tool upgrade kea` does not move a pinned tag.
+- Remove: `uv tool uninstall kea` (or `uv remove kea`).
+- If `kea` is not found after `uv tool install`, run `uv tool update-shell` and open a new shell.
+- Needs `git` (for the install and for change logs and versions). Optional: [Typst](https://github.com/typst/typst/releases)
+  for the PDF (see [PDF](#pdf)).
+- The agent skill is separate: copy `skill/SKILL.md` to `~/.claude/skills/kea/SKILL.md` (Claude Code), from the
+  same tag:
+  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.10.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
+
 ## Use in a project
 
 **Kea is meant to be run by an AI coding agent** (Claude Code, or another harness that reads a skill file and runs
