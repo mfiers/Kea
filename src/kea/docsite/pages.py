@@ -15,13 +15,36 @@ from pathlib import Path
 from kea.config import SETTINGS
 from kea.docsite import artefacts, changes, codepages, comments, history, mode, questions, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_PLURALS, Node, Tree
-from kea.docsite.pdf import natural  # noqa: E402
+from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (LinkContext, card, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
                             prefix_for, render_markdown, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons
 
 CHILD_ORDER = ["goal", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
-               "artefact", "caveat", "term", "reference", "dataset", "page"]
+               "artefact", "resource", "caveat", "term", "reference", "dataset", "page"]
+RESOURCE_LABELS = (("kind", "Kind"), ("url", "Where"), ("version", "Version"), ("retrieved", "Retrieved"),
+                   ("sha256", "SHA-256"), ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
+
+
+def resource_panel(node: Node) -> str:
+    """The facts that make a resource reproducible, as a small table (missing ones marked)."""
+    from kea.docsite.nodes import RESOURCE_FIELDS
+    rows = []
+    for key, label in RESOURCE_LABELS:
+        value = node.header.get(key)
+        if value is None or value == "":
+            if key in RESOURCE_FIELDS or (key == "sha256" and node.header.get("kind") == "file"):
+                rows.append(f"<tr><th>{label}</th><td class='missing'>not recorded</td></tr>")
+            continue
+        shown = esc(value)
+        if key == "url" and str(value).startswith(("http://", "https://")):
+            shown = f"<a href='{esc(value)}'>{esc(value)}</a>"
+        elif key in ("sha256", "local"):
+            shown = f"<code>{esc(value)}</code>"
+        rows.append(f"<tr><th>{label}</th><td>{shown}</td></tr>")
+    return f"<table class='resource-facts not-annotatable'>{''.join(rows)}</table>"
+
+
 CAPTION_PARTS = ("*Shows:*", "*Method:*", "*Statistics:*")      # caption standard, doc/site_design.md
 REVIEW_STATUSES = ("open", "planned")                           # threads that put an experiment "under review"
 ASSETS = Path(__file__).resolve().parent / "static"
@@ -339,6 +362,8 @@ class SiteRenderer:
             if download:
                 self.downloads.add(download)
             parts.append(panel)
+        if node.type == "resource":
+            parts.append(resource_panel(node))
         body_text = node.body
         if node.type == "figure":   # an Obsidian-style embed of the figure's own image: already shown above
             embeds = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", body_text)
@@ -398,12 +423,13 @@ class SiteRenderer:
 
     # columns of the relations graph, left to right (question → hypothesis → result → conclusion)
     GRAPH_COLUMNS = {"goal": 0, "premise": 1, "question": 1, "hypothesis": 2, "decision": 2, "step": 3,
-                     "artefact": 4, "result": 5, "figure": 6, "caveat": 6, "conclusion": 7, "term": 8, "reference": 8}
-    GRAPH_HIDDEN = ("artefact", "figure", "term", "reference")        # unticked when the page opens
+                     "artefact": 4, "resource": 4, "result": 5, "figure": 6, "caveat": 6, "conclusion": 7, "term": 8,
+                     "reference": 8}
+    GRAPH_HIDDEN = ("artefact", "resource", "figure", "term", "reference")        # unticked when the page opens
     TYPE_COLOURS = {"goal": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#9467bd",
                     "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#7f7f7f",
                     "figure": "#17818a", "artefact": "#b8860b", "caveat": "#d35400", "term": "#556677",
-                    "reference": "#556677"}
+                    "reference": "#556677", "resource": "#5b6b2f"}
     RELATION_COLOURS = {"supports": "#1b7f4b", "supported_by": "#1b7f4b", "opposes": "#c0392b",
                         "opposed_by": "#c0392b", "limits": "#d35400", "answers": "#1f77b4", "tests": "#9467bd",
                         "relies_on": "#6a4c93"}
@@ -561,7 +587,6 @@ class SiteRenderer:
                 + (f"<h2>Summary</h2><article>{render_markdown(summary, context)}</article>" if summary else
                    "<div class='short'>Working documentation of the project: each experiment is a tree of small "
                    "pages (questions, premises, hypotheses, steps, results, conclusions, caveats).</div>")
-                + self.pdf_line()
                 + "<p class='help not-annotatable'>New here? <a href='help.html'>How to read this site</a>.</p>"
                 + f"<h2>Experiments</h2><div class='cards not-annotatable'>{cards}</div>{latest}"
                 + ("<h2>About this site</h2><ul class='not-annotatable'>" + "".join(
@@ -582,9 +607,16 @@ class SiteRenderer:
                     "conclusion": "what we make of results, with the evidence for and against",
                     "figure": "a figure with its full caption", "artefact": "a data file, with download",
                     "caveat": "what limits a result or conclusion", "term": "a glossary entry",
+                    "resource": "a data source, database, MCP server or file the analysis takes from outside, with its "
+                                "version, date, checksum and local copy",
                     "reference": "a paper, with its abstract and why it is cited"}
-        rows = "".join(f"<tr><td><span class='tag t-{kind}'>{icons.svg(kind)}{esc(TYPE_LABELS.get(kind, kind))}</span>"
-                       f"</td><td>{esc(meaning)}</td></tr>" for kind, meaning in meanings.items())
+        prefixes = self.tree.schema.get("number_prefix", {})
+
+        def legend(kind: str) -> str:        # the kind as on every page: word in its colour, then the tag
+            number = f"{prefixes[kind]}1" if kind in prefixes else ""
+            tag = (f" <span class='tag t-{kind}'>{icons.svg(kind)}{number}</span>" if number else "")
+            return f"<span class='fullname k-{kind}'>{esc(TYPE_LABELS.get(kind, kind))}{tag}</span>"
+        rows = "".join(f"<tr><td>{legend(kind)}</td><td>{esc(meaning)}</td></tr>" for kind, meaning in meanings.items())
         body = (crumbs([("Help", None)], "") + "<h1>How to read this site</h1>"
                 "<div class='short'>The documentation of a data analysis as a tree of small pages, one idea per page, "
                 "linked by typed relations (supports, opposes, answers, tests, limits).</div>"
@@ -617,13 +649,6 @@ class SiteRenderer:
         if mode.MODE != "review":       # no comments, editor, plans or history without the comment server
             body = re.sub(r"<h2>Comments and edits</h2>.*?</ul>", "", body, flags=re.S)
         self.write("help.html", page("Help", body, "", None, self.tree))
-
-    def pdf_line(self) -> str:
-        if not self.pdf:
-            return ""
-        return (f"<p class='not-annotatable'><a href='{esc(self.pdf['file'])}'><b>PDF of all pages</b></a> "
-                f"<span class='help'>site version {esc(self.pdf['version'])}, commit {esc(self.pdf['commit'])}, "
-                f"made {esc(self.pdf['built'])}: conclusions first, then methods, questions with results and figures, caveats; without comments, plans, history, code or data-file contents.</span></p>")
 
     def site_pages(self) -> list[tuple[str, str, str]]:
         """Site-wide pages from doc/_site/*.md (title, short in front matter) into site/<name>.html.

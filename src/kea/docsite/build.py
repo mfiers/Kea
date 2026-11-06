@@ -46,6 +46,8 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     if with_pdf:
         from kea.docsite import pdf
         renderer.pdf = pdf.site_pdf(tree, site)
+    from kea.docsite import render
+    render.PDF = renderer.pdf               # the menu bar links it on every page
     renderer.render_all()
     commit = comments.source_version(None)
     build_id = f"{dt.datetime.now().strftime('%Y%m%dT%H%M%S')}-{commit}"

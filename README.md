@@ -8,7 +8,7 @@ A documentation site for a data analysis, built from typed Markdown pages, with
 comments, review cycles run by an agent, and semantic versions.
 
 - **Typed pages** in `doc/<experiment>/<type>/<id>.md`: goal, premise, question, hypothesis (written before or
-  after the results), step, result, conclusion, decision, figure, artefact, caveat, term, reference. Typed
+  after the results), step, result, conclusion, decision, figure, artefact, resource (a data source, server or file from outside, with version and checksum), caveat, term, reference. Typed
   relations live in the front matter (supports, opposes, answers, tests, limits, …) and are checked against
   `doc/_schema.yaml`.
 - **The site** (`kea build`) shows:
@@ -65,8 +65,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.7.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.7.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.8.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.8.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -98,13 +98,14 @@ experiment, page 2 summarises each experiment and each is a chapter; with one, t
 Then:
 
 - *At a glance* (every question with its answer in short and its conclusions, each conclusion in full once, and
-  the open caveats), *Key terms* and term groups such as *Genes* (`group:` on a term page);
-- background and premises;
-- methods (steps, each followed by its decisions);
+  the open caveats);
+- background and scope, premises;
 - one part per question: a table of its hypotheses, then the results with their figures;
-- conclusions and caveats;
-- an appendix: overview tables (one per kind of page: tag, one line, status, question, linked pages), hypotheses in
-  full, data and figure files, the glossary, the references and what changed (versions and run entries).
+- conclusions, caveats and methods (steps, each followed by its decisions);
+- closing chapters: overview of all pages (one table per kind: tag, one line, status, question, linked pages),
+  hypotheses in full, data and resources (resources O1 … with version, retrieval date, checksum and local copy;
+  data files; figure files), the glossary (terms T1 …, then groups such as *Genes*), the references and what
+  changed (releases with kind, plan and commit; runs with their commits).
 
 References are numbered B1, B2 … in order of first citation, shown in the text as small superscript tags, and listed
 like a journal's reference list from each page's `citation:` (`kea cite --write` fills it from Europe PMC, Nature

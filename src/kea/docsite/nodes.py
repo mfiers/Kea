@@ -21,22 +21,22 @@ LINK_PATTERN = re.compile(r"\[\[([^\[\]|]+)(?:\|([^\[\]|]*))?(?:\|([^\[\]]*))?\]
 TYPE_LABELS = {"goal": "Goal", "premise": "Premise", "question": "Question", "hypothesis": "Hypothesis",
                "step": "Step", "result": "Result", "conclusion": "Conclusion", "decision": "Decision",
                "figure": "Figure", "artefact": "Artefact", "caveat": "Caveat", "term": "Term",
-               "reference": "Reference", "dataset": "Dataset", "page": "Page"}
+               "reference": "Reference", "resource": "Resource", "dataset": "Dataset", "page": "Page"}
 TYPE_PLURALS = {"goal": "Goals", "premise": "Premises", "question": "Questions", "hypothesis": "Hypotheses",
                 "step": "Steps", "result": "Results", "conclusion": "Conclusions", "decision": "Decisions",
                 "figure": "Figures", "artefact": "Artefacts", "caveat": "Caveats", "term": "Terms",
-                "reference": "References", "dataset": "Datasets", "page": "Pages"}
+                "reference": "References", "resource": "Resources", "dataset": "Datasets", "page": "Pages"}
 # reverse names of relations, shown on the target page
 REVERSE_LABELS = {"answers": "Answered by", "tests": "Tested by", "supports": "Supported by",
                   "opposes": "Opposed by", "supported_by": "Supports", "opposed_by": "Opposes",
                   "relies_on": "Used by", "shown_in": "Shows", "made_by": "Makes", "from_artefact": "Used in",
                   "derived_from": "Used to make", "decided_in": "Applies to", "supersedes": "Superseded by",
-                  "limits": "Limited by", "addressed_by": "Addresses", "cites": "Cited by"}
+                  "limits": "Limited by", "addressed_by": "Addresses", "cites": "Cited by", "uses": "Used in"}
 FORWARD_LABELS = {"answers": "Answers", "tests": "Tests", "supports": "Supports", "opposes": "Opposes",
                   "supported_by": "Supported by", "opposed_by": "Opposed by", "relies_on": "Builds on",
                   "shown_in": "Shown in", "made_by": "Made by", "from_artefact": "From", "derived_from": "Made from",
                   "decided_in": "Decided in", "supersedes": "Supersedes", "limits": "Limits",
-                  "addressed_by": "Addressed by", "cites": "Cites"}
+                  "addressed_by": "Addressed by", "cites": "Cites", "uses": "Uses"}
 # merge equivalent edges written from either side, so reverse lists don't duplicate
 EQUIVALENT = {"supported_by": "supports", "opposed_by": "opposes"}
 
@@ -121,13 +121,33 @@ class Tree:
                       key=lambda child: (child.order, child.number, child.id))
 
 
+RESOURCE_FIELDS = ("kind", "version", "retrieved")     # what makes a resource reproducible (sha256 for files)
+
+
+def with_defaults(schema: dict) -> dict:
+    """The project's schema plus what Kea's template has and the project's copy lacks (numbering prefixes,
+    statuses and relations of kinds added in later Kea versions, e.g. resource O, term T). The project's own
+    entries always win."""
+    from kea.config import PACKAGE_DIR
+    template = yaml.safe_load((PACKAGE_DIR / "templates" / "_schema.yaml").read_text()) or {}
+    merged = dict(schema)
+    for section in ("number_prefix", "status_values", "relations"):
+        own = dict(schema.get(section) or {})
+        used = set(own.values()) if section == "number_prefix" else set()
+        for key, value in (template.get(section) or {}).items():
+            if key not in own and not (section == "number_prefix" and value in used):
+                own[key] = value
+        merged[section] = own
+    return merged
+
+
 def _as_key(value: str, project: str) -> str:
     return value if ":" in value else f"{project}:{value}"
 
 
 def load_tree(doc: Path = DOC) -> Tree:
     """Read every node of every project, number them, add reverse edges, and validate."""
-    schema = yaml.safe_load((doc / "_schema.yaml").read_text())
+    schema = with_defaults(yaml.safe_load((doc / "_schema.yaml").read_text()) or {})
     nodes: dict[str, Node] = {}
     problems: list[str] = []
     project_dirs = [path for path in doc.iterdir() if path.is_dir() and not path.name.startswith("_")
@@ -180,12 +200,37 @@ def _number(tree: Tree) -> None:
             stack.extend(reversed(tree.children(node)))
         reading_order += sorted((node for node in tree.nodes.values()
                                  if node.project == project and node.key not in seen), key=lambda node: node.id)
+        terms = [node for node in reading_order if node.type == "term"]     # terms: in glossary order instead
+        reading_order = [node for node in reading_order if node.type != "term"] + sorted(terms, key=glossary_order)
         counters: dict[str, int] = {}
         for node in reading_order:
             prefix = prefixes.get(node.type)
             if prefix:
                 counters[node.type] = counters.get(node.type, 0) + 1
                 node.number = f"{prefix}{counters[node.type]}"
+
+
+GENE_SYMBOL = re.compile(r"[A-Z][A-Z0-9]*\d[A-Z0-9-]*|[A-Z][a-z0-9]*\d[a-z0-9]*")   # S100A8, CD74, Trem2
+
+
+def natural(value: str) -> list:
+    """Sort key that orders numbers by value: S100A2 before S100A10."""
+    return [(0, int(part), "") if part.isdigit() else (1, 0, part.lower()) for part in re.split(r"(\d+)", str(value))]
+
+
+def term_group(term: Node) -> str:
+    """The group a term is listed in: front matter `group:` (e.g. Genes, Proteins, Cell types), else 'Genes' for
+    a title that looks like a gene symbol (letters with a digit, no spaces), else '' (key terms)."""
+    group = str(term.header.get("group") or "").strip()
+    if group:
+        return group
+    return "Genes" if len(term.title) <= 12 and GENE_SYMBOL.fullmatch(term.title) else ""
+
+
+def glossary_order(term: Node) -> tuple:
+    """Key terms first, then each group by name; within them by title, numbers by value (T1, T2 … follow it)."""
+    group = term_group(term)
+    return (group != "", group.lower(), natural(term.title))
 
 
 def _allowed(rule: dict, source_type: str, target_type: str) -> bool:
@@ -207,7 +252,7 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{where}: status {node.status!r} not in {statuses[node.type]}")
         if node.type == "hypothesis" and "fixed_before_results" not in node.header:
             tree.problems.append(f"{where}: hypothesis without fixed_before_results")
-        internal = re.findall(r"\b[PQHSRCDFAW]\d{1,2}\b", node.short)
+        internal = re.findall(r"\b[PQHSRCDFAWTO]\d{1,2}\b", node.short)
         if internal:
             tree.notes.append(f"{where}: summary line uses internal labels {', '.join(sorted(set(internal)))} "
                               "(write it for the reader)")
@@ -220,6 +265,12 @@ def _validate(tree: Tree) -> None:
             tree.notes.append(f"{where}: summary line has {len(node.short.split())} words (aim for at most ~40)")
         if node.type == "caveat" and not node.relations.get("limits"):
             tree.problems.append(f"{where}: caveat without limits (say what it limits)")
+        if node.type == "resource":
+            missing = [name for name in RESOURCE_FIELDS if not node.header.get(name)]
+            if node.header.get("kind") == "file" and not node.header.get("sha256"):
+                missing.append("sha256")
+            if missing:
+                tree.notes.append(f"{where}: resource without {', '.join(missing)} (needed to reproduce the analysis)")
         if node.type == "artefact" and not node.header.get("path"):
             tree.problems.append(f"{where}: artefact without path")
         for relation, targets in node.relations.items():

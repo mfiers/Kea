@@ -44,7 +44,7 @@ def test_build_modes(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     run(["init", "--title", "Example", "--experiment", "first"], project)
     (project / "data").mkdir(exist_ok=True)
-    (project / "data" / "table.tsv").write_text("donor\tvalue\nD1\t3\n")
+    (project / "data" / "table.tsv").write_text("donor\tvalue\ndonor-zx81\t3\n")
     (project / "doc" / "first" / "result").mkdir()
     (project / "doc" / "first" / "artefact").mkdir()
     (project / "doc" / "first" / "step").mkdir()
@@ -66,7 +66,7 @@ def test_build_modes(tmp_path):
     assert run(["build", "--mode", "public", "--out", str(outside)], project).returncode == 0
     pages = "".join(path.read_text() for path in outside.rglob("*.html"))
     assert "data/table.tsv' download" not in pages and "/files/" not in pages and "fb-script" not in pages
-    assert "D1" not in pages                                                  # controlled preview left out
+    assert "donor-zx81" not in pages                                          # controlled preview left out
     assert not (outside / "plan.html").exists() and not (outside / "feedback.html").exists()
     assert (outside / "_public_report.json").exists()
     refused = run(["build", "--mode", "local", "--out", str(outside)], project)

@@ -59,7 +59,7 @@ h3{font-size:16px;margin:20px 0 6px}
 .t-goal{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#9467bd}
 .t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#7f7f7f}
 .t-figure{background:#17818a}.t-artefact{background:#b8860b}.t-caveat{background:#d35400}
-.t-term,.t-reference,.t-dataset,.t-page{background:#556}
+.t-term,.t-reference,.t-dataset,.t-page{background:#556}.t-resource{background:#5b6b2f}
 .badge .ico,.tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 a.tag,span.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:11px;
 padding:1px 8px 1px 6px;line-height:1.45;vertical-align:baseline;white-space:nowrap;box-shadow:0 1px 0 rgba(0,0,0,.18);
@@ -76,11 +76,12 @@ h1 .pills,.qhead .pills{font-size:0;margin-left:8px;vertical-align:middle;white-
 h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:4px}
 .k-goal{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#9467bd}.k-step{color:#2a7f62}
 .k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
-.k-artefact{color:#9a7000}.k-caveat{color:#d35400}.k-term,.k-reference,.k-dataset,.k-page{color:#556}
+.k-artefact{color:#9a7000}.k-caveat{color:#d35400}.k-term,.k-reference,.k-dataset,.k-page{color:#556}.k-resource{color:#5b6b2f}
 a.fullname,span.fullname{font-weight:700;margin-right:6px;white-space:nowrap}.fullname>.ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}
 .fullname .tag{margin-left:2px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
 h1 .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 .qblock h3{font-size:14px;margin:14px 0 4px;color:var(--fg)}
+table.resource-facts th{text-align:left;padding-right:14px;color:var(--muted);font-weight:600}table.resource-facts td.missing{color:#aa3333}table.resource-facts code{word-break:break-all}
 table.status-table{display:table;width:100%}table.status-table td{white-space:normal}
 tr.st-good td{background:#eaf6ef}tr.st-bad td{background:#fbeceb}tr.st-mid td{background:#fdf5e6}
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
@@ -230,6 +231,9 @@ def card(node: Node, prefix: str) -> str:
             f"<div class='cs'>{esc(node.short)}</div></div>")
 
 
+PDF: dict | None = None          # the PDF of all pages ({"file", "version", "commit", "built"}), set by the build
+
+
 def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, node: Node | None = None,
            here: str | None = None) -> str:
     """Menu bar. Left: "Kea" (home) / project / experiment / [tag] page title. Right: the menu, the page tools
@@ -262,6 +266,9 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
                   f"<a href='{prefix}changes/index.html'>What changed</a>", f"<a href='{prefix}data.html'>Data</a>",
                   f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
+    if PDF:
+        right.append(f"<a href='{prefix}{esc(PDF['file'])}' title='All pages as one PDF: version "
+                     f"{esc(PDF['version'])}, commit {esc(PDF['commit'])}, made {esc(PDF['built'])}'>PDF</a>")
     right.append(f"<a href='{prefix}help.html'>Help</a>")
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"

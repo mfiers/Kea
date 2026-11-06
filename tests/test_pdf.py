@@ -46,8 +46,8 @@ def test_toy_tree_compiles(toy_doc, tmp_path):
     source = writer.document()
     fixed = {"version": "-", "commit": "-", "built": "-"}
     assert writer.document(fixed) == writer.document(fixed)        # repeatable (the site cache renders it twice)
-    assert "<proj:r-a>" in source and "== Appendix: glossary" in source and "<kea-about>" in source
-    assert "== Appendix: overview of all pages" in source
+    assert "<proj:r-a>" in source and "== Glossary" in source and "<kea-about>" in source
+    assert "== Overview of all pages" in source and "Appendix" not in source
     assert source.index("== At a glance") < source.index("<proj:q-a>") < source.index("<proj:r-a>")
     assert "#chapter(" not in source.split("#chapter(none)")[0].split("#outline")[1]   # one experiment: no chapter page
     assert "#tag(" in source and "Document version " in source and "Site version" not in source

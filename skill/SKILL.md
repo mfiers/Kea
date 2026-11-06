@@ -1,6 +1,6 @@
 ---
 name: kea
-description: Set up and run a Kea site for a data analysis, and run the analysis through it. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user says "use Kea", wants an explained, commentable project site, wants to review or discuss an analysis with others, asks to set up kea in a project, or works on a question in a project that has kea.yaml (read its context with kea context first).
+description: Set up and run a Kea site for a data analysis, and run the analysis through it. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, resources, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user says "use Kea", wants an explained, commentable project site, wants to review or discuss an analysis with others, asks to set up kea in a project, or works on a question in a project that has kea.yaml (read its context with kea context first).
 ---
 # Kea
 
@@ -114,9 +114,15 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   panel take-home / Shows / Method / Statistics (`kea build` notes missing parts). Make figures at their printed
   size (at most 16.6 cm wide, 19 cm high, fonts 6–8 pt, with the PNG's dpi set): the PDF prints them at that size
   and the build notes figures it has to shrink below 80 %.
-- Terms (`aliases:`) are linked automatically from first use. Terms that name entities (genes, proteins, cell
-  types) get `group: Genes` (etc.); the PDF lists each group apart from the key terms (titles that look like gene
-  symbols are put under Genes without it).
+- Terms (`aliases:`) are linked automatically from first use and numbered T1, T2 … in glossary order. Terms that
+  name entities (genes, proteins, cell types) get `group: Genes` (etc.); the glossary lists each group after the
+  key terms (titles that look like gene symbols go under Genes without it).
+- **Resources** (`resource/`, numbered O1, O2 …): everything the analysis takes from outside: a database or API, an
+  MCP server, a dataset on a server, an uploaded or downloaded file, software with its version. Front matter:
+  `kind` (database | api | mcp_server | dataset | file | software), `url`, `version`, `retrieved` (ISO date),
+  `sha256` (files), `local` (path of the local copy), `access`, `licence`. Steps, results and figures point to
+  them with `uses:`. The build notes resources without kind, version, retrieved date or (files) checksum. Keep
+  them apart from references (papers): a resource is what you need to rerun the analysis.
 - Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
   the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
   PMC); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.
@@ -152,20 +158,22 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
   repository, "made with Kea" with the page of "About this document"; then the project summary. With several
   experiments page 2 summarises them; with one, the PDF reads as that experiment.
 - **Order of each chapter:** at a glance (each question with its answer and conclusions; each conclusion in full
-  once; open caveats), key terms and term groups (Genes …), background (the home page after its summary),
-  premises, methods, then per question its answer, a hypothesis table and the results with their figures, then
-  conclusions and caveats.
-- **Layout:** At a glance, every question, Conclusions, Caveats and the appendix start on a new page (other
-  sections follow on); full names read as the kind in its colour followed by the tag ("Question [Q1]"); lists of
+  once; open caveats), background and scope (the home page after its summary), premises, then per question its
+  answer, a hypothesis table and the results with their figures, then conclusions, caveats and methods (steps
+  with their decisions).
+- **Layout:** At a glance, every question and every closing chapter start on a new page (other sections follow
+  on); full names read as the kind in its colour followed by the tag ("Question [Q1]"); lists of
   pages are one link per line with the status and page number at the end of the line; hypotheses, conclusions and
   caveats also appear as tables tinted by status (green supported, red rejected, amber open).
-- **Appendix:** overview tables (one per kind: tag, one line, status, question, linked pages), hypotheses in full,
-  data and figure files, the glossary and term groups, the references (numbered, Nature style), what changed
-  (versions and run entries); then a standard "About this document" that names only the parts present.
+- **Closing chapters** (no "Appendix" label): overview of all pages (one table per kind: tag, one line, status,
+  question, linked pages), hypotheses in full, data and resources (resources with version, date, checksum and
+  local copy; data files; figure files), glossary (key terms, then groups such as Genes), references (numbered
+  B1 …, Nature style), what changed (each release with kind, plan, commit and run; each run with its plan,
+  release and commits); then a standard "About this document" that names only the parts present.
 - **No data-file contents.**
 - **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
   to install Typst rather than working around it.
-- **`kea build` adds the PDF to the site** with a home page link. It is recompiled only when its inputs change
+- **`kea build` adds the PDF to the site**, linked from the menu bar of every page. It is recompiled only when its inputs change
   (source, images, Kea, Typst; the build says why); `--no-pdf` skips it.
 
 The PDF is read on paper by people outside the review cycle. Keep review-process notes ("plan v0.4 #2", "Mark's

@@ -2,18 +2,16 @@
 
 The PDF tells each experiment as a story for a reader who is not on the site (a biologist reading on paper):
 
-    At a glance      the experiment's summary and every conclusion's summary, with page numbers
-    Key terms        the glossary's one-line definitions
+    At a glance      the experiment's summary, every question with its answer and conclusions, open caveats
     Background       the experiment's home page text
     Starting points  premises
-    Methods          steps in order, each followed by the decisions taken in it
     one part per question
-                     the question, its hypotheses as a table (claim, written before its test or after results,
-                     outcome, tested by), then the results that answer it or test its hypotheses, each followed by
-                     the figures that show it
-    Conclusions, Caveats, Other pages (anything not placed above)
-    Appendix         hypotheses in full (their tests and expectations as written), data files and figure files
-                     (provenance), glossary, references (without abstracts)
+                     the question, its hypotheses as a table (claim, outcome, tested by), then the results that
+                     answer it or test its hypotheses, each followed by the figures that show it
+    Conclusions, Caveats, Methods (steps, each with its decisions), Other pages (anything not placed above)
+    closing chapters overview of all pages (one table per kind), hypotheses in full, data and resources
+                     (resources O, data files, figure files), glossary (terms T, then groups such as Genes),
+                     references (numbered B in order of citation, Nature style), what changed (document)
 
 At the end a standard chapter "About this document" explains the page types (with the site's colours), numbers,
 statuses, page references and what is left out. Every link to a page carries its page number. Left out: comments,
@@ -45,13 +43,14 @@ from pathlib import Path
 
 from kea.config import SETTINGS
 from kea.docsite import artefacts, icons, questions
-from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree
+from kea.docsite.nodes import (PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree, natural,  # noqa: F401
+                                term_group)
 from kea.docsite.render import LinkContext, render_markdown
 
 SENTINEL = "kea-pdf:/"                    # link prefix that marks a link to a page of the tree
 TYPE_COLOURS = {"goal": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#9467bd",
                 "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#7f7f7f",
-                "figure": "#17818a", "artefact": "#b8860b", "caveat": "#d35400", "term": "#555566",
+                "figure": "#17818a", "artefact": "#b8860b", "caveat": "#d35400", "term": "#555566", "resource": "#5b6b2f",
                 "reference": "#555566", "dataset": "#555566", "page": "#555566"}
 TYPE_MEANINGS = {
     "goal": "the experiment: what it asks and what it found",
@@ -64,7 +63,8 @@ TYPE_MEANINGS = {
     "conclusion": "what we make of the results, always with the evidence and its limits",
     "caveat": "what limits a result or conclusion",
     "figure": "a figure with its full caption",
-    "artefact": "a data file made by a step (listed in the appendix)",
+    "artefact": "a data file made by a step (listed under Data and resources)",
+    "resource": "what the analysis takes from outside (database, server, file), with version, date and checksum",
     "term": "a glossary entry",
     "reference": "a paper or resource the pages rely on",
 }
@@ -118,11 +118,6 @@ def code_text(value: str) -> str:
     escaped = MARKUP_SPECIALS.sub(r"\\\1", re.sub(r"\s+", " ", str(value)))
     escaped = re.sub(r"(\d)\.", r"\1\\.", escaped)
     return re.sub(r"(\\[_/\-=]|[.,](?=\S))", r"\1" + ZWSP, escaped)
-
-
-def natural(value: str) -> list:
-    """Sort key that orders numbers by value: S100A2 before S100A10."""
-    return [(0, int(part), "") if part.isdigit() else (1, 0, part.lower()) for part in re.split(r"(\d+)", str(value))]
 
 
 def string(value: str) -> str:
@@ -553,18 +548,6 @@ def written_pill(node: Node) -> str:
     return ""
 
 
-GENE_SYMBOL = re.compile(r"[A-Z][A-Z0-9]*\d[A-Z0-9-]*|[A-Z][a-z0-9]*\d[a-z0-9]*")   # S100A8, CD74, Trem2
-
-
-def term_group(term: Node) -> str:
-    """The group a term is listed in: front matter `group:` (e.g. Genes, Proteins, Cell types), else 'Genes' for
-    a title that looks like a gene symbol (letters with a digit, no spaces), else '' (key terms)."""
-    group = str(term.header.get("group") or "").strip()
-    if group:
-        return group
-    return "Genes" if len(term.title) <= 12 and GENE_SYMBOL.fullmatch(term.title) else ""
-
-
 def term_groups(terms: list[Node]) -> list[tuple[str, list[Node]]]:
     """Terms by group (key terms first, then the other groups by name), each sorted naturally (S100A2 < S100A10)."""
     groups: dict[str, list[Node]] = {}
@@ -574,10 +557,10 @@ def term_groups(terms: list[Node]) -> list[tuple[str, list[Node]]]:
             for name in sorted(groups, key=lambda name: (name != "", name.lower()))]
 
 
-BREAK_BEFORE: tuple[str, ...] = ()     # questions and the appendix start a page; other parts follow on (no empty pages)
+BREAK_BEFORE: tuple[str, ...] = ()     # questions and closing chapters start a page; other parts follow on
 REFERENCE_PREFIX = "B"          # citation numbers in the PDF (B for bibliography; R is taken by results)
 OVERVIEW_TYPES = ("question", "hypothesis", "premise", "step", "decision", "result", "figure", "conclusion",
-                  "caveat", "artefact")
+                  "caveat", "artefact", "resource")
 
 
 class PdfWriter:
@@ -838,7 +821,7 @@ class PdfWriter:
                 f"align: left, {self.status_fill(hypotheses)}, "
                 f"table.header(..({', '.join(header)}).map(strong)), {', '.join(cells)})]\n\n"
                 f"#meta[The full text of each hypothesis (its test, its yardstick and what was expected) is in the "
-                f"appendix; the results below test them.{note}]")
+                f"chapter Hypotheses in full; the results below test them.{note}]")
 
     def results_with_figures(self, results: list[Node], level: int) -> list[str]:
         parts = []
@@ -879,17 +862,6 @@ class PdfWriter:
                 f"#block(above: 0.45em, below: 0.45em, inset: (left: 10pt), stroke: (left: 2pt + "
                 f"rgb({string(TYPE_COLOURS['caveat'])}).lighten(40%)))[{self.entry(caveat, caveat.title)}]"
                 for caveat in caveats) + "]")
-        for group, terms in term_groups(self.of_type(project, "term")):
-            cells = [f"#block(breakable: false, below: 0.75em)[#strong[{text(term.title)}]: {text(term.short)}]"
-                     for term in terms]
-            middle = (len(cells) + 1) // 2         # fill the left column first, then the right: balanced columns
-            entries = f"[{chr(10).join(cells[:middle])}], [{chr(10).join(cells[middle:])}]"
-            heading = "Key terms" if group == "" else group
-            parts += [("#pagebreak(weak: true)\n" if group else "") + f"== {text(heading)}",
-                      f"#intro[Short definitions; {'the glossary' if group == '' else 'the appendix'} has the full "
-                      f"entries.]",
-                      f"#block[#set text(size: 8.6pt); #set par(justify: false)\n"
-                      f"#grid(columns: (1fr, 1fr), column-gutter: 14pt, {entries})]"]
         return parts
 
     def chapter(self, project: str) -> str:
@@ -914,19 +886,6 @@ class PdfWriter:
         if premises:
             parts += ["== Starting points",
                       "#intro[What the analysis takes as given, and why.]"] + [self.section(node, 3) for node in premises]
-        steps, decisions = self.of_type(project, "step"), self.of_type(project, "decision")
-        if steps or decisions:
-            parts += ["== Methods", "#intro[What was done, in order; each step is followed by the method decisions "
-                                    "taken in it (what was chosen, why, and the alternatives).]"]
-            for step in steps:
-                parts.append(self.section(step, 3))
-                for key in step.relations.get("decided_in", []):
-                    decision = self.tree.nodes.get(key)
-                    if decision and decision.key not in self.placed:
-                        parts.append(self.section(decision, 4))
-            for decision in decisions:
-                if decision.key not in self.placed:
-                    parts.append(self.section(decision, 3))
         hypotheses = self.of_type(project, "hypothesis")
         results = self.of_type(project, "result")
         for question in self.of_type(project, "question"):
@@ -952,28 +911,43 @@ class PdfWriter:
         if caveats:
             parts += ["== Caveats", "#intro[What limits the results and conclusions above.]", self.caveats_table(caveats)] + \
                      [self.section(node, 3) for node in caveats]
-        excluded = {"hypothesis", "artefact", "term", "reference"}
+        steps, decisions = self.of_type(project, "step"), self.of_type(project, "decision")
+        if steps or decisions:
+            parts += ["== Methods", "#intro[What was done, in order; each step is followed by the method decisions "
+                                    "taken in it (what was chosen, why, and the alternatives).]"]
+            for step in steps:
+                parts.append(self.section(step, 3))
+                for key in step.relations.get("decided_in", []):
+                    decision = self.tree.nodes.get(key)
+                    if decision and decision.key not in self.placed:
+                        parts.append(self.section(decision, 4))
+            for decision in decisions:
+                if decision.key not in self.placed:
+                    parts.append(self.section(decision, 3))
+        excluded = {"hypothesis", "artefact", "term", "reference", "resource"}
         others = sorted((node for node in self.tree.nodes.values() if node.project == project
                          and node.key not in self.placed and node.type not in excluded),
                         key=lambda node: (node.type, node.number, node.id))
         if others:
             parts += ["== Other pages"] + [self.section(node, 3) for node in others]
-        parts += self.appendix(project, hypotheses)
-        broken, first_appendix = [], True
-        for part in parts:          # a new page for the main parts only: short sections would leave empty pages
-            breaks = part.startswith(BREAK_BEFORE)
-            if part.startswith("== Appendix"):
-                breaks, first_appendix = first_appendix, False
-            broken.append(f"#pagebreak(weak: true)\n{part}" if breaks else part)
-        self.section_names += [part[3:].split("\n")[0] for part in parts if part.startswith("== ")]
-        return "\n\n".join(part for part in broken if part.strip())
+        main_names = [part[3:].split("\n")[0] for part in parts if part.startswith("== ")]
+        closing = self.closing_chapters(project, hypotheses)
+        closing_names = [part[3:].split("\n")[0] for part in closing if part.startswith("== ")]
+        # closing chapters each start a page; in the main part only questions do (short parts would leave gaps)
+        parts += [f"#pagebreak(weak: true)\n{part}" if part.startswith("== ") else part for part in closing]
+        self.section_names += main_names
+        self.closing_names += closing_names
+        return "\n\n".join(part for part in parts if part.strip())
 
-    def appendix(self, project: str, hypotheses: list[Node]) -> list[str]:
+    def closing_chapters(self, project: str, hypotheses: list[Node]) -> list[str]:
+        """The chapters at the end: overview of all pages, hypotheses in full, data and resources, glossary,
+        references."""
         parts = self.overview(project)
         if hypotheses:
-            parts += [f"== Appendix: hypotheses in full",
+            parts += [f"== Hypotheses in full",
                       "#intro[As written, with the test and the expectation. Whether each was written before its test "
                       "is shown on its pill.]"] + [self.section(node, 3) for node in hypotheses]
+        data_parts = self.resources_table(project)
         data = self.of_type(project, "artefact")
         if data:
             cells = []
@@ -987,9 +961,9 @@ class PdfWriter:
                           f"[{text(str(item.header.get('format', '')))}]", f"[{text(size)}]",
                           f"[{self.link(made_by) if made_by else ''}]"]
                 self.placed.add(item.key)
-            parts += ["== Appendix: data files",
-                      "#intro[Files made by the steps, as paths in the project folder. Their contents are not printed "
-                      "here (they may hold controlled-access, donor-level data).]",
+            data_parts += ["=== Data files made by the steps",
+                      "#intro[Paths in the project folder. Their contents are not printed here (they may hold "
+                      "controlled-access, donor-level data).]",
                       f"#datatable(6, 7.5pt, 1, table.header([File], [What it holds], [Path], [Format], [Size], [Made by]), "
                       + ", ".join(cells) + ")"]
         figures = [node for node in self.of_type(project, "figure") if node.header.get("image")]
@@ -1000,19 +974,73 @@ class PdfWriter:
                           f"[#mono[{text(str(figure.header.get('image', '')), breakable=True)}]]",
                           f"[#mono[{text(str(figure.header.get('script', '')), breakable=True)}]]",
                           f"[#mono[{text(str(figure.header.get('table', '')), breakable=True)}]]"]
-            parts += ["== Appendix: figure files",
+            data_parts += ["=== Figure files",
                       "#intro[Each figure is made by a script from a saved table; the image, script and table are "
                       "kept in the project folder.]",
                       f"#datatable(4, 7.5pt, 1, table.header([Figure], [Image], [Script], [Table]), " + ", ".join(cells) + ")"]
-        for group, terms in term_groups(self.of_type(project, "term")):
-            parts.append(f"== Appendix: {text('glossary' if group == '' else group.lower())}")
+        if data_parts:
+            parts += ["== Data and resources",
+                      "#intro[What the analysis takes from outside (resources: databases, servers, files, with the "
+                      "version, date and checksum needed to get the same input again), then the files it made and "
+                      "the figure files.]"] + data_parts
+        parts += self.glossary(project)
+        parts += self.bibliography(project)
+        return parts
+
+    def resources_table(self, project: str) -> list[str]:
+        """Each resource as a small block: tag, name and what it is, then the facts needed to get the same input
+        again (kind, where, version, retrieved, SHA-256 in full, local copy, access, licence)."""
+        resources = self.of_type(project, "resource")
+        if not resources:
+            return []
+        fields = (("kind", "Kind"), ("url", "Where"), ("version", "Version"), ("retrieved", "Retrieved"),
+                  ("sha256", "SHA-256"), ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
+        blocks = []
+        for item in resources:
+            self.placed.add(item.key)
+            cells = []
+            for key, name in fields:
+                value = str(item.header.get(key) or "").strip()
+                if not value and key not in ("kind", "version", "retrieved"):
+                    continue
+                if not value:
+                    shown = "#text(fill: rgb(\"#aa3333\"))[not recorded]"
+                elif key == "url" and value.startswith(("http://", "https://")):
+                    shown = f"#link({string(value)})[#mono[{text(value, breakable=True)}]]"
+                elif key in ("sha256", "local"):
+                    shown = f"#mono[{text(value, breakable=True)}]"
+                else:
+                    shown = text(value)
+                cells += [f"[#text(fill: muted)[{name}]]", f"[{shown}]"]
+            blocks.append(f"#block(breakable: false, stroke: (left: 3pt + rgb({string(TYPE_COLOURS['resource'])})), "
+                          f"inset: (left: 9pt, y: 4pt), above: 1em)[{self.full_name(item)} #h(0.3em) "
+                          f"#strong[{text(item.title)}] {label(item.key)} #h(1fr) {status_pill(item.status)}\n\n"
+                          f"#text(size: 9pt)[{text(item.short)}]\n\n"
+                          f"#block[#set text(size: 8.5pt); #set par(justify: false)\n#grid(columns: (auto, 1fr), "
+                          f"column-gutter: 10pt, row-gutter: 5pt, {', '.join(cells)})]]")
+        return ["=== Resources",
+                "#intro[What the analysis takes from outside, with what is needed to get the same input again; the "
+                "website has a page for each.]"] + blocks
+
+    def glossary(self, project: str) -> list[str]:
+        """One glossary at the end: key terms first, then each group (Genes, Proteins …) under its own heading."""
+        groups = term_groups(self.of_type(project, "term"))
+        if not groups:
+            return []
+        parts = ["== Glossary",
+                 "#intro[Words with a dotted underline in the text link here. "
+                 + ("Entities (" + ", ".join(text(name.lower()) for name, _ in groups if name) + ") follow the key "
+                    "terms. " if any(name for name, _ in groups) else "") + "]"]
+        for group, terms in groups:
+            if len(groups) > 1:
+                parts.append(f"=== {text(group or 'Key terms')}")
             for member in terms:
                 self.placed.add(member.key)
-                entry = [f"=== {text(member.title)} {label(member.key)}", f"#emph[{text(member.short)}]",
-                         self.body(member, 3)]
+                heading = (f"==== {fullname_markup('term', member.number) if member.number else ''} #h(0.3em) "
+                           f"{text(member.title)} {label(member.key)}")
+                entry = [heading, f"#emph[{text(member.short)}]", self.body(member, 4)]
                 joined = "\n\n".join(part for part in entry if part)
                 parts.append(f"#block(breakable: false)[\n{joined}\n]" if len(member.body) < 1500 else joined)
-        parts += self.bibliography(project)
         return parts
 
     # ------------------------------------------------------------------ overview tables
@@ -1093,7 +1121,7 @@ class PdfWriter:
             tables.append(self.status_table(members, "(" + ", ".join(widths) + ")", header, rows))
         if not tables:
             return []
-        return ["== Appendix: overview of all pages",
+        return ["== Overview of all pages",
                 "#intro[One table per kind of page: its number, what it says in one line, its status, the questions it "
                 "belongs to and the other pages it links to (in either direction), grouped by kind. Tags are links.]"
                 ] + tables
@@ -1126,7 +1154,7 @@ class PdfWriter:
             self.placed.add(node.key)
             cells += [f"[{tag_markup('reference', self.reference_numbers[node.key])} {label(node.key)}]",
                       f"[{self.citation_markup(node)} #linebreak() #text(size: 8pt, fill: muted)[{text(node.short)}]]"]
-        return ["== Appendix: references",
+        return ["== References",
                 "#intro[Numbered in the order they are first cited; the small superscript tags in the text "
                 "(" + tag_markup("reference", REFERENCE_PREFIX + "1") + ") point here. Under each: why the paper "
                 "is cited.]",
@@ -1135,38 +1163,52 @@ class PdfWriter:
 
     # ------------------------------------------------------------------ change history
     def what_changed(self) -> str:
-        """Once for the document, after the chapters: releases (version, date, kind, reason) and one line per
-        agent run (doc/_changes; the full entries are on the site)."""
+        """Once for the document, after the chapters: each release (version, date, kind, plan, commit, run, why)
+        and each agent run (date, plan, release kind, commits, what it did; doc/_changes, newest first)."""
         from kea.docsite import changes, versions
         parts = []
+        plans = review_plans()
         releases = versions.releases(None)
         merged: dict[tuple, list] = {}              # the site and the experiment released together: one row
         for release in releases:
             merged.setdefault((release.key, release.commit), []).append(release)
+        kind_of_run: dict[str, str] = {}
         if merged:
             rows = []
             for (_, _), group in sorted(merged.items(), reverse=True):
                 release = group[0]
+                kind_of_run.setdefault(release.run, f"{release.kind} → {release.label}" if release.kind else release.label)
                 scope = ", ".join(sorted("whole site" if not item.experiment else item.experiment for item in group))
+                plan = plan_label(release.cycle, plans) or plans.get(f"run:{release.run}", "")
                 rows.append([f"[#strong[{text(release.label)}]]", f"[{text(release.date[:10])}]", f"[{text(scope)}]",
-                             f"[{text(release.kind)}]", f"[{text(release.run)}]", f"[{text(release.reason)}]"])
+                             f"[{text(release.kind)}]", f"[{text(plan)}]", f"[#mono[{text(release.short)}]]",
+                             f"[{text(release.run)}]", f"[{text(release.reason)}]"])
             parts.append("=== Versions")
-            parts.append("#datatable(6, 7.5pt, 1, table.header([Version], [Date], [Of], [Kind], [Run], [Why]), "
-                         + ", ".join(cell for row in rows for cell in row) + ")")
+            parts.append("#datatable(8, 7.2pt, 1, table.header([Version], [Date], [Of], [Kind], [Plan], [Commit], "
+                         "[Run], [Why]), " + ", ".join(cell for row in rows for cell in row) + ")")
         try:
-            runs = changes.load_runs([])
+            runs = changes.load_runs(changes.all_commits())
         except (OSError, ValueError):
             runs = []
         if runs:
+            cells = []
+            for run in runs:
+                commits = [commit.short for commit in run.commits]
+                shown = " ".join(commits[:4]) + (f" +{len(commits) - 4}" if len(commits) > 4 else "")
+                cells += [f"[{text(run.id)}]", f"[{text(run.date)}]", f"[{text(plans.get('run:' + run.id, ''))}]",
+                          f"[{text(kind_of_run.get(run.id, ''))}]", f"[#mono[{text(shown or '—', breakable=True)}]]",
+                          f"[{text(re.sub(r'^Run [0-9a-z-]+:\s*', '', run.title))}]"]
             parts.append("=== Runs")
-            parts.append("#datatable(3, 7.5pt, 1, table.header([Run], [Date], [What it did]), " + ", ".join(
-                f"[{text(run.id)}], [{text(run.date)}], [{text(run.title)}]" for run in runs) + ")")
+            parts.append("#datatable(6, 7.2pt, 1, table.header([Run], [Date], [Plan], [Release], [Commits], "
+                         "[What it did]), " + ", ".join(cells) + ")")
         if not parts:
             return ""
-        self.section_names.append("Appendix: what changed")
-        return "\n\n".join(["#pagebreak(weak: true)\n== Appendix: what changed",
-                             "#intro[Each released version with the reason, then each agent run (newest first). The "
-                             "website has the full record of every run, with the changed text of every page.]"] + parts)
+        self.closing_names.append("What changed")
+        return "\n\n".join(["#pagebreak(weak: true)\n== What changed",
+                             "#intro[Each released version (its kind: major when a conclusion changes direction, minor "
+                             "for new results or pages, patch for wording), the review plan it carried out and the "
+                             "commit it was made from; then each agent run, newest first, with its commits. The website "
+                             "has every run in full, with the changed text of every page.]"] + parts)
 
     def written_text(self) -> str:
         """The About text on 'written before its test' / 'written after results', for the pills this PDF has."""
@@ -1200,9 +1242,8 @@ class PdfWriter:
         numbering = ", ".join(f"{prefix} = {TYPE_LABELS.get(node_type, node_type).lower()}" for prefix, node_type in prefixes)
         if self.reference_numbers:
             numbering += f", {REFERENCE_PREFIX} = reference (in this document only, in order of citation)"
-        names = list(dict.fromkeys(self.section_names))
-        main = [name for name in names if not name.startswith("Appendix")]
-        appendix = [name.removeprefix("Appendix: ") for name in names if name.startswith("Appendix")]
+        main = list(dict.fromkeys(self.section_names))
+        appendix = list(dict.fromkeys(self.closing_names))
 
         def listed(items: list[str]) -> str:
             items = [f"#emph[{text(item)}]" for item in items]
@@ -1227,7 +1268,7 @@ newer version, that one replaces this document.
 == How it is ordered
 
 {'The document is one experiment, in these parts' if self.single else 'Each experiment is one chapter, in these parts'}: {listed(main)}.
-{question_text}The appendix holds {listed(appendix) if appendix else 'nothing'}. To read quickly: {'the summary on the title page and ' if getattr(self, 'has_summary', False) else ''}#emph[At a glance]; to check a claim, follow its evidence.
+{question_text}{('Chapters at the end: ' + listed(appendix) + '.') if appendix else ''} To read quickly: {'the summary on the title page and ' if getattr(self, 'has_summary', False) else ''}#emph[At a glance]; to check a claim, follow its evidence.
 
 == Kinds of page
 
@@ -1256,8 +1297,8 @@ lists of pages the whole line is the link, with the status and the page number a
 == What is left out
 
 The comments of readers, the review plans and the changed text of each page (all on the site); the code (named by
-its file); the relations graph (the overview tables in the appendix are its printed form); and the contents of data
-files, which may hold controlled-access, donor-level data. Numbers in the text come from those files; the appendix
+its file); the relations graph (the overview tables at the end are its printed form); and the contents of data
+files, which may hold controlled-access, donor-level data. Numbers in the text come from those files; Data and resources
 lists them.
 
 #meta[Made with Kea (github.com/mfiers/Kea), a tool that turns an analysis into a site of linked claims and
@@ -1270,6 +1311,7 @@ evidence, reviewed in cycles by readers and an AI agent.]
         from kea.docsite import comments, versions
         self.placed = set()                      # document() may run twice (the site cache hashes a fixed-stamp copy)
         self.reference_numbers, self.glance_seen, self.section_names, self.notes = {}, set(), [], []
+        self.closing_names: list[str] = []
         self.part_seen: set[str] = set()
         title = str(SETTINGS.get("title") or PROJECT_ROOT.name)
         heading = str(SETTINGS.get("heading") or "")
@@ -1347,6 +1389,28 @@ evidence, reviewed in cycles by readers and an AI agent.]
 
 CACHE_KEEP = 6
 KEA_URL = "https://mfiers.github.io/Kea/"
+
+
+def review_plans() -> dict[str, str]:
+    """Review plans (doc/_cycles/cycle-NNN.md): {"cycle:<n>": "plan v0.5 (cycle 4)", "run:<run id>": same}."""
+    from kea.docsite.nodes import DOC, split_front_matter
+    plans: dict[str, str] = {}
+    for path in sorted((DOC / "_cycles").glob("cycle-*.md")):
+        try:
+            header, _ = split_front_matter(path.read_text(encoding="utf-8"), path)
+        except ValueError:
+            continue
+        number = str(header.get("cycle") or path.stem.removeprefix("cycle-").lstrip("0"))
+        name = f"plan {('v' + str(header['version'])) if header.get('version') else ''} (cycle {number})".replace("  ", " ")
+        plans[f"cycle:{number}"] = name
+        if header.get("run"):
+            plans[f"run:{header['run']}"] = name
+    return plans
+
+
+def plan_label(cycle: str, plans: dict[str, str]) -> str:
+    number = re.sub(r"\D", "", str(cycle or "")).lstrip("0")
+    return plans.get(f"cycle:{number}", f"cycle {number}" if number else "")
 
 
 def repository_url() -> str:

@@ -158,3 +158,22 @@ def test_spelled_out_page_numbers_are_noted(toy_doc):
                "status: done", "As conclusion 2 says, in 40 cells.")
     tree = nodes.load_tree(toy_doc)
     assert any("'conclusion 2'" in note for note in tree.notes)
+
+
+def test_resources_and_terms_are_numbered_with_schema_defaults(toy_doc):
+    import yaml
+    schema = yaml.safe_load((toy_doc / "_schema.yaml").read_text())
+    for section in ("number_prefix", "status_values", "relations"):      # an older project's schema
+        for kind in ("term", "resource", "uses"):
+            schema.get(section, {}).pop(kind, None)
+    (toy_doc / "_schema.yaml").write_text(yaml.safe_dump(schema))
+    write_page(toy_doc, "proj/term/t-x.md", "id: t-x\ntype: term\ntitle: Thing\nshort: A thing.\nparent: home")
+    write_page(toy_doc, "proj/resource/o-db.md", "id: o-db\ntype: resource\ntitle: A database\nshort: Where data "
+               "came from.\nparent: home\nstatus: current\nkind: file\nversion: '2'")
+    write_page(toy_doc, "proj/step/s-a.md", "id: s-a\ntype: step\ntitle: S\nshort: A step.\nparent: home\n"
+               "status: done\nrelations:\n  uses: [o-db]")
+    tree = nodes.load_tree(toy_doc)
+    assert tree.problems == []
+    assert tree.nodes["proj:t-x"].number == "T1" and tree.nodes["proj:o-db"].number == "O1"
+    assert tree.nodes["proj:o-db"].incoming == {"Used in": ["proj:s-a"]}
+    assert any("resource without retrieved, sha256" in note for note in tree.notes)
