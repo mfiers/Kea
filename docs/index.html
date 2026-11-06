@@ -60,32 +60,39 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
       parts in flux.</div>
   </div>
 
-  <h2>Install the skill (Claude Code)</h2>
-  <p>The skill tells Claude how to set up Kea in a project and how to run the review cycle. Install it once, and
-    it is available in every project:</p>
+  <h2>How to use it: through an AI agent</h2>
+  <p class="note"><b>Kea is meant to be run by an AI coding agent</b>: Claude Code, or another agent harness that
+    can read a skill file and run shell commands. The agent installs the tool, sets up the pages, runs the analysis
+    through them, serves the site, watches for comments and runs the review cycles. You talk to the agent and read
+    and comment on the site. Installing and running Kea by hand is possible but is not the intended way to use it:
+    keeping the pages, hypotheses, change logs and review cycles consistent is the work the agent does.</p>
+  <h3>1. Give your agent the skill (once)</h3>
+  <p>For Claude Code:</p>
   <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.5.0/skill/SKILL.md \
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.6.0/skill/SKILL.md \
      -o ~/.claude/skills/kea/SKILL.md</code></pre>
-  <p>Then, in any project, ask Claude something like <i>"set up a kea site for this analysis"</i>. Claude
-    installs the tool, runs <code>kea init</code>, writes the first pages and starts the comment server and the
-    watcher.</p>
+  <p>Other agents: put <code>skill/SKILL.md</code> wherever your agent reads its instructions, for example in the
+    project's agent instructions file.</p>
+  <h3>2. Say "use Kea"</h3>
+  <p>In your project, tell the agent <i>"use Kea"</i>. It asks for a short outline of the project and its first
+    experiment, unless that is already clear. It then installs a tagged version of Kea, writes the first pages,
+    builds the site, agrees with you on where to host it (on your own machine unless you need more), gives you the
+    link and starts watching for comments. From then on, ask it to work on a question: it reads what the site
+    already holds for that question before it starts (<code>kea context</code>).</p>
   <details><summary>Read the skill</summary>
     <p><a href="https://github.com/mfiers/Kea/blob/main/skill/SKILL.md">skill/SKILL.md on GitHub</a> ·
       <a href="https://raw.githubusercontent.com/mfiers/Kea/main/skill/SKILL.md" download="SKILL.md">download</a></p>
     <pre id="skill-text">Loading the current skill from GitHub…</pre>
   </details>
-
-  <h2>Install the tool</h2>
-  <h3>A Python project (uv)</h3>
-  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.5.0"</code></pre>
-  <h3>Any other project (R, a plain folder)</h3>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.5.0</code></pre>
-  <h3>Start</h3>
-  <pre><code>kea init --title "My analysis" --experiment first-experiment --question "What do we ask?"
-make site       # build the site from doc/
-make serve      # serve it with comments; the password is in .env</code></pre>
-  <p class="note">Install a <b>tagged</b> version, so a project does not change when Kea does. The newest tags are
-    on the <a href="https://github.com/mfiers/Kea/tags">tags page</a>.</p>
+  <details><summary>What the agent runs (for reference, not to type yourself)</summary>
+    <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.6.0"       # a Python project
+uv tool install git+https://github.com/mfiers/Kea.git@v1.6.0        # any other project
+kea init --title "My analysis" --author "Your Name" --experiment first-experiment
+make site && make serve                                           # the password is in .env
+kea watch --deadline 3d                                           # waits for comments</code></pre>
+    <p class="note">The agent installs a <b>tagged</b> version, so a project does not change when Kea does
+      (<a href="https://github.com/mfiers/Kea/tags">tags</a>).</p>
+  </details>
 
   <h2 id="reading">Reading a Kea site</h2>
   <p>A Kea site documents one analysis as small pages, one idea per page, linked by typed relations (supports,

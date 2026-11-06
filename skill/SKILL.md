@@ -141,6 +141,9 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 - **Order of each chapter:** at a glance (each question with its answer and conclusions), key terms, background
   (the home page after its summary), premises, methods, then per question its answer, a hypothesis table and the
   results with their figures, then conclusions and caveats.
+- **Layout:** every question and every section starts on a new page; headings name the kind in full in its colour
+  ("Question Q1", "Result R2"); a question opens with its answer and a "Conclusions" list; hypotheses, conclusions
+  and caveats also appear as tables tinted by status (green supported, red rejected, amber open).
 - **Appendix:** hypotheses in full, data and figure files, the glossary, the references; then a standard
   "About this document".
 - **No data-file contents.**

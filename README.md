@@ -58,9 +58,15 @@ into Kea, with a test, as a new tagged version.
 
 ## Use in a project
 
+**Kea is meant to be run by an AI coding agent** (Claude Code, or another harness that reads a skill file and runs
+shell commands). Give the agent the skill (`skill/SKILL.md`, see below) and tell it "use Kea" in your project; it
+installs a tagged version, sets up the pages, builds and serves the site, and runs the review cycles. Running Kea
+by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job. For
+reference, the agent runs:
+
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.5.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.5.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.6.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.6.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)

@@ -67,11 +67,22 @@ text-decoration:none}
 a.tag:hover{text-decoration:none;filter:brightness(1.12);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 a.tagline{color:var(--fg);display:inline}a.tagline:hover{text-decoration:none;background:#eef3fb}
 a.tagline .tag{margin-right:6px}a.tagline .tl-text{border-bottom:1px dotted #8a94a6}
-.qhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.qhead{display:block;line-height:1.5}
 .qblock{margin:6px 0 18px}.qblock .answer{margin:4px 0 6px}.qblock ul{margin:4px 0}
 article h2{position:relative}
+h1 .kind{display:block;font-size:15px;font-weight:700;letter-spacing:.02em;margin-bottom:2px}
+h1 .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}
+h1 .pills,.qhead .pills{font-size:0;margin-left:8px;vertical-align:middle;white-space:normal}
+h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:4px}
+.k-goal{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#9467bd}.k-step{color:#2a7f62}
+.k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
+.k-artefact{color:#9a7000}.k-caveat{color:#d35400}.k-term,.k-reference,.k-dataset,.k-page{color:#556}
+a.fullname{font-weight:700;margin-right:6px}a.fullname .ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
+.qblock h3{font-size:14px;margin:14px 0 4px;color:var(--fg)}
+table.status-table{display:table;width:100%}table.status-table td{white-space:normal}
+tr.st-good td{background:#eaf6ef}tr.st-bad td{background:#fbeceb}tr.st-mid td{background:#fdf5e6}
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
-.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 8px;color:var(--muted);vertical-align:middle}
+.pill{display:inline-block;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:10px;padding:0 8px;color:var(--muted);vertical-align:middle}
 .s-supported,.s-done,.s-answered,.s-current,.s-active{border-color:var(--ok);color:var(--ok)}
 .s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
 .s-exploratory,.s-in_progress,.s-planned,.s-open,.s-inconclusive,.s-assumed,.s-questioned,.s-under_review{border-color:var(--amber);color:var(--amber)}
@@ -170,13 +181,37 @@ def node_link(node: Node, prefix: str, text: str | None = None, note: str | None
     return f"<a class='ref' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node, note))}'>{esc(label)}</a>"
 
 
-def tagline(node: Node, prefix: str, text: str | None = None, from_project: str | None = None) -> str:
-    """Tag plus one line (the title by default) as ONE link: for lists of pages."""
+def full_kind(node: Node) -> str:
+    """'Question Q1': the page's kind and number in full."""
+    return f"{TYPE_LABELS.get(node.type, node.type)}{' ' + node.number if node.number else ''}"
+
+
+def fullname_link(node: Node, prefix: str) -> str:
+    """'Question Q1' in the type's colour, as a link (headings of question blocks)."""
+    return (f"<a class='fullname k-{esc(node.type)}' href='{esc(node_href(node, prefix))}' "
+            f"title='{esc(hover_text(node))}'>{icons.svg(node.type)}{esc(full_kind(node))}</a>")
+
+
+GOOD_STATUSES = {"supported", "done", "answered", "current", "active", "addressed"}
+BAD_STATUSES = {"not_supported", "deprecated", "dropped", "superseded"}
+
+
+def status_row_class(node: Node) -> str:
+    """Row tint for tables of pages: green supported/settled, red rejected, amber open or exploratory."""
+    status = str(node.status or "")
+    return "st-good" if status in GOOD_STATUSES else "st-bad" if status in BAD_STATUSES else "st-mid" if status else ""
+
+
+def tagline(node: Node, prefix: str, text: str | None = None, from_project: str | None = None,
+            full: bool = False) -> str:
+    """Tag plus one line (the title by default) as ONE link: for lists of pages. `full` names the kind in full
+    inside the tag ("Conclusion C1")."""
     words = node.title if text is None else text
     if not node.number:
         return node_link(node, prefix, words, from_project=from_project)
+    inner = f"{icons.svg(node.type)}{esc(full_kind(node))}" if full else tag_inner(node, from_project)
     return (f"<a class='tagline' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node))}'>"
-            f"<span class='tag t-{esc(node.type)}'>{tag_inner(node, from_project)}</span>"
+            f"<span class='tag t-{esc(node.type)}'>{inner}</span>"
             f"<span class='tl-text'>{esc(words)}</span></a>")
 
 

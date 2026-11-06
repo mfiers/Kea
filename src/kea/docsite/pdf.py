@@ -359,7 +359,9 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
 #let sans = SANS_FONTS
 #set document(title: TITLE, date: auto)
 #set text(font: ("Libertinus Serif", "New Computer Modern"), size: 10pt, lang: "en")
-#set par(justify: true, leading: 0.62em, spacing: 0.95em)
+#set par(justify: true, leading: 0.72em, spacing: 1.25em)
+#set list(spacing: 0.9em, indent: 4pt)
+#set enum(spacing: 0.9em)
 #set heading(numbering: none)
 #set page(paper: "a4", margin: (x: 2.2cm, top: 2.5cm, bottom: 2.2cm),
   header: context {
@@ -381,7 +383,7 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
   })
 #show heading: set text(font: sans, fill: ink)
 #show heading.where(level: 1): set text(size: 19pt, fill: white)
-#show heading.where(level: 2): it => block(sticky: true, above: 1.6em, below: 0.7em, {
+#show heading.where(level: 2): it => block(sticky: true, above: 1.6em, below: 1em, {
   set text(size: 14pt, fill: accent); it.body; v(-6pt); line(length: 100%, stroke: 0.8pt + accent.lighten(55%)) })
 #show heading.where(level: 3): set text(size: 11.5pt)
 #show heading.where(level: 4): set text(size: 10.5pt)
@@ -400,11 +402,11 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
   text(font: sans, fill: white, size: 7.3pt, weight: "bold", { box(height: 0.95em, baseline: 0.12em, image(bytes(icon), format: "svg")); h(2pt); body }))
 #let badge(colour, body) = box(fill: rgb(colour), inset: (x: 4.5pt, y: 2.2pt), outset: (y: 0.5pt), radius: 2.5pt, text(font: sans, fill: white, size: 7.5pt, weight: "bold", body))
 #let pill(colour, body) = box(stroke: 0.6pt + rgb(colour), fill: rgb(colour).lighten(92%), inset: (x: 4.5pt, y: 1.8pt), outset: (y: 0.5pt), radius: 7pt, text(font: sans, size: 7.5pt, fill: rgb(colour).darken(10%), body))
-#let summary(colour, body) = block(fill: rgb(colour).lighten(91%), inset: (x: 9pt, y: 7pt), radius: 3pt, width: 100%, below: 0.9em, text(size: 9.6pt, body))
+#let summary(colour, body) = block(fill: rgb(colour).lighten(91%), inset: (x: 10pt, y: 8pt), radius: 3pt, width: 100%, above: 0.6em, below: 0.4em, text(size: 9.8pt, body))
 #let claim(body) = block(fill: rgb("#fff8f0"), stroke: 0.5pt + rgb("#f0d9bf"), inset: 9pt, radius: 4pt, width: 100%, body)
-#let meta(body) = block(above: 0.7em, text(font: sans, size: 7.8pt, fill: muted, body))
-#let intro(body) = block(sticky: true, above: 0.4em, below: 0.8em, text(font: sans, size: 7.8pt, fill: muted, body))
-#let node(colour, body) = block(breakable: false, stroke: (left: 3pt + rgb(colour)), inset: (left: 9pt, top: 1pt, bottom: 1pt), above: 1.5em, below: 0.6em, body)
+#let meta(body) = block(above: 1em, below: 1em, text(font: sans, size: 7.8pt, fill: muted, body))
+#let intro(body) = block(sticky: true, above: 0.5em, below: 1.2em, text(font: sans, size: 8pt, fill: muted, body))
+#let node(colour, body) = block(breakable: false, stroke: (left: 3pt + rgb(colour)), inset: (left: 10pt, top: 3pt, bottom: 3pt), above: 2.4em, below: 1em, body)
 #let datatable(columns, size, header-rows, ..cells) = block(width: 100%, {
   set text(size: size); set par(justify: false, leading: 0.45em)
   show table.cell: it => if it.y < header-rows { strong(it) } else { it }
@@ -505,16 +507,31 @@ class PdfWriter:
         _, _, conclusions = questions.evidence(self.tree, question)
         parts = []
         if with_question:
-            parts.append(f"#block(sticky: true, above: 1.1em, below: 0.5em)[{self.link(question)} "
-                         f"{status_pill(question.status)} #h(3pt) #text(font: sans, weight: \"bold\", fill: ink)"
-                         f"[{text(question.title)}]]")
+            parts.append(f"#block(sticky: true, above: 1.8em, below: 0.7em)[{self.full_name(question)} #h(3pt) "
+                         f"#text(font: sans, weight: \"bold\", fill: ink)[{text(question.title)}] "
+                         f"{status_pill(question.status)}]")
         summary = questions.answer(question)
         if summary:
             parts.append(self.markdown(question, summary, 4))
         if conclusions:
-            parts.append("#list(" + ", ".join(f"[{self.tagline(conclusion, conclusion.short)} "
-                                               f"{status_pill(conclusion.status)}]" for conclusion in conclusions) + ")")
+            parts.append(self.conclusion_list(conclusions, with_question))
         return "\n\n".join(parts)
+
+    def full_name(self, node: Node) -> str:
+        """'Conclusion C1' in the type's colour, as the link (with the page number)."""
+        colour = TYPE_COLOURS.get(node.type, "#555566")
+        kind = f"{TYPE_LABELS.get(node.type, node.type)} {node.number}".strip()
+        return (f"#nlink({label(node.key)})[#text(font: sans, weight: \"bold\", fill: rgb({string(colour)}))"
+                f"[{text(kind)}]]")
+
+    def conclusion_list(self, conclusions: list[Node], compact: bool) -> str:
+        """The conclusions of a question under their own small heading, each named in full."""
+        items = "\n".join(f"#block(above: 0.55em, below: 0.55em, inset: (left: 10pt), stroke: (left: 2pt + "
+                          f"rgb({string(TYPE_COLOURS['conclusion'])}).lighten(40%)))[{self.full_name(item)} "
+                          f"{status_pill(item.status)} #h(0.3em) {text(item.short)}]" for item in conclusions)
+        title = "" if compact else ("#block(sticky: true, above: 1.2em, below: 0.5em)[#text(font: sans, size: 10.5pt, "
+                                    "weight: \"bold\", fill: ink)[Conclusions]]\n")
+        return title + items
 
     def links(self, keys: list[str]) -> str:
         return ", ".join(self.link(self.tree.nodes[key]) for key in keys if key in self.tree.nodes)
@@ -537,11 +554,14 @@ class PdfWriter:
 
     def head(self, node: Node, level: int, extra: str = "") -> str:
         """The heading block: stripe in the type's colour, heading with label, badge and pills, summary."""
-        heading = f"{node.number} {node.title}" if node.number else node.title
         colour = TYPE_COLOURS.get(node.type, "#555566")
-        pills = " ".join(part for part in (type_badge(node), status_pill(node.status), written_pill(node), extra) if part)
-        return (f"#node({string(colour)})[\n{'=' * level} {text(heading)} {label(node.key)}\n\n{pills}\n\n"
-                f"#summary({string(colour)})[{text(node.short)}]]")
+        kind = f"{TYPE_LABELS.get(node.type, node.type)}{' ' + node.number if node.number else ''}"
+        heading = f"#text(fill: rgb({string(colour)}))[{text(kind)}] #h(0.3em) {text(node.title)}"
+        pills = " ".join(part for part in (status_pill(node.status), written_pill(node), extra) if part)
+        return ((f"#pagebreak(weak: true)\n" if level <= 2 else "")
+                + f"#node({string(colour)})[\n{'=' * level} {heading} {label(node.key)}\n\n"
+                + (f"#block(above: 0.5em, below: 0.7em)[{pills}]\n\n" if pills else "")
+                + f"#summary({string(colour)})[{text(node.short)}]]")
 
     def section(self, node: Node, level: int) -> str:
         """One page of the tree as a section (heading block, figure, body, a few connection lines)."""
@@ -597,6 +617,36 @@ class PdfWriter:
         answers = hypothesis.relations.get("answers") or []
         return answers[0] if answers else None
 
+    @staticmethod
+    def status_fill(nodes: list[Node]) -> str:
+        """A table fill: the header row tinted, each row tinted by its page's status (green / red / amber)."""
+        tints = ", ".join(string(STATUS_COLOURS.get(str(node.status), "#ffffff")) for node in nodes)
+        return (f"fill: (_, row) => if row == 0 {{ luma(232) }} else {{ rgb(({tints},).at(row - 1)).lighten(90%) }}")
+
+    def status_table(self, nodes: list[Node], columns: str, header: list[str], rows: list[list[str]],
+                     note: str = "") -> str:
+        return (f"#block(width: 100%, above: 0.9em, below: 1.1em)[#set text(size: 8.5pt); #set par(justify: false, leading: 0.5em)\n"
+                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), align: left, "
+                f"{self.status_fill(nodes)}, table.header(..({', '.join(header)},).map(strong)), "
+                + ", ".join(cell for row in rows for cell in row) + ")]"
+                + (f"\n\n#meta[{note}]" if note else ""))
+
+    def conclusions_table(self, conclusions: list[Node]) -> str:
+        rows = [[f"[{self.link(item)}]", f"[{text(item.title)}]", f"[{status_pill(item.status)}]",
+                 f"[{self.links(item.relations.get('supported_by', []))}]",
+                 f"[{self.links(item.relations.get('opposed_by', []))}]",
+                 f"[{self.links(item.incoming.get('Limited by', []))}]"] for item in conclusions]
+        return self.status_table(conclusions, "(auto, 2.2fr, auto, 1.3fr, 0.8fr, 1fr)",
+                                 ["[Conclusion]", "[In short]", "[Status]", "[Supported by]", "[Opposed by]",
+                                  "[Limited by]"], rows)
+
+    def caveats_table(self, caveats: list[Node]) -> str:
+        rows = [[f"[{self.link(item)}]", f"[{text(item.title)}]", f"[{status_pill(item.status)}]",
+                 f"[{self.links(item.relations.get('limits', []))}]"] for item in caveats]
+        return self.status_table(caveats, "(auto, 2.5fr, auto, 1.2fr)", ["[Caveat]", "[What it says]", "[Status]",
+                                                                       "[Limits]"], rows,
+                                 "Open: still limits the pages listed. Addressed: a later step dealt with it.")
+
     def hypothesis_table(self, hypotheses: list[Node]) -> str:
         cells = []
         for hypothesis in hypotheses:
@@ -606,8 +656,8 @@ class PdfWriter:
                       f"[{status_pill(hypothesis.status)}]", f"[{self.links(hypothesis.incoming.get('Tested by', []))}]"]
         header = ["[Hypothesis]", "[Expected (in short)]", "[Written]", "[Outcome]", "[Tested by]"]
         return (f"#block(width: 100%)[#set text(size: 8.5pt); #set par(justify: false)\n"
-                f"#table(columns: (auto, 1fr, auto, auto, auto), inset: (x: 4pt, y: 4pt), stroke: 0.4pt + luma(205), "
-                f"align: (left, left, left, left, left), fill: (_, row) => if row == 0 {{ rgb(\"#9467bd\").lighten(85%) }}, "
+                f"#table(columns: (auto, 1fr, auto, auto, auto), inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), "
+                f"align: (left, left, left, left, left), {self.status_fill(hypotheses)}, "
                 f"table.header(..({', '.join(header)}).map(strong)), {', '.join(cells)})]\n\n"
                 f"#meta[The full text of each hypothesis (its test, its yardstick and what was expected) is in the "
                 f"appendix; the results below test them.]")
@@ -709,10 +759,10 @@ class PdfWriter:
             parts += ["== Other results"] + self.results_with_figures(leftover_results, 3)
         conclusions = self.of_type(project, "conclusion")
         if conclusions:
-            parts += ["== Conclusions"] + [self.section(node, 3) for node in conclusions]
+            parts += ["== Conclusions", self.conclusions_table(conclusions)] + [self.section(node, 3) for node in conclusions]
         caveats = self.of_type(project, "caveat")
         if caveats:
-            parts += ["== Caveats", "#intro[What limits the results and conclusions above.]"] + \
+            parts += ["== Caveats", "#intro[What limits the results and conclusions above.]", self.caveats_table(caveats)] + \
                      [self.section(node, 3) for node in caveats]
         excluded = {"hypothesis", "artefact", "term", "reference"}
         others = sorted((node for node in self.tree.nodes.values() if node.project == project
@@ -721,6 +771,7 @@ class PdfWriter:
         if others:
             parts += ["== Other pages"] + [self.section(node, 3) for node in others]
         parts += self.appendix(project, hypotheses)
+        parts = [f"#pagebreak(weak: true)\n{part}" if part.startswith("== ") else part for part in parts]
         return "\n\n".join(part for part in parts if part.strip())
 
     def appendix(self, project: str, hypotheses: list[Node]) -> list[str]:

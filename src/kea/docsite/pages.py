@@ -15,8 +15,9 @@ from pathlib import Path
 from kea.config import SETTINGS
 from kea.docsite import artefacts, changes, codepages, comments, history, mode, questions, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_PLURALS, Node, Tree
-from kea.docsite.render import (LinkContext, card, crumbs, esc, node_link, page, prefix_for, render_markdown,
-                            status_pill, tagline, type_badge)
+from kea.docsite.render import (LinkContext, card, crumbs, esc, full_kind, fullname_link, node_link, page,
+                            prefix_for, render_markdown, status_pill, status_row_class, tagline, type_badge)
+from kea.docsite import icons
 
 CHILD_ORDER = ["goal", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
                "artefact", "caveat", "term", "reference", "dataset", "page"]
@@ -243,9 +244,25 @@ class SiteRenderer:
     def answer_list(self, label: str, members: list[Node], prefix: str, project: str) -> str:
         if not members:
             return ""
-        return (f"<div class='help'>{esc(label)}</div><ul class='answer-list'>"
-                + "".join(f"<li>{tagline(member, prefix, member.short if member.type == 'conclusion' else member.title, project)} "
+        return (f"<h3>{esc(label)}</h3><ul class='answer-list'>"
+                + "".join(f"<li>{tagline(member, prefix, member.short if member.type == 'conclusion' else member.title, project, full=True)} "
                           f"{status_pill(member)}</li>" for member in members) + "</ul>")
+
+    def hypothesis_table(self, hypotheses: list[Node], prefix: str) -> str:
+        """Hypotheses of a question with when they were written and their outcome; rows tinted by outcome."""
+        if not hypotheses:
+            return ""
+        rows = []
+        for item in hypotheses:
+            written = ("before its test" if item.header.get("fixed_before_results") is True else
+                       "after results" if item.header.get("fixed_before_results") is False else "")
+            tested = ", ".join(node_link(self.tree.nodes[key], prefix) for key in item.incoming.get("Tested by", [])
+                               if key in self.tree.nodes)
+            rows.append(f"<tr class='{status_row_class(item)}'><td>{node_link(item, prefix)}</td>"
+                        f"<td><a href='{prefix}{item.url}'>{esc(item.short)}</a></td><td>{esc(written)}</td>"
+                        f"<td>{status_pill(item)}</td><td>{tested}</td></tr>")
+        return ("<h3>Hypotheses</h3><table class='status-table'><tr><th>Hypothesis</th><th>Expected (in short)</th>"
+                "<th>Written</th><th>Outcome</th><th>Tested by</th></tr>" + "".join(rows) + "</table>")
 
     def answer_html(self, question: Node, prefix: str, context: LinkContext) -> str:
         """Top of a question page: its executive summary (answer:), then the conclusions and results."""
@@ -257,7 +274,7 @@ class SiteRenderer:
         body = (f"<div class='answer'>{render_markdown(summary, context)}</div>" if summary else "") \
             + self.answer_list("Conclusions", conclusions, prefix, question.project) \
             + self.answer_list("Results", results, prefix, question.project) \
-            + self.answer_list("Hypotheses", hypotheses, prefix, question.project)
+            + self.hypothesis_table(hypotheses, prefix)
         return f"<section class='qblock not-annotatable'><h2>Answer in short</h2>{body}</section>" if body else ""
 
     def questions_html(self, project: str, prefix: str, context: LinkContext) -> str:
@@ -266,11 +283,12 @@ class SiteRenderer:
         for question in questions.questions(self.tree, project):
             _, _, conclusions = questions.evidence(self.tree, question)
             summary = questions.answer(question)
-            blocks.append(f"<div class='qblock'><h3 class='qhead'>{node_link(question, prefix)} {status_pill(question)}"
-                          f"<a href='{prefix}{question.url}'>{esc(question.title)}</a></h3>"
+            blocks.append(f"<div class='qblock'><h3 class='qhead'>{fullname_link(question, prefix)} "
+                          f"<a href='{prefix}{question.url}'>{esc(question.title)}</a>"
+                          f"<span class='pills'>{status_pill(question)}</span></h3>"
                           + (f"<div class='answer'>{render_markdown(summary, context)}</div>" if summary else "")
                           + (("<ul class='answer-list'>" + "".join(
-                              f"<li>{tagline(member, prefix, member.short, project)} {status_pill(member)}</li>"
+                              f"<li>{tagline(member, prefix, member.short, project, full=True)} {status_pill(member)}</li>"
                               for member in conclusions) + "</ul>") if conclusions else "") + "</div>")
         return (f"<section class='questions not-annotatable'><h2>Questions</h2>{''.join(blocks)}</section>" if blocks else "")
 
@@ -292,8 +310,7 @@ class SiteRenderer:
     def node_page(self, node: Node) -> None:
         prefix = prefix_for(node.url)
         context = self.context(node.project, prefix, node.key)
-        parts = [crumbs(self.trail(node, prefix), prefix),
-                 f"<div class='not-annotatable'>{type_badge(node)}{status_pill(node)}"
+        pills = (status_pill(node)
                  + (self.review_pill(node.project, prefix) if node.id == "home" else "")
                  + self.stability_pill(node)
                  + (f" <span class='pill'>experiment {esc(self.experiment_version(node.project))}</span>"
@@ -301,8 +318,12 @@ class SiteRenderer:
                  + (f" <span class='pill' title='The claim, test and expectation were fixed before this test was run (possibly after other results had been seen)'>written before its test{self.version_note(node)}</span>"
                     if node.header.get("fixed_before_results") is True
                     else " <span class='pill s-exploratory'>written after results</span>"
-                    if node.header.get("fixed_before_results") is False else "") + "</div>",
-                 f"<h1>{esc(node.title)}</h1><div class='short'>{esc(node.short)}</div>"]
+                    if node.header.get("fixed_before_results") is False else ""))
+        kind = "Experiment" if node.id == "home" and node.type == "goal" else full_kind(node)
+        parts = [crumbs(self.trail(node, prefix), prefix),
+                 f"<h1><span class='kind k-{esc(node.type)} not-annotatable'>{icons.svg(node.type)}{esc(kind)}</span>"
+                 f"{esc(node.title)}<span class='pills not-annotatable'>{pills}</span></h1>"
+                 f"<div class='short'>{esc(node.short)}</div>"]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
         if node.type == "artefact":
