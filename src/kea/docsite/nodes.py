@@ -211,6 +211,11 @@ def _validate(tree: Tree) -> None:
         if internal:
             tree.notes.append(f"{where}: summary line uses internal labels {', '.join(sorted(set(internal)))} "
                               "(write it for the reader)")
+        spelled = sorted({match.group(0) for match in KIND_WITH_DIGIT.finditer(_without_code(node.body + " " + node.short))})
+        if spelled:
+            tree.notes.append(f"{where}: names pages as {', '.join(repr(item) for item in spelled[:3])}; link them "
+                              "instead ([[c-x]] shows the tag, e.g. 'Conclusion C2'), so the kind and number match "
+                              "the site")
         if len(node.short.split()) > 45:
             tree.notes.append(f"{where}: summary line has {len(node.short.split())} words (aim for at most ~40)")
         if node.type == "caveat" and not node.relations.get("limits"):
@@ -237,6 +242,14 @@ def _validate(tree: Tree) -> None:
     for project, home in tree.projects.items():
         if home.type != "goal":
             tree.problems.append(f"{project}/home: must be a goal")
+
+
+KIND_WITH_DIGIT = re.compile(r"\b(?:[Pp]remise|[Qq]uestion|[Hh]ypothesis|[Ss]tep|[Rr]esult|[Cc]onclusion|[Dd]ecision|"
+                             r"[Cc]aveat)s? \d{1,2}\b(?! ?(?:%|cells|donors|days|genes|times))")
+
+
+def _without_code(text: str) -> str:
+    return re.sub(r"```.*?```|`[^`\n]*`", " ", text, flags=re.S)
 
 
 def _missing(tree: Tree, where, target: str) -> None:

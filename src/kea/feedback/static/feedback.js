@@ -213,8 +213,10 @@
       if (heading.querySelector(".fb-sec-edit")) return;
       const button = el("button", { class: "fb-sec-edit " + NOT, title: "Edit just this section (saved as a suggestion)",
         onclick: event => { event.preventDefault(); openEditor({ index, title: heading.textContent.trim() }); } });
-      button.innerHTML = PENCIL + "<span>edit section</span>";
-      heading.append(button);
+      button.innerHTML = PENCIL;                 // icon only, right after the heading text (no wrap, no new line)
+      const holder = el("span", { class: "fb-sec-holder " + NOT });
+      holder.append(button);
+      heading.append(holder);
     });
   }
   async function openEditor(section) {

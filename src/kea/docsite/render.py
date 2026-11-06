@@ -66,7 +66,7 @@ padding:1px 8px 1px 6px;line-height:1.45;vertical-align:baseline;white-space:now
 text-decoration:none}
 a.tag:hover{text-decoration:none;filter:brightness(1.12);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 a.tagline{color:var(--fg);display:inline}a.tagline:hover{text-decoration:none;background:#eef3fb}
-a.tagline .tag{margin-right:6px}a.tagline .tl-text{border-bottom:1px dotted #8a94a6}
+a.tagline .tag{margin-right:6px}a.tagline .kindword{font-weight:700;margin-right:3px}a.tagline .tl-text{border-bottom:1px dotted #8a94a6}
 .qhead{display:block;line-height:1.5}
 .qblock{margin:6px 0 18px}.qblock .answer{margin:4px 0 6px}.qblock ul{margin:4px 0}
 article h2{position:relative}
@@ -77,7 +77,9 @@ h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:
 .k-goal{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#9467bd}.k-step{color:#2a7f62}
 .k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
 .k-artefact{color:#9a7000}.k-caveat{color:#d35400}.k-term,.k-reference,.k-dataset,.k-page{color:#556}
-a.fullname{font-weight:700;margin-right:6px}a.fullname .ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
+a.fullname,span.fullname{font-weight:700;margin-right:6px;white-space:nowrap}.fullname>.ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}
+.fullname .tag{margin-left:2px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
+h1 .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 .qblock h3{font-size:14px;margin:14px 0 4px;color:var(--fg)}
 table.status-table{display:table;width:100%}table.status-table td{white-space:normal}
 tr.st-good td{background:#eaf6ef}tr.st-bad td{background:#fbeceb}tr.st-mid td{background:#fdf5e6}
@@ -142,10 +144,17 @@ def node_href(node: Node, prefix: str) -> str:
 
 
 def type_badge(node: Node) -> str:
-    """The page-type badge at the head of a page: icon, type name and number (not a link)."""
-    label = TYPE_LABELS.get(node.type, node.type)
-    number = f" {node.number}" if node.number else ""
-    return f"<span class='badge t-{esc(node.type)}'>{icons.svg(node.type)}{esc(label)}{esc(number)}</span>"
+    """The page type in full, not a link: the word in the type's colour, then the tag (icon and number)."""
+    return f"<span class='fullname k-{esc(node.type)}'>{fullname_inner(node)}</span>"
+
+
+def fullname_inner(node: Node) -> str:
+    """'Question' as coloured text followed by the tag [icon Q1]: the tag always looks the same, with or without
+    the word in front. Pages without a number show the word and the icon."""
+    word = esc(TYPE_LABELS.get(node.type, node.type))
+    if node.number:
+        return f"{word} <span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}{esc(node.number)}</span>"
+    return f"{icons.svg(node.type)}{word}"
 
 
 def status_pill(node: Node) -> str:
@@ -189,7 +198,7 @@ def full_kind(node: Node) -> str:
 def fullname_link(node: Node, prefix: str) -> str:
     """'Question Q1' in the type's colour, as a link (headings of question blocks)."""
     return (f"<a class='fullname k-{esc(node.type)}' href='{esc(node_href(node, prefix))}' "
-            f"title='{esc(hover_text(node))}'>{icons.svg(node.type)}{esc(full_kind(node))}</a>")
+            f"title='{esc(hover_text(node))}'>{fullname_inner(node)}</a>")
 
 
 GOOD_STATUSES = {"supported", "done", "answered", "current", "active", "addressed"}
@@ -204,14 +213,15 @@ def status_row_class(node: Node) -> str:
 
 def tagline(node: Node, prefix: str, text: str | None = None, from_project: str | None = None,
             full: bool = False) -> str:
-    """Tag plus one line (the title by default) as ONE link: for lists of pages. `full` names the kind in full
-    inside the tag ("Conclusion C1")."""
+    """Tag plus one line (the title by default) as ONE link: for lists of pages. `full` writes the kind in front of
+    the tag, in its colour ("Conclusion [C1]"); the tag itself always holds the icon and the number only."""
     words = node.title if text is None else text
     if not node.number:
         return node_link(node, prefix, words, from_project=from_project)
-    inner = f"{icons.svg(node.type)}{esc(full_kind(node))}" if full else tag_inner(node, from_project)
-    return (f"<a class='tagline' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node))}'>"
-            f"<span class='tag t-{esc(node.type)}'>{inner}</span>"
+    kind = (f"<span class='kindword k-{esc(node.type)}'>{esc(TYPE_LABELS.get(node.type, node.type))}</span> "
+            if full else "")
+    return (f"<a class='tagline' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node))}'>{kind}"
+            f"<span class='tag t-{esc(node.type)}'>{tag_inner(node, from_project)}</span>"
             f"<span class='tl-text'>{esc(words)}</span></a>")
 
 
@@ -435,10 +445,33 @@ def tagline_items(html_text: str) -> str:
     return TAGLINE_ITEM.sub(join, html_text)
 
 
+LIST_ITEM = re.compile(r"^ {0,3}(?:[-*+]|\d{1,3}[.)])\s+\S")
+FENCE = re.compile(r"^ {0,3}(```|~~~)")
+
+
+def separate_lists(text: str) -> str:
+    """Insert a blank line before a list that directly follows a paragraph line (Markdown would otherwise run the
+    list into the sentence: "three checks: - one - two"). Code fences and lines inside a list are left alone."""
+    output, in_fence, in_list, previous = [], False, False, ""
+    for line in text.split("\n"):
+        if FENCE.match(line):
+            in_fence = not in_fence
+        elif not in_fence:
+            if LIST_ITEM.match(line):
+                if previous.strip() and not in_list and not previous.lstrip().startswith(("|", "#", ">", "<")):
+                    output.append("")
+                in_list = True
+            elif line.strip() and not line.startswith((" ", "\t")) and not previous.strip():
+                in_list = False          # a new paragraph after a blank line ends the list
+        output.append(line)
+        previous = line
+    return "\n".join(output)
+
+
 def render_markdown(text: str, context: LinkContext) -> str:
     """Markdown to HTML with [[links]] resolved and the first use of each term linked to its page.
     Links inside `code spans` are left alone. Link rules: see node_link and tagline_items."""
-    text = heading_links(text, context)
+    text = heading_links(separate_lists(text), context)
     pieces = re.split(r"(`[^`\n]*`)", text)
     linked = "".join(piece if piece.startswith("`") else LINK_PATTERN.sub(context.replace, piece) for piece in pieces)
     html_text = markdown.markdown(callouts(linked), extensions=["tables", "fenced_code", "sane_lists", "md_in_html"])

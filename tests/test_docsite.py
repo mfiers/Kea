@@ -138,3 +138,23 @@ def test_context_lists_evidence_caveats_and_gaps(toy_doc):
     assert "has no hypothesis" in text                                  # a gap
     overview = context.experiment_context(tree, "proj")
     assert "## Open caveats" in overview and "W1 A limit" in overview
+
+
+def test_lists_without_blank_line_and_full_names(toy_doc):
+    from kea.docsite.render import fullname_link, separate_lists, type_badge
+    assert separate_lists("three checks:\n- a\n- b") == "three checks:\n\n- a\n- b"
+    assert separate_lists("- a\n  more\n- b") == "- a\n  more\n- b"                 # inside a list: unchanged
+    assert separate_lists("```\nx:\n- y\n```") == "```\nx:\n- y\n```"              # code fences: unchanged
+    tree = nodes.load_tree(toy_doc)
+    context = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: (None, target))
+    assert "<li>" in render_markdown("Three checks:\n- one\n- two", context)
+    full = fullname_link(tree.nodes["proj:q-a"], "")
+    assert ">Question <span class='tag t-question'>" in full and "Q1</span></a>" in full   # word, then the tag
+    assert "Question <span class='tag" in type_badge(tree.nodes["proj:q-a"])
+
+
+def test_spelled_out_page_numbers_are_noted(toy_doc):
+    write_page(toy_doc, "proj/result/r-b.md", "id: r-b\ntype: result\ntitle: R2\nshort: Other.\nparent: home\n"
+               "status: done", "As conclusion 2 says, in 40 cells.")
+    tree = nodes.load_tree(toy_doc)
+    assert any("'conclusion 2'" in note for note in tree.notes)

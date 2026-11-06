@@ -106,10 +106,22 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - `result` = what a file shows (every number from a file named in `sources:` or an artefact page);
   `conclusion` = the interpretation, with `supported_by`/`opposed_by` results; `caveat` = what limits other pages
   (`limits:`); hypotheses carry `fixed_before_results: true|false` and are committed before their test runs.
+- **Steps read as the Methods section of a paper**: what was done to which data (dataset, version, n of donors and
+  cells), with which tool and version (package, function, parameters, seed), which test and why (unit, sidedness,
+  correction, number of permutations), and which files came out. Name the script and its Makefile target. A step
+  that says only "ran the analysis" is not finished.
 - Figures: made by scripts from saved tables, new version per change; captions with title, take-home and per
-  panel take-home / Shows / Method / Statistics (`kea build` notes missing parts).
-- Terms (`aliases:`) are linked automatically from first use; reference pages carry the abstract fetched from
-  Europe PMC / PubMed (never from memory) and why the paper is there.
+  panel take-home / Shows / Method / Statistics (`kea build` notes missing parts). Make figures at their printed
+  size (at most 16.6 cm wide, 19 cm high, fonts 6–8 pt, with the PNG's dpi set): the PDF prints them at that size
+  and the build notes figures it has to shrink below 80 %.
+- Terms (`aliases:`) are linked automatically from first use. Terms that name entities (genes, proteins, cell
+  types) get `group: Genes` (etc.); the PDF lists each group apart from the key terms (titles that look like gene
+  symbols are put under Genes without it).
+- Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
+  the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
+  PMC); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.
+- **Name pages by their link**, never as "conclusion 2" or "step 3": `[[c-x]]` shows the kind and tag
+  (Conclusion C2) exactly as everywhere else; the build notes spelled-out names.
 - **Executive summaries**, written for a biologist (or whoever the reader is) who has five minutes:
   - the project: `doc/_summary.md` (with a single experiment, that experiment's summary serves);
   - each experiment: the text of its home page before the first `##` heading: what was asked, what was found, how
@@ -136,16 +148,20 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 `kea pdf` (`make pdf`): one PDF of every page, typeset with Typst, into `report/pdf/` under a new name each time
 (title, date, site version, commit).
 
-- **Title page:** project summary, version, author (`author:` in `kea.yaml`), repository, Kea link. With several
+- **Title page:** title, author (`author:` in `kea.yaml`), then stacked: document version, commit and date,
+  repository, "made with Kea" with the page of "About this document"; then the project summary. With several
   experiments page 2 summarises them; with one, the PDF reads as that experiment.
-- **Order of each chapter:** at a glance (each question with its answer and conclusions), key terms, background
-  (the home page after its summary), premises, methods, then per question its answer, a hypothesis table and the
-  results with their figures, then conclusions and caveats.
-- **Layout:** every question and every section starts on a new page; headings name the kind in full in its colour
-  ("Question Q1", "Result R2"); a question opens with its answer and a "Conclusions" list; hypotheses, conclusions
-  and caveats also appear as tables tinted by status (green supported, red rejected, amber open).
-- **Appendix:** hypotheses in full, data and figure files, the glossary, the references; then a standard
-  "About this document".
+- **Order of each chapter:** at a glance (each question with its answer and conclusions; each conclusion in full
+  once; open caveats), key terms and term groups (Genes …), background (the home page after its summary),
+  premises, methods, then per question its answer, a hypothesis table and the results with their figures, then
+  conclusions and caveats.
+- **Layout:** At a glance, every question, Conclusions, Caveats and the appendix start on a new page (other
+  sections follow on); full names read as the kind in its colour followed by the tag ("Question [Q1]"); lists of
+  pages are one link per line with the status and page number at the end of the line; hypotheses, conclusions and
+  caveats also appear as tables tinted by status (green supported, red rejected, amber open).
+- **Appendix:** overview tables (one per kind: tag, one line, status, question, linked pages), hypotheses in full,
+  data and figure files, the glossary and term groups, the references (numbered, Nature style), what changed
+  (versions and run entries); then a standard "About this document" that names only the parts present.
 - **No data-file contents.**
 - **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
   to install Typst rather than working around it.

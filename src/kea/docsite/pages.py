@@ -15,7 +15,8 @@ from pathlib import Path
 from kea.config import SETTINGS
 from kea.docsite import artefacts, changes, codepages, comments, history, mode, questions, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_PLURALS, Node, Tree
-from kea.docsite.render import (LinkContext, card, crumbs, esc, full_kind, fullname_link, node_link, page,
+from kea.docsite.pdf import natural  # noqa: E402
+from kea.docsite.render import (LinkContext, card, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
                             prefix_for, render_markdown, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons
 
@@ -279,9 +280,12 @@ class SiteRenderer:
 
     def questions_html(self, project: str, prefix: str, context: LinkContext) -> str:
         """On an experiment page: each question as a heading with its executive summary and conclusions."""
-        blocks = []
+        blocks, seen = [], set()
         for question in questions.questions(self.tree, project):
-            _, _, conclusions = questions.evidence(self.tree, question)
+            _, _, found = questions.evidence(self.tree, question)
+            conclusions = [member for member in found if member.key not in seen]   # in full once, then by tag
+            earlier = [member for member in found if member.key in seen]
+            seen.update(member.key for member in found)
             summary = questions.answer(question)
             blocks.append(f"<div class='qblock'><h3 class='qhead'>{fullname_link(question, prefix)} "
                           f"<a href='{prefix}{question.url}'>{esc(question.title)}</a>"
@@ -289,7 +293,9 @@ class SiteRenderer:
                           + (f"<div class='answer'>{render_markdown(summary, context)}</div>" if summary else "")
                           + (("<ul class='answer-list'>" + "".join(
                               f"<li>{tagline(member, prefix, member.short, project, full=True)} {status_pill(member)}</li>"
-                              for member in conclusions) + "</ul>") if conclusions else "") + "</div>")
+                              for member in conclusions) + "</ul>") if conclusions else "")
+                          + (f"<p class='help'>Also: {' '.join(node_link(member, prefix) for member in earlier)}</p>"
+                             if earlier else "") + "</div>")
         return (f"<section class='questions not-annotatable'><h2>Questions</h2>{''.join(blocks)}</section>" if blocks else "")
 
     def project_index_html(self, project: str, prefix: str) -> str:
@@ -299,7 +305,7 @@ class SiteRenderer:
                 groups.setdefault(node.type, []).append(node)
         parts = []
         for node_type in sorted(groups, key=lambda kind: CHILD_ORDER.index(kind) if kind in CHILD_ORDER else 99):
-            members = sorted(groups[node_type], key=lambda item: (len(item.number), item.number, item.id))
+            members = sorted(groups[node_type], key=lambda item: (natural(item.number), natural(item.title)))
             rows = "".join(f"<tr><td>{tagline(member, prefix)}</td><td>{status_pill(member)}</td></tr>"
                            for member in members)
             parts.append(f"<h3>{TYPE_PLURALS.get(node_type, node_type)} ({len(members)})</h3><table>{rows}</table>")
@@ -319,9 +325,10 @@ class SiteRenderer:
                     if node.header.get("fixed_before_results") is True
                     else " <span class='pill s-exploratory'>written after results</span>"
                     if node.header.get("fixed_before_results") is False else ""))
-        kind = "Experiment" if node.id == "home" and node.type == "goal" else full_kind(node)
+        kind_html = (f"{icons.svg(node.type)}Experiment" if node.id == "home" and node.type == "goal"
+                     else fullname_inner(node))
         parts = [crumbs(self.trail(node, prefix), prefix),
-                 f"<h1><span class='kind k-{esc(node.type)} not-annotatable'>{icons.svg(node.type)}{esc(kind)}</span>"
+                 f"<h1><span class='kind k-{esc(node.type)} not-annotatable'>{kind_html}</span>"
                  f"{esc(node.title)}<span class='pills not-annotatable'>{pills}</span></h1>"
                  f"<div class='short'>{esc(node.short)}</div>"]
         if node.type == "figure":

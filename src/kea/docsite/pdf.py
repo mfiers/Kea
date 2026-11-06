@@ -49,7 +49,6 @@ from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tre
 from kea.docsite.render import LinkContext, render_markdown
 
 SENTINEL = "kea-pdf:/"                    # link prefix that marks a link to a page of the tree
-APPENDIX_TYPES = {"term": "Glossary", "reference": "References"}
 TYPE_COLOURS = {"goal": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#9467bd",
                 "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#7f7f7f",
                 "figure": "#17818a", "artefact": "#b8860b", "caveat": "#d35400", "term": "#555566",
@@ -84,7 +83,8 @@ STATUS_MEANINGS = {
 }
 CALLOUT_COLOURS = {"warning": "#d35400", "caution": "#d35400", "caveat": "#d35400", "important": "#aa3333",
                    "danger": "#aa3333", "tip": "#1b7f4b", "success": "#1b7f4b"}
-MAX_FIGURE_HEIGHT_CM = 11.0             # a tall figure is narrowed so that it does not fill a whole page
+MAX_FIGURE_HEIGHT_CM = 19.0             # a taller figure is narrowed (it still leaves room for its caption)
+SMALL_FIGURE_SCALE = 0.8                # printed below this share of its own size: noted in the build log
 TEXT_WIDTH_CM = 16.6
 INSTALL_HINT = ("Typst was not found. Install it (one binary, no TeX needed): https://github.com/typst/typst/releases, "
                 "or `cargo install --locked typst-cli`, `brew install typst`, `conda install -c conda-forge typst`; "
@@ -100,7 +100,7 @@ def typst_command() -> str | None:
 
 
 # ---------------------------------------------------------------------------------------------- Typst escaping
-MARKUP_SPECIALS = re.compile(r"([\\#*_`$<>@\[\]~=\-+/'\"])")
+MARKUP_SPECIALS = re.compile(r"([\\#*_`$<>@\[\]~=\-+/'\";(])")   # ; and ( would end or continue a preceding #expr
 ZWSP = "\u200b"
 
 
@@ -109,7 +109,20 @@ def text(value: str, breakable: bool = False) -> str:
     breaks after _ and / (long identifiers in narrow table columns)."""
     escaped = MARKUP_SPECIALS.sub(r"\\\1", re.sub(r"\s+", " ", str(value)))
     escaped = re.sub(r"(\d)\.", r"\1\\.", escaped)          # '1.' at a line start would start a numbered list
+    escaped = re.sub(r"^\.", r"\\.", escaped)                # '.x' after #expr would be a field access
     return re.sub(r"(\\[_/])", r"\1" + ZWSP, escaped) if breakable else escaped
+
+
+def code_text(value: str) -> str:
+    """Inline code as escaped text that may break after / _ . - , = (long paths in justified text)."""
+    escaped = MARKUP_SPECIALS.sub(r"\\\1", re.sub(r"\s+", " ", str(value)))
+    escaped = re.sub(r"(\d)\.", r"\1\\.", escaped)
+    return re.sub(r"(\\[_/\-=]|[.,](?=\S))", r"\1" + ZWSP, escaped)
+
+
+def natural(value: str) -> list:
+    """Sort key that orders numbers by value: S100A2 before S100A10."""
+    return [(0, int(part), "") if part.isdigit() else (1, 0, part.lower()) for part in re.split(r"(\d+)", str(value))]
 
 
 def string(value: str) -> str:
@@ -121,19 +134,39 @@ def label(key: str) -> str:
     return "<" + re.sub(r"[^A-Za-z0-9_.:-]", "-", key) + ">"
 
 
-def figure_width(path: Path) -> str:
-    """Typst width for an image: the text width, or narrower when the image would be taller than
-    MAX_FIGURE_HEIGHT_CM (PNG only; other formats get the full width)."""
+def png_size(path: Path) -> tuple[int, int, float | None] | None:
+    """(width px, height px, pixels per cm or None) of a PNG; None for other files."""
     try:
-        with path.open("rb") as handle:
-            header = handle.read(24)
-        if header[:8] == b"\x89PNG\r\n\x1a\n":
-            width, height = struct.unpack(">II", header[16:24])
-            if width and height and TEXT_WIDTH_CM * height / width > MAX_FIGURE_HEIGHT_CM:
-                return f"{MAX_FIGURE_HEIGHT_CM * width / height:.1f}cm"
+        data = path.open("rb").read(1 << 16)
     except OSError:
-        pass
-    return "100%"
+        return None
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    width, height = struct.unpack(">II", data[16:24])
+    per_cm = None
+    position = data.find(b"pHYs")
+    if position > 0:
+        x_per_metre, _, unit = struct.unpack(">IIB", data[position + 4:position + 13])
+        if unit == 1 and x_per_metre:
+            per_cm = x_per_metre / 100
+    return width, height, per_cm
+
+
+def figure_width(path: Path) -> tuple[str, float | None]:
+    """(Typst width, scale) for an image. A PNG that records its resolution is printed at its own size (so its
+    fonts keep their size), at most the text width and MAX_FIGURE_HEIGHT_CM high; scale is printed size / own size.
+    Without a resolution: the text width, narrowed when it would be taller than MAX_FIGURE_HEIGHT_CM."""
+    size = png_size(path)
+    if not size or not size[0] or not size[1]:
+        return "100%", None
+    width, height, per_cm = size
+    if per_cm:
+        own_width, own_height = width / per_cm, height / per_cm
+        scale = min(1.0, TEXT_WIDTH_CM / own_width, MAX_FIGURE_HEIGHT_CM / own_height)
+        return f"{own_width * scale:.1f}cm", scale
+    if TEXT_WIDTH_CM * height / width > MAX_FIGURE_HEIGHT_CM:
+        return f"{MAX_FIGURE_HEIGHT_CM * width / height:.1f}cm", None
+    return "100%", None
 
 
 def drop_section(markdown_text: str, heading: str) -> str:
@@ -152,6 +185,23 @@ def drop_section(markdown_text: str, heading: str) -> str:
         if not skipping_level:
             output.append(line)
     return "\n".join(output)
+
+
+def section_text(markdown_text: str, heading: str) -> str:
+    """The text under the section titled ``heading`` (any level), without the heading; '' when absent."""
+    lines, output, level_found = markdown_text.split("\n"), [], 0
+    for line in lines:
+        match = re.match(r"^(#{1,6})\s+(.*?)\s*$", line)
+        if match:
+            level = len(match.group(1))
+            if level_found and level <= level_found:
+                break
+            if not level_found and match.group(2).strip().lower() == heading.lower():
+                level_found = level
+                continue
+        if level_found:
+            output.append(line)
+    return "\n".join(output).strip()
 
 
 # ---------------------------------------------------------------------------------------------- HTML to Typst
@@ -196,8 +246,9 @@ class Converter:
     """HTML (as rendered for the site) to Typst markup. ``urls`` maps page paths (node.url) to node keys. Links to
     pages become ``#nlink`` (with the page number), glossary links ``#tlink`` (preamble)."""
 
-    def __init__(self, urls: dict[str, str], heading_level: int = 3):
+    def __init__(self, urls: dict[str, str], heading_level: int = 3, cite=None):
         self.urls, self.heading_level = urls, heading_level
+        self.cite = cite              # key, link text -> citation markup for references (None: an ordinary link)
         self.in_table = 0
 
     def convert(self, html_text: str) -> str:
@@ -232,7 +283,8 @@ class Converter:
             return self.inlines(element.children).strip()
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
             level = min(self.heading_level + int(tag[1]) - 2, 6)
-            return f"#heading(level: {max(level, 3)}, outlined: false)[{self.inlines(element.children).strip()}]"
+            return (f"#block(sticky: true, above: 1.3em, below: 0.7em)[#heading(level: {max(level, 3)}, outlined: false)"
+                    f"[{self.inlines(element.children).strip()}]]")
         if tag in ("ul", "ol"):
             items = [child for child in element.children if isinstance(child, Element) and child.tag == "li"]
             body = ", ".join(f"[{self.blocks(item.children)}]" for item in items)
@@ -295,7 +347,12 @@ class Converter:
         return f"#datatable({width}, {size}, {1 if header_rows else 0}, " + ", ".join(parts) + ")"
 
     def inlines(self, children: list) -> str:
-        return "".join(self.inline(child) for child in children)
+        pieces = [self.inline(child) for child in children]
+        for index in range(1, len(pieces) - 1):   # "(B1)": a lone citation mark needs no brackets of its own
+            if pieces[index].startswith("#cite(") and pieces[index - 1].endswith("\\(") and pieces[index + 1].startswith(")"):
+                pieces[index - 1] = pieces[index - 1][:-2].rstrip()
+                pieces[index + 1] = pieces[index + 1][1:]
+        return "".join(pieces)
 
     def inline(self, node) -> str:
         if isinstance(node, str):
@@ -305,10 +362,8 @@ class Converter:
             return f"#strong[{self.inlines(node.children)}]"
         if tag in ("em", "i"):
             return f"#emph[{self.inlines(node.children)}]"
-        if tag == "code":
-            if self.in_table:         # raw text cannot break; tables need it to
-                return f"#mono[{text(node.text_content(), breakable=True)}]"
-            return f"#raw({string(node.text_content())})"
+        if tag == "code":             # not #raw: raw text cannot break, and paths stretched justified lines
+            return f"#icode[{code_text(node.text_content())}]"
         if tag == "sup":
             return f"#super[{self.inlines(node.children)}]"
         if tag == "sub":
@@ -329,11 +384,15 @@ class Converter:
                 key = self.urls.get(href[len(SENTINEL):].split("#")[0])
                 if not key:
                     return inner
+                if self.cite:
+                    cited = self.cite(key, node.text_content().strip())
+                    if cited is not None:
+                        return cited
                 if "tag" in classes:              # the tag is the link (site's link rules)
                     kind = next((name[2:] for name in classes if name.startswith("t-")), "page")
                     return f"#nlink({label(key)})[{tag_markup(kind, node.text_content().strip())}]"
-                if "tagline" in classes:          # tag and one line: the whole line is the link
-                    return f"#nlink({label(key)})[{inner}]"
+                if "tagline" in classes:          # tag and one line: the whole line is the link, page at the end
+                    return f"#link({label(key)})[{inner}] #h(0.4em) #h(1fr) #pagenum({label(key)})"
                 return f"#tlink({label(key)})[{inner}]" if "term" in node.attrs.get("class", "").split() \
                     else f"#nlink({label(key)})[{inner}]"
             if href.startswith(("http://", "https://", "mailto:")):
@@ -346,6 +405,9 @@ class Converter:
         if tag == "span" and "tag" in node.attrs.get("class", "").split():
             kind = next((name[2:] for name in node.attrs.get("class", "").split() if name.startswith("t-")), "page")
             return tag_markup(kind, node.text_content().strip()) + " "
+        if tag == "span" and "kindword" in node.attrs.get("class", "").split():
+            kind = next((name[2:] for name in node.attrs.get("class", "").split() if name.startswith("k-")), "page")
+            return f"#kindname({string(TYPE_COLOURS.get(kind, '#555566'))})[{text(node.text_content().strip())}] "
         if tag == "span" and "tl-text" in node.attrs.get("class", "").split():
             return f"#text(fill: ink)[{self.inlines(node.children)}]"
         return self.inlines(node.children)
@@ -398,15 +460,27 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
 }
 #let nlink(target, body) = { link(target, body); pageref(target) }
 #let tlink(target, body) = link(target, underline(stroke: (paint: luma(150), thickness: 0.5pt, dash: "dotted"), offset: 2pt, text(fill: ink, body)))
-#let tag(colour, icon, body) = box(fill: rgb(colour), inset: (x: 3.4pt, y: 1.2pt), outset: (y: 0.3pt), radius: 5pt,
-  text(font: sans, fill: white, size: 7.3pt, weight: "bold", { box(height: 0.95em, baseline: 0.12em, image(bytes(icon), format: "svg")); h(2pt); body }))
+#let tag(colour, icon, body) = box(fill: rgb(colour), inset: (x: 2.6pt), outset: (y: 1.6pt), radius: 4pt,
+  text(font: sans, fill: white, size: 6.6pt, weight: "bold", top-edge: "cap-height", bottom-edge: "baseline",
+    { box(height: 0.92em, baseline: 0.02em, image(bytes(icon), format: "svg")); h(1.4pt); body }))
+#let kindname(colour, word) = text(font: sans, weight: "bold", fill: rgb(colour), word)
+#let pagenum(target) = context {
+  if locate(target).page() != here().page() { text(font: sans, size: 7pt, fill: muted)[p.#counter(page).at(target).first()] }
+}
+#let entry(target, head, body, status) = grid(columns: (1fr, auto), column-gutter: 0.6em,
+  link(target, { head; h(0.35em); text(fill: ink, body) }),
+  align(right + top, box({ status; h(3pt); pagenum(target) })))
+#let cite(target, colour, icon, number) = box(baseline: -0.42em, link(target, box(fill: rgb(colour), inset: (x: 1.6pt), outset: (y: 1pt), radius: 2.5pt,
+  text(font: sans, fill: white, size: 5.2pt, weight: "bold", top-edge: "cap-height", bottom-edge: "baseline",
+    { box(height: 0.92em, baseline: 0.02em, image(bytes(icon), format: "svg")); h(0.8pt); number }))))
+#let icode(body) = { h(1.2pt); highlight(fill: luma(240), extent: 0.6pt, text(font: "DejaVu Sans Mono", size: 0.84em, body)); h(1.2pt) }
 #let badge(colour, body) = box(fill: rgb(colour), inset: (x: 4.5pt, y: 2.2pt), outset: (y: 0.5pt), radius: 2.5pt, text(font: sans, fill: white, size: 7.5pt, weight: "bold", body))
 #let pill(colour, body) = box(stroke: 0.6pt + rgb(colour), fill: rgb(colour).lighten(92%), inset: (x: 4.5pt, y: 1.8pt), outset: (y: 0.5pt), radius: 7pt, text(font: sans, size: 7.5pt, fill: rgb(colour).darken(10%), body))
 #let summary(colour, body) = block(fill: rgb(colour).lighten(91%), inset: (x: 10pt, y: 8pt), radius: 3pt, width: 100%, above: 0.6em, below: 0.4em, text(size: 9.8pt, body))
 #let claim(body) = block(fill: rgb("#fff8f0"), stroke: 0.5pt + rgb("#f0d9bf"), inset: 9pt, radius: 4pt, width: 100%, body)
 #let meta(body) = block(above: 1em, below: 1em, text(font: sans, size: 7.8pt, fill: muted, body))
-#let intro(body) = block(sticky: true, above: 0.5em, below: 1.2em, text(font: sans, size: 8pt, fill: muted, body))
-#let node(colour, body) = block(breakable: false, stroke: (left: 3pt + rgb(colour)), inset: (left: 10pt, top: 3pt, bottom: 3pt), above: 2.4em, below: 1em, body)
+#let intro(body) = block(sticky: true, above: 1em, below: 1.2em, text(font: sans, size: 8pt, fill: muted, body))
+#let node(colour, body) = block(breakable: false, sticky: true, stroke: (left: 3pt + rgb(colour)), inset: (left: 10pt, top: 3pt, bottom: 3pt), above: 2.4em, below: 1em, body)
 #let datatable(columns, size, header-rows, ..cells) = block(width: 100%, {
   set text(size: size); set par(justify: false, leading: 0.45em)
   show table.cell: it => if it.y < header-rows { strong(it) } else { it }
@@ -456,6 +530,13 @@ def tag_markup(kind: str, label_text: str) -> str:
     return f"#tag({string(TYPE_COLOURS.get(kind, '#555566'))}, {icon_bytes(kind)})[{text(label_text)}]"
 
 
+def fullname_markup(kind: str, number: str) -> str:
+    """'Question' as coloured text, then the tag [icon Q1] (the tag looks the same with or without the word)."""
+    colour = string(TYPE_COLOURS.get(kind, "#555566"))
+    word = f"#kindname({colour})[{text(TYPE_LABELS.get(kind, kind))}]"
+    return f"{word} #h(1pt){tag_markup(kind, number)}" if number else word
+
+
 def type_badge(node: Node) -> str:
     return (f"#badge({string(TYPE_COLOURS.get(node.type, '#555566'))})[#box(height: 0.95em, baseline: 0.12em, "
             f"image(bytes({icon_bytes(node.type)}), format: \"svg\")) #h(1pt){text(TYPE_LABELS.get(node.type, node.type))}"
@@ -472,6 +553,33 @@ def written_pill(node: Node) -> str:
     return ""
 
 
+GENE_SYMBOL = re.compile(r"[A-Z][A-Z0-9]*\d[A-Z0-9-]*|[A-Z][a-z0-9]*\d[a-z0-9]*")   # S100A8, CD74, Trem2
+
+
+def term_group(term: Node) -> str:
+    """The group a term is listed in: front matter `group:` (e.g. Genes, Proteins, Cell types), else 'Genes' for
+    a title that looks like a gene symbol (letters with a digit, no spaces), else '' (key terms)."""
+    group = str(term.header.get("group") or "").strip()
+    if group:
+        return group
+    return "Genes" if len(term.title) <= 12 and GENE_SYMBOL.fullmatch(term.title) else ""
+
+
+def term_groups(terms: list[Node]) -> list[tuple[str, list[Node]]]:
+    """Terms by group (key terms first, then the other groups by name), each sorted naturally (S100A2 < S100A10)."""
+    groups: dict[str, list[Node]] = {}
+    for term in terms:
+        groups.setdefault(term_group(term), []).append(term)
+    return [(name, sorted(groups[name], key=lambda term: natural(term.title)))
+            for name in sorted(groups, key=lambda name: (name != "", name.lower()))]
+
+
+BREAK_BEFORE: tuple[str, ...] = ()     # questions and the appendix start a page; other parts follow on (no empty pages)
+REFERENCE_PREFIX = "B"          # citation numbers in the PDF (B for bibliography; R is taken by results)
+OVERVIEW_TYPES = ("question", "hypothesis", "premise", "step", "decision", "result", "figure", "conclusion",
+                  "caveat", "artefact")
+
+
 class PdfWriter:
     def __init__(self, tree: Tree):
         self.tree = tree
@@ -480,12 +588,29 @@ class PdfWriter:
                                  for node in tree.nodes.values() if node.type == "artefact"}
         self.placed: set[str] = set()
         self.single = len(tree.projects) == 1        # one experiment: read as a single-experiment document
+        self.reference_numbers: dict[str, str] = {}  # reference key -> "B1", in order of first citation
+        self.notes: list[str] = []                   # problems worth a line in the build log (small figures)
 
     # ------------------------------------------------------------------ helpers
     def markdown(self, node: Node, source: str, level: int) -> str:
         context = LinkContext(self.tree, node.project, SENTINEL, lambda target, prefix: None,
                               self.data_href, node.key)
-        return Converter(self.urls, heading_level=level).convert(render_markdown(source, context))
+        return Converter(self.urls, heading_level=level, cite=self.cite).convert(render_markdown(source, context))
+
+    def reference_number(self, key: str) -> str:
+        if key not in self.reference_numbers:
+            self.reference_numbers[key] = f"{REFERENCE_PREFIX}{len(self.reference_numbers) + 1}"
+        return self.reference_numbers[key]
+
+    def cite(self, key: str, link_text: str) -> str | None:
+        """A link to a reference page as a numbered citation mark (superscript tag B1, numbered in order of first
+        citation, Nature style); text given with the link ([[ref-x|Smith 2020]]) stays in front of the mark."""
+        node = self.tree.nodes.get(key)
+        if node is None or node.type != "reference":
+            return None
+        mark = (f"#cite({label(key)}, {string(TYPE_COLOURS['reference'])}, {icon_bytes('reference')}, "
+                f"[{self.reference_number(key)}])")
+        return mark if not link_text or link_text == node.title else f"{text(link_text)}{mark}"
 
     def data_href(self, target: str, prefix: str) -> tuple[str | None, str]:
         node = self.artefact_by_path.get(target.rstrip("/"))
@@ -507,38 +632,67 @@ class PdfWriter:
         _, _, conclusions = questions.evidence(self.tree, question)
         parts = []
         if with_question:
-            parts.append(f"#block(sticky: true, above: 1.8em, below: 0.7em)[{self.full_name(question)} #h(3pt) "
-                         f"#text(font: sans, weight: \"bold\", fill: ink)[{text(question.title)}] "
-                         f"{status_pill(question.status)}]")
+            parts.append(f"#block(sticky: true, above: 1.8em, below: 0.7em)[{self.entry(question, question.title, True)}]")
         summary = questions.answer(question)
         if summary:
             parts.append(self.markdown(question, summary, 4))
-        if conclusions:
-            parts.append(self.conclusion_list(conclusions, with_question))
+        if conclusions and with_question:          # at a glance: each conclusion in full once, then by its tag
+            new = [item for item in conclusions if item.key not in self.glance_seen]
+            seen = [item for item in conclusions if item.key in self.glance_seen]
+            self.glance_seen.update(item.key for item in conclusions)
+            if new:
+                parts.append(self.conclusion_list(new, True))
+            if seen:
+                parts.append(f"#block(above: 0.5em, inset: (left: 12pt))[#text(font: sans, size: 8pt, fill: muted)"
+                             f"[Also: ] {self.links([item.key for item in seen])}]")
+        elif conclusions:                         # a question part: in full once, later by tag
+            new = [item for item in conclusions if item.key not in self.part_seen]
+            seen = [item for item in conclusions if item.key in self.part_seen]
+            self.part_seen.update(item.key for item in conclusions)
+            if new:
+                parts.append(self.conclusion_list(new, False))
+            if seen:
+                parts.append(f"#block(above: 0.6em, below: 1em)[#text(font: sans, size: 8.5pt, fill: muted)"
+                             f"[{'Conclusions' if len(seen) > 1 else 'Conclusion'} given above: ] {self.links([item.key for item in seen])}]")
         return "\n\n".join(parts)
 
     def full_name(self, node: Node) -> str:
-        """'Conclusion C1' in the type's colour, as the link (with the page number)."""
-        colour = TYPE_COLOURS.get(node.type, "#555566")
-        kind = f"{TYPE_LABELS.get(node.type, node.type)} {node.number}".strip()
-        return (f"#nlink({label(node.key)})[#text(font: sans, weight: \"bold\", fill: rgb({string(colour)}))"
-                f"[{text(kind)}]]")
+        """'Conclusion' in the type's colour and the tag [icon C1] (not a link by itself)."""
+        return fullname_markup(node.type, node.number)
+
+    def entry(self, node: Node, words: str, bold: bool = False) -> str:
+        """Full name and a line of text as one link; status and page number right-aligned at the end of the line."""
+        body = f"#text(font: sans, weight: \"bold\")[{text(words)}]" if bold else text(words)
+        return f"#entry({label(node.key)}, [{self.full_name(node)}], [{body}], [{status_pill(node.status)}])"
 
     def conclusion_list(self, conclusions: list[Node], compact: bool) -> str:
         """The conclusions of a question under their own small heading, each named in full."""
         items = "\n".join(f"#block(above: 0.55em, below: 0.55em, inset: (left: 10pt), stroke: (left: 2pt + "
-                          f"rgb({string(TYPE_COLOURS['conclusion'])}).lighten(40%)))[{self.full_name(item)} "
-                          f"{status_pill(item.status)} #h(0.3em) {text(item.short)}]" for item in conclusions)
+                          f"rgb({string(TYPE_COLOURS['conclusion'])}).lighten(40%)))[{self.entry(item, item.short)}]"
+                          for item in conclusions)
         title = "" if compact else ("#block(sticky: true, above: 1.2em, below: 0.5em)[#text(font: sans, size: 10.5pt, "
                                     "weight: \"bold\", fill: ink)[Conclusions]]\n")
-        return title + items
+        return title + items + "\n#v(0.6em)"
+
+    def tag_cell(self, node: Node) -> str:
+        return f"#link({label(node.key)})[{tag_markup(node.type, node.number)}]"
+
+    def title_cell(self, node: Node, words: str) -> str:
+        """Table cell: the text as the link, the page number at the end of the line."""
+        return f"#link({label(node.key)})[#text(fill: ink)[{text(words)}]] #h(0.4em) #h(1fr) #pagenum({label(node.key)})"
 
     def links(self, keys: list[str]) -> str:
-        return ", ".join(self.link(self.tree.nodes[key]) for key in keys if key in self.tree.nodes)
+        found = sorted((self.tree.nodes[key] for key in keys if key in self.tree.nodes), key=self.number_order)
+        return ", ".join(self.link(node) for node in found)
+
+    @staticmethod
+    def number_order(node: Node) -> tuple:
+        return (list(TYPE_COLOURS).index(node.type) if node.type in TYPE_COLOURS else 99, natural(node.number),
+                natural(node.title))
 
     def of_type(self, project: str, node_type: str) -> list[Node]:
         return sorted((node for node in self.tree.nodes.values() if node.project == project and node.type == node_type),
-                      key=lambda node: (len(node.number), node.number, node.order, node.id))
+                      key=lambda node: (natural(node.number), node.order, node.id))
 
     def body(self, node: Node, level: int) -> str:
         source = node.body
@@ -555,8 +709,7 @@ class PdfWriter:
     def head(self, node: Node, level: int, extra: str = "") -> str:
         """The heading block: stripe in the type's colour, heading with label, badge and pills, summary."""
         colour = TYPE_COLOURS.get(node.type, "#555566")
-        kind = f"{TYPE_LABELS.get(node.type, node.type)}{' ' + node.number if node.number else ''}"
-        heading = f"#text(fill: rgb({string(colour)}))[{text(kind)}] #h(0.3em) {text(node.title)}"
+        heading = f"{fullname_markup(node.type, node.number)} #h(0.3em) {text(node.title)}"
         pills = " ".join(part for part in (status_pill(node.status), written_pill(node), extra) if part)
         return ((f"#pagebreak(weak: true)\n" if level <= 2 else "")
                 + f"#node({string(colour)})[\n{'=' * level} {heading} {label(node.key)}\n\n"
@@ -597,7 +750,12 @@ class PdfWriter:
         image = str(node.header.get("image", ""))
         if not image or not (PROJECT_ROOT / image).is_file():
             return f"#emph[Figure image missing: {text(image)}]"
-        width = str(node.header.get("pdf_width") or figure_width(PROJECT_ROOT / image))
+        automatic, scale = figure_width(PROJECT_ROOT / image)
+        width = str(node.header.get("pdf_width") or automatic)
+        if scale is not None and scale < SMALL_FIGURE_SCALE and not node.header.get("pdf_width"):
+            self.notes.append(f"{node.number or node.id}: printed at {scale:.0%} of its own size ({image}); make it "
+                              f"at most {TEXT_WIDTH_CM:.0f} cm wide and {MAX_FIGURE_HEIGHT_CM:.0f} cm high so its "
+                              "text keeps its size")
         if not re.fullmatch(r"\d+(\.\d+)?(cm|mm|%)", width):
             width = "100%"
         parts = [f"#align(center, image({string('/' + image)}, width: {width}))"]
@@ -607,6 +765,8 @@ class PdfWriter:
                                 if not line.startswith(("# ", "- source table:", "- script:", "- commit:")))
             parts.append(f"#block(inset: (x: 4pt), above: 0.8em)[#set text(size: 9pt)\n"
                          f"{self.markdown(node, caption.strip(), level + 1)}]")
+            if len(caption) < 1800:        # a short caption stays with its image (a long one may run on)
+                return f"#block(breakable: false)[\n{chr(10).join(parts)}\n]"
         return "\n\n".join(parts)
 
     # ------------------------------------------------------------------ chapter parts
@@ -632,35 +792,53 @@ class PdfWriter:
                 + (f"\n\n#meta[{note}]" if note else ""))
 
     def conclusions_table(self, conclusions: list[Node]) -> str:
-        rows = [[f"[{self.link(item)}]", f"[{text(item.title)}]", f"[{status_pill(item.status)}]",
-                 f"[{self.links(item.relations.get('supported_by', []))}]",
-                 f"[{self.links(item.relations.get('opposed_by', []))}]",
-                 f"[{self.links(item.incoming.get('Limited by', []))}]"] for item in conclusions]
-        return self.status_table(conclusions, "(auto, 2.2fr, auto, 1.3fr, 0.8fr, 1fr)",
-                                 ["[Conclusion]", "[In short]", "[Status]", "[Supported by]", "[Opposed by]",
-                                  "[Limited by]"], rows)
+        columns = [("[Conclusion]", "auto", lambda item: self.tag_cell(item)),
+                   ("[In short]", "2.2fr", lambda item: self.title_cell(item, item.title)),
+                   ("[Status]", "auto", lambda item: status_pill(item.status)),
+                   ("[Supported by]", "1.3fr", lambda item: self.links(self.supporting(item))),
+                   ("[Opposed by]", "0.8fr", lambda item: self.links(self.opposing(item))),
+                   ("[Limited by]", "1fr", lambda item: self.links(item.incoming.get("Limited by", [])))]
+        cells = [[render(item) for _, _, render in columns] for item in conclusions]
+        keep = [index for index in range(len(columns)) if index < 3 or any(row[index] for row in cells)]
+        return self.status_table(conclusions, "(" + ", ".join(columns[index][1] for index in keep) + ")",
+                                 [columns[index][0] for index in keep],
+                                 [[f"[{row[index]}]" for index in keep] for row in cells])
+
+    @staticmethod
+    def supporting(node: Node) -> list[str]:
+        return list(dict.fromkeys(node.relations.get("supported_by", []) + node.incoming.get("Supported by", [])))
+
+    @staticmethod
+    def opposing(node: Node) -> list[str]:
+        return list(dict.fromkeys(node.relations.get("opposed_by", []) + node.incoming.get("Opposed by", [])))
 
     def caveats_table(self, caveats: list[Node]) -> str:
-        rows = [[f"[{self.link(item)}]", f"[{text(item.title)}]", f"[{status_pill(item.status)}]",
+        rows = [[f"[{self.tag_cell(item)}]", f"[{self.title_cell(item, item.title)}]", f"[{status_pill(item.status)}]",
                  f"[{self.links(item.relations.get('limits', []))}]"] for item in caveats]
         return self.status_table(caveats, "(auto, 2.5fr, auto, 1.2fr)", ["[Caveat]", "[What it says]", "[Status]",
                                                                        "[Limits]"], rows,
                                  "Open: still limits the pages listed. Addressed: a later step dealt with it.")
 
     def hypothesis_table(self, hypotheses: list[Node]) -> str:
+        def written(hypothesis: Node) -> str:
+            return ("before its test" if hypothesis.header.get("fixed_before_results") is True else
+                    "after results" if hypothesis.header.get("fixed_before_results") is False else "")
+        uniform = len({written(hypothesis) for hypothesis in hypotheses}) == 1
         cells = []
         for hypothesis in hypotheses:
-            written = ("before its test" if hypothesis.header.get("fixed_before_results") is True else
-                       "after results" if hypothesis.header.get("fixed_before_results") is False else "")
-            cells += [f"[{self.link(hypothesis)}]", f"[{text(hypothesis.short)}]", f"[{text(written)}]",
-                      f"[{status_pill(hypothesis.status)}]", f"[{self.links(hypothesis.incoming.get('Tested by', []))}]"]
-        header = ["[Hypothesis]", "[Expected (in short)]", "[Written]", "[Outcome]", "[Tested by]"]
-        return (f"#block(width: 100%)[#set text(size: 8.5pt); #set par(justify: false)\n"
-                f"#table(columns: (auto, 1fr, auto, auto, auto), inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), "
-                f"align: (left, left, left, left, left), {self.status_fill(hypotheses)}, "
+            cells += [f"[{self.tag_cell(hypothesis)}]", f"[{self.title_cell(hypothesis, hypothesis.short)}]"]
+            cells += [] if uniform else [f"[{text(written(hypothesis))}]"]
+            cells += [f"[{status_pill(hypothesis.status)}]", f"[{self.links(hypothesis.incoming.get('Tested by', []))}]"]
+        header = ["[Hypothesis]", "[Expected (in short)]"] + ([] if uniform else ["[Written]"]) + ["[Outcome]", "[Tested by]"]
+        columns = "(auto, 1fr, auto, auto)" if uniform else "(auto, 1fr, auto, auto, auto)"
+        when = written(hypotheses[0])
+        note = (f" All of them were written {when}." if uniform and when else "")
+        return (f"#block(width: 100%, above: 1.2em)[#set text(size: 8.5pt); #set par(justify: false)\n"
+                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), "
+                f"align: left, {self.status_fill(hypotheses)}, "
                 f"table.header(..({', '.join(header)}).map(strong)), {', '.join(cells)})]\n\n"
                 f"#meta[The full text of each hypothesis (its test, its yardstick and what was expected) is in the "
-                f"appendix; the results below test them.]")
+                f"appendix; the results below test them.{note}]")
 
     def results_with_figures(self, results: list[Node], level: int) -> list[str]:
         parts = []
@@ -695,16 +873,23 @@ class PdfWriter:
                 parts.append("#list(" + ", ".join(f"[{self.tagline(item, item.short)}]" for item in conclusions) + ")")
         caveats = [caveat for caveat in self.of_type(project, "caveat") if caveat.status != "addressed"]
         if caveats:
-            parts.append("#meta[Open caveats: " + ", ".join(f"{self.link(caveat)} {text(caveat.title)}"
-                                                            for caveat in caveats) + "]")
-        terms = self.of_type(project, "term")
-        if terms:
-            entries = ", ".join(f"[#strong[{text(term.title)}]: {text(term.short)}]"
-                                for term in sorted(terms, key=lambda term: term.title.lower()))
-            parts += ["== Key terms",
-                      "#intro[Short definitions; the glossary in the appendix has the full entries.]",
+            parts.append("#block(sticky: true, above: 1.6em, below: 0.5em)[#text(font: sans, size: 10.5pt, weight: "
+                         "\"bold\", fill: ink)[Open caveats]]")
+            parts.append("#block[#set text(size: 9pt)\n" + "\n".join(
+                f"#block(above: 0.45em, below: 0.45em, inset: (left: 10pt), stroke: (left: 2pt + "
+                f"rgb({string(TYPE_COLOURS['caveat'])}).lighten(40%)))[{self.entry(caveat, caveat.title)}]"
+                for caveat in caveats) + "]")
+        for group, terms in term_groups(self.of_type(project, "term")):
+            cells = [f"#block(breakable: false, below: 0.75em)[#strong[{text(term.title)}]: {text(term.short)}]"
+                     for term in terms]
+            middle = (len(cells) + 1) // 2         # fill the left column first, then the right: balanced columns
+            entries = f"[{chr(10).join(cells[:middle])}], [{chr(10).join(cells[middle:])}]"
+            heading = "Key terms" if group == "" else group
+            parts += [("#pagebreak(weak: true)\n" if group else "") + f"== {text(heading)}",
+                      f"#intro[Short definitions; {'the glossary' if group == '' else 'the appendix'} has the full "
+                      f"entries.]",
                       f"#block[#set text(size: 8.6pt); #set par(justify: false)\n"
-                      f"#grid(columns: (1fr, 1fr), column-gutter: 14pt, row-gutter: 7pt, {entries})]"]
+                      f"#grid(columns: (1fr, 1fr), column-gutter: 14pt, {entries})]"]
         return parts
 
     def chapter(self, project: str) -> str:
@@ -715,12 +900,15 @@ class PdfWriter:
         pills = " ".join(part for part in ([f"#pill(\"#f0b429\")[{text(own[-1].label)}]"] if own else []) +
                          [status_pill(home.status)] if part)
         if self.single:      # one experiment: the document is that experiment; no chapter page of its own
-            parts = [f"#metadata(none) {label(home.key)}"]
+            parts = [f"#pagebreak(weak: true)\n#metadata(none) {label(home.key)}"]
         else:
             parts = [f"#chapter({string(project)})[\n= {text(home.title)} {label(home.key)}\n]", pills]
         parts += self.at_a_glance(project, home)
         _, rest = questions.split_intro(home.body)
         if rest.strip():
+            first = re.match(r"\s*#{1,6}\s+(.+)", rest)
+            if first and first.group(1).strip().lower() == "background":
+                rest = rest.strip().split("\n", 1)[1] if "\n" in rest.strip() else ""
             parts += ["== Background", self.markdown(home, rest, 3)]
         premises = self.of_type(project, "premise")
         if premises:
@@ -771,11 +959,17 @@ class PdfWriter:
         if others:
             parts += ["== Other pages"] + [self.section(node, 3) for node in others]
         parts += self.appendix(project, hypotheses)
-        parts = [f"#pagebreak(weak: true)\n{part}" if part.startswith("== ") else part for part in parts]
-        return "\n\n".join(part for part in parts if part.strip())
+        broken, first_appendix = [], True
+        for part in parts:          # a new page for the main parts only: short sections would leave empty pages
+            breaks = part.startswith(BREAK_BEFORE)
+            if part.startswith("== Appendix"):
+                breaks, first_appendix = first_appendix, False
+            broken.append(f"#pagebreak(weak: true)\n{part}" if breaks else part)
+        self.section_names += [part[3:].split("\n")[0] for part in parts if part.startswith("== ")]
+        return "\n\n".join(part for part in broken if part.strip())
 
     def appendix(self, project: str, hypotheses: list[Node]) -> list[str]:
-        parts = []
+        parts = self.overview(project)
         if hypotheses:
             parts += [f"== Appendix: hypotheses in full",
                       "#intro[As written, with the test and the expectation. Whether each was written before its test "
@@ -810,22 +1004,192 @@ class PdfWriter:
                       "#intro[Each figure is made by a script from a saved table; the image, script and table are "
                       "kept in the project folder.]",
                       f"#datatable(4, 7.5pt, 1, table.header([Figure], [Image], [Script], [Table]), " + ", ".join(cells) + ")"]
-        for node_type, heading in APPENDIX_TYPES.items():
-            members = sorted(self.of_type(project, node_type), key=lambda node: node.title.lower())
-            if members:
-                parts.append(f"== {text(heading)}")
-                for member in members:
-                    self.placed.add(member.key)
-                    entry = [f"=== {text(member.title)} {label(member.key)}", f"#emph[{text(member.short)}]",
-                             self.body(member, 3)]
-                    parts.append("\n\n".join(part for part in entry if part))
+        for group, terms in term_groups(self.of_type(project, "term")):
+            parts.append(f"== Appendix: {text('glossary' if group == '' else group.lower())}")
+            for member in terms:
+                self.placed.add(member.key)
+                entry = [f"=== {text(member.title)} {label(member.key)}", f"#emph[{text(member.short)}]",
+                         self.body(member, 3)]
+                joined = "\n\n".join(part for part in entry if part)
+                parts.append(f"#block(breakable: false)[\n{joined}\n]" if len(member.body) < 1500 else joined)
+        parts += self.bibliography(project)
         return parts
+
+    # ------------------------------------------------------------------ overview tables
+    def question_keys(self, project: str) -> dict[str, list[str]]:
+        """page key -> keys of the questions it belongs to (hypotheses, results and conclusions through
+        questions.evidence; figures through the results they show; caveats through what they limit)."""
+        owners: dict[str, list[str]] = {}
+        for question in questions.questions(self.tree, project):
+            for group in questions.evidence(self.tree, question):
+                for member in group:
+                    owners.setdefault(member.key, []).append(question.key)
+        for node in list(self.tree.nodes.values()):
+            if node.project != project:
+                continue
+            if node.type == "result":
+                for figure in node.relations.get("shown_in", []):
+                    owners.setdefault(figure, []).extend(owners.get(node.key, []))
+            if node.type == "figure":
+                for result in node.incoming.get("Shows", []):
+                    owners.setdefault(node.key, []).extend(owners.get(result, []))
+                if node.parent and f"{project}:{node.parent}" in owners:
+                    owners.setdefault(node.key, []).extend(owners[f"{project}:{node.parent}"])
+        for node in self.tree.nodes.values():
+            if node.project == project and node.type == "caveat":
+                for target in node.relations.get("limits", []):
+                    limited = self.tree.nodes.get(target)
+                    owners.setdefault(node.key, []).extend(
+                        owners.get(target, []) + ([target] if limited and limited.type == "question" else []))
+        return {key: list(dict.fromkeys(values)) for key, values in owners.items()}
+
+    def related(self, node: Node) -> list[Node]:
+        """Every numbered page linked to this one, in either direction (parent and children included)."""
+        keys = [key for values in node.relations.values() for key in values]
+        keys += [key for values in node.incoming.values() for key in values]
+        if node.parent:
+            keys.append(f"{node.project}:{node.parent}")
+        keys += [child.key for child in self.tree.children(node)]
+        found = {key: self.tree.nodes[key] for key in keys if key in self.tree.nodes and key != node.key}
+        return sorted((item for item in found.values() if item.number), key=self.number_order)
+
+    def tag_links(self, nodes: list[Node]) -> str:
+        """Tags only (no page numbers), grouped by kind: compact cells of the overview tables."""
+        groups: dict[str, list[str]] = {}
+        for item in nodes:
+            groups.setdefault(item.type, []).append(f"#link({label(item.key)})[{tag_markup(item.type, item.number)}]")
+        return " #h(5pt) ".join(" ".join(tags) for tags in groups.values())
+
+    def overview(self, project: str) -> list[str]:
+        """Supplementary tables: one per kind of page, one row per page (tag, one line, status, the questions it
+        belongs to and the other pages it links to). A flat, printed version of the site's map."""
+        owners = self.question_keys(project)
+        tables = []
+        for node_type in OVERVIEW_TYPES:
+            members = self.of_type(project, node_type)
+            if not members:
+                continue
+            with_status = any(member.status for member in members)
+            with_question = node_type != "question" and any(owners.get(member.key) for member in members)
+            header = [f"[{text(TYPE_LABELS[node_type])}]", "[In short]"] + (["[Status]"] if with_status else []) + \
+                (["[Question]"] if with_question else []) + ["[Linked to]"]
+            with_links = any(item.key not in set(owners.get(member.key, [])) for member in members
+                             for item in self.related(member))
+            if not with_links:
+                header = header[:-1]
+            widths = ["auto", "2.4fr"] + (["auto"] if with_status else []) + (["auto"] if with_question else []) + \
+                (["1.6fr"] if with_links else [])
+            rows = []
+            for member in members:
+                questions_of = [self.tree.nodes[key] for key in owners.get(member.key, []) if key in self.tree.nodes]
+                others = [item for item in self.related(member) if item.key not in {q.key for q in questions_of}]
+                row = [f"[{self.tag_cell(member)}]", f"[{self.title_cell(member, member.title)}]"]
+                row += [f"[{status_pill(member.status)}]"] if with_status else []
+                row += [f"[{self.tag_links(sorted(questions_of, key=self.number_order))}]"] if with_question else []
+                row += [f"[{self.tag_links(others)}]"] if with_links else []
+                rows.append(row)
+            tables.append(f"=== {fullname_markup(node_type, '')} #h(2pt) "
+                          f"#text(font: sans, size: 9pt, weight: \"regular\", fill: muted)[{len(members)}]")
+            tables.append(self.status_table(members, "(" + ", ".join(widths) + ")", header, rows))
+        if not tables:
+            return []
+        return ["== Appendix: overview of all pages",
+                "#intro[One table per kind of page: its number, what it says in one line, its status, the questions it "
+                "belongs to and the other pages it links to (in either direction), grouped by kind. Tags are links.]"
+                ] + tables
+
+    # ------------------------------------------------------------------ references
+    def citation_markup(self, node: Node) -> str:
+        """A reference as in a journal's reference list: `citation:` from the front matter (written by
+        `kea cite`, Nature style) or the title, then DOI and PubMed links."""
+        citation = str(node.header.get("citation") or "").strip()
+        body = self.markdown(node, citation, 4) if citation else text(node.title)
+        extras = []
+        doi = str(node.header.get("doi") or "").strip()
+        if doi:
+            extras.append(f"#link({string('https://doi.org/' + doi)})[doi:{text(doi)}]")
+        pmid = str(node.header.get("pmid") or "").strip()
+        if pmid:
+            extras.append(f"#link({string('https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/')})[PMID {text(pmid)}]")
+        return body + (" " + " · ".join(extras) if extras else "")
+
+    def bibliography(self, project: str) -> list[str]:
+        references = self.of_type(project, "reference")
+        if not references:
+            return []
+        for node in sorted((node for node in references if node.key not in self.reference_numbers),
+                           key=lambda node: natural(node.title)):
+            self.reference_number(node.key)            # pages never cited get the numbers after the cited ones
+        ordered = sorted(references, key=lambda node: natural(self.reference_numbers[node.key]))
+        cells = []
+        for node in ordered:
+            self.placed.add(node.key)
+            cells += [f"[{tag_markup('reference', self.reference_numbers[node.key])} {label(node.key)}]",
+                      f"[{self.citation_markup(node)} #linebreak() #text(size: 8pt, fill: muted)[{text(node.short)}]]"]
+        return ["== Appendix: references",
+                "#intro[Numbered in the order they are first cited; the small superscript tags in the text "
+                "(" + tag_markup("reference", REFERENCE_PREFIX + "1") + ") point here. Under each: why the paper "
+                "is cited.]",
+                "#block[#set text(size: 9pt); #set par(justify: false)\n#grid(columns: (auto, 1fr), column-gutter: "
+                "8pt, row-gutter: 9pt, " + ", ".join(cells) + ")]"]
+
+    # ------------------------------------------------------------------ change history
+    def what_changed(self) -> str:
+        """Once for the document, after the chapters: releases (version, date, kind, reason) and one line per
+        agent run (doc/_changes; the full entries are on the site)."""
+        from kea.docsite import changes, versions
+        parts = []
+        releases = versions.releases(None)
+        merged: dict[tuple, list] = {}              # the site and the experiment released together: one row
+        for release in releases:
+            merged.setdefault((release.key, release.commit), []).append(release)
+        if merged:
+            rows = []
+            for (_, _), group in sorted(merged.items(), reverse=True):
+                release = group[0]
+                scope = ", ".join(sorted("whole site" if not item.experiment else item.experiment for item in group))
+                rows.append([f"[#strong[{text(release.label)}]]", f"[{text(release.date[:10])}]", f"[{text(scope)}]",
+                             f"[{text(release.kind)}]", f"[{text(release.run)}]", f"[{text(release.reason)}]"])
+            parts.append("=== Versions")
+            parts.append("#datatable(6, 7.5pt, 1, table.header([Version], [Date], [Of], [Kind], [Run], [Why]), "
+                         + ", ".join(cell for row in rows for cell in row) + ")")
+        try:
+            runs = changes.load_runs([])
+        except (OSError, ValueError):
+            runs = []
+        if runs:
+            parts.append("=== Runs")
+            parts.append("#datatable(3, 7.5pt, 1, table.header([Run], [Date], [What it did]), " + ", ".join(
+                f"[{text(run.id)}], [{text(run.date)}], [{text(run.title)}]" for run in runs) + ")")
+        if not parts:
+            return ""
+        self.section_names.append("Appendix: what changed")
+        return "\n\n".join(["#pagebreak(weak: true)\n== Appendix: what changed",
+                             "#intro[Each released version with the reason, then each agent run (newest first). The "
+                             "website has the full record of every run, with the changed text of every page.]"] + parts)
+
+    def written_text(self) -> str:
+        """The About text on 'written before its test' / 'written after results', for the pills this PDF has."""
+        values = {node.header.get("fixed_before_results") for node in self.tree.nodes.values() if node.type == "hypothesis"}
+        parts = []
+        if True in values:
+            parts.append("#pill(\"#1b7f4b\")[written before its test]: the claim, the test and the expectation were "
+                         "fixed before that test was run, though possibly after other results of the same experiment "
+                         "had been seen.")
+        if False in values:
+            parts.append("#pill(\"#a86b00\")[written after results]: it was written with its result already known, "
+                         "so it describes rather than predicts.")
+        return ("A hypothesis also says when it was written. " + " ".join(parts) + " ") if parts else ""
+
+    def example_number(self, node_type: str) -> str:
+        numbered = [node.number for node in self.tree.nodes.values() if node.type == node_type and node.number]
+        return sorted(numbered, key=natural)[0] if numbered else ""
 
     # ------------------------------------------------------------------ whole document
     def about(self, version: str, commit: str, today: str) -> str:
-        used_types = [node_type for node_type in TYPE_MEANINGS
-                      if any(node.type == node_type for node in self.tree.nodes.values())]
-        type_rows = ", ".join(f"[{tag_markup(node_type, TYPE_LABELS[node_type])}], "
+        used_types = [node_type for node_type in TYPE_MEANINGS if node_type != "goal"
+                      and any(node.type == node_type for node in self.tree.nodes.values())]
+        type_rows = ", ".join(f"[{fullname_markup(node_type, REFERENCE_PREFIX + '1' if node_type == 'reference' else self.example_number(node_type))}], "
                               f"[{text(TYPE_MEANINGS[node_type])}]" for node_type in used_types)
         used_statuses = sorted({str(node.status) for node in self.tree.nodes.values() if node.status},
                                key=lambda status: (STATUS_COLOURS.get(status, "z"), status))
@@ -834,6 +1198,20 @@ class PdfWriter:
         prefixes = sorted({(node.number[:1], node.type) for node in self.tree.nodes.values()
                            if node.number and node.number[:1].isalpha()})
         numbering = ", ".join(f"{prefix} = {TYPE_LABELS.get(node_type, node_type).lower()}" for prefix, node_type in prefixes)
+        if self.reference_numbers:
+            numbering += f", {REFERENCE_PREFIX} = reference (in this document only, in order of citation)"
+        names = list(dict.fromkeys(self.section_names))
+        main = [name for name in names if not name.startswith("Appendix")]
+        appendix = [name.removeprefix("Appendix: ") for name in names if name.startswith("Appendix")]
+
+        def listed(items: list[str]) -> str:
+            items = [f"#emph[{text(item)}]" for item in items]
+            return ", ".join(items[:-1]) + (" and " if len(items) > 1 else "") + (items[-1] if items else "")
+        has_questions = any(node.type == "question" for node in self.tree.nodes.values())
+        has_hypotheses = any(node.type == "hypothesis" for node in self.tree.nodes.values())
+        question_text = ("Each #emph[question] has a part of its own: the question and its answer in short"
+                         + (", a table of its hypotheses" if has_hypotheses else "")
+                         + ", and the results that answer it, each followed by its figures. ") if has_questions else ""
         return f"""#chapter(none)[
 = About this document <kea-about>
 ]
@@ -846,49 +1224,41 @@ result or a page changes. The website and this document are two views of the sam
 source files on {text(today)}; the website also carries the comments and the review history. When the website shows a
 newer version, that one replaces this document.
 
-== How each chapter is ordered
+== How it is ordered
 
-{'The document is one experiment.' if self.single else 'Each experiment is one chapter.'} #emph[At a glance]
-gives every question with its answer in short and the conclusions that give it; then #emph[Key terms],
-#emph[Background], #emph[Starting points] (premises), #emph[Methods] (steps and the decisions taken in them), then
-one part per #emph[question]: the question and its answer in short, a table of its hypotheses, and the results that
-answer it, each followed by its figures. #emph[Conclusions] and #emph[Caveats] close the
-{'document' if self.single else 'chapter'}. The appendix holds the hypotheses in full, the data and figure files, the
-glossary and the references. To read quickly: the summary on the title page and At a glance; to check a claim,
-follow its evidence.
+{'The document is one experiment, in these parts' if self.single else 'Each experiment is one chapter, in these parts'}: {listed(main)}.
+{question_text}The appendix holds {listed(appendix) if appendix else 'nothing'}. To read quickly: {'the summary on the title page and ' if getattr(self, 'has_summary', False) else ''}#emph[At a glance]; to check a claim, follow its evidence.
 
 == Kinds of page
 
 Every page has a kind, shown as a coloured tag with an icon and its number (for example
-{tag_markup("question", "Q1")} or {tag_markup("conclusion", "C2")}); the same colour marks the stripe beside its
-heading.
+{tag_markup("question", "Q1")} or {tag_markup("conclusion", "C2")}); in headings the kind is written out in front of
+the tag ({fullname_markup("conclusion", "C2")}), and the same colour marks the stripe beside the heading.
 
 #block[#set par(justify: false)
-#grid(columns: (auto, 1fr), column-gutter: 10pt, row-gutter: 6pt, {type_rows})]
+#grid(columns: (auto, 1fr), column-gutter: 10pt, row-gutter: 8pt, {type_rows})]
 
 == Numbers, links and page references
 
-Pages are numbered per experiment and kind ({text(numbering)}); the numbers are the same as on the website. The tag
-is the link: {tag_markup("result", "R3")}#text(size: 0.72em, fill: muted)[#h(1.5pt)p.12] leads to that page, and
-the small number gives the page of this document (left out when it is the same page). In lists of pages the whole
-line, tag and text, is the link. #tlink(<kea-about>)[Words with a dotted
-underline] are glossary terms: the link leads to their definition.
+Pages are numbered per experiment and kind ({text(numbering)}); apart from the references, the numbers are the
+same as on the website. The tag is the link: {tag_markup("result", "R3")}#text(size: 0.72em, fill: muted)[#h(1.5pt)p.12]
+leads to that page, and the small number gives the page of this document (left out when it is the same page). In
+lists of pages the whole line is the link, with the status and the page number at the end of the line.
+#tlink(<kea-about>)[Words with a dotted underline] are glossary terms: the link leads to their definition.
 
 == Status
 
 #block[#set par(justify: false)
-#grid(columns: (auto, 1fr), column-gutter: 10pt, row-gutter: 6pt, {status_rows})]
+#grid(columns: (auto, 1fr), column-gutter: 10pt, row-gutter: 8pt, {status_rows})]
 
-A hypothesis also says when it was written. #pill("#1b7f4b")[written before its test]: the claim, the test and
-the expectation were fixed before that test was run, though possibly after other results of the same experiment
-had been seen. #pill("#a86b00")[written after results]: it was written with its result already known, so it
-describes rather than predicts. An analysis marked #emph[exploratory] suggests; it needs new data to confirm.
+{self.written_text()}An analysis marked #emph[exploratory] suggests; it needs new data to confirm.
 
 == What is left out
 
-The comments of readers, the review plans and the history of the pages (all on the site); the code (named by its
-file); the relations graph; and the contents of data files, which may hold controlled-access, donor-level data.
-Numbers in the text come from those files; the appendix lists them.
+The comments of readers, the review plans and the changed text of each page (all on the site); the code (named by
+its file); the relations graph (the overview tables in the appendix are its printed form); and the contents of data
+files, which may hold controlled-access, donor-level data. Numbers in the text come from those files; the appendix
+lists them.
 
 #meta[Made with Kea (github.com/mfiers/Kea), a tool that turns an analysis into a site of linked claims and
 evidence, reviewed in cycles by readers and an AI agent.]
@@ -899,6 +1269,8 @@ evidence, reviewed in cycles by readers and an AI agent.]
         (the site cache hashes a source made with a fixed stamp, so only real content changes count)."""
         from kea.docsite import comments, versions
         self.placed = set()                      # document() may run twice (the site cache hashes a fixed-stamp copy)
+        self.reference_numbers, self.glance_seen, self.section_names, self.notes = {}, set(), [], []
+        self.part_seen: set[str] = set()
         title = str(SETTINGS.get("title") or PROJECT_ROOT.name)
         heading = str(SETTINGS.get("heading") or "")
         if stamp is None:
@@ -908,44 +1280,43 @@ evidence, reviewed in cycles by readers and an AI agent.]
             today = dt.date.today().isoformat()
         else:
             version, commit, today = stamp["version"], stamp["commit"], stamp["built"]
+        summary = questions.project_summary(self.tree)      # first, so its citations are numbered first
+        summary_markup = ""
+        if summary:
+            home = next(iter(self.tree.projects.values()))
+            summary_markup = self.markdown(home, summary, 3)
         chapters = [self.chapter(project) for project in sorted(self.tree.projects)]
+        self.has_summary = bool(summary_markup)
         self.content = "\n\n".join(chapters)            # what the site cache keys on (not the date or commit)
         self.stamp = {"version": version, "commit": commit, "built": today}
         author = str(SETTINGS.get("author") or "").strip()
         repository = repository_url()
         logo = pdf_logo()
-        summary = questions.project_summary(self.tree)
-        summary_markup = ""
-        if summary:
-            home = next(iter(self.tree.projects.values()))
-            summary_markup = Converter(self.urls, heading_level=3).convert(render_markdown(summary, LinkContext(
-                self.tree, home.project, SENTINEL, lambda target, prefix: None, self.data_href)))
-        facts = [f"#box(fill: amber, inset: (x: 7pt, y: 3pt), radius: 3pt, text(font: sans, size: 9pt, weight: "
-                 f"\"bold\", fill: ink)[Version {text(version)}])",
-                 f"#text(font: sans, size: 9pt, fill: rgb(\"#c9d2e3\"))[commit {text(commit)} · {text(today)}]"]
-        links = []
+        light = 'rgb("#c9d2e3")'
+        lines = [f"#box(fill: amber, inset: (x: 7pt, y: 3pt), radius: 3pt, text(font: sans, size: 9pt, weight: "
+                 f"\"bold\", fill: ink)[Document version {text(version)}])",
+                 f"#text(font: sans, size: 9pt, fill: {light})[Commit {text(commit)} · {text(today)}]"]
         if repository:
-            links.append(f"#link({string(repository)})[{text(repository.removeprefix('https://'))}]")
-        links.append(f"made with #link(\"{KEA_URL}\")[Kea]")
+            lines.append(f"#text(font: sans, size: 9pt, fill: {light})[#link({string(repository)})"
+                         f"[{text(repository.removeprefix('https://'))}]]")
+        lines.append(f"#text(font: sans, size: 9pt, fill: {light})[Made with #link(\"{KEA_URL}\")[Kea] · "
+                     f"#link(<kea-about>)[about this document, p.#context counter(page).at(<kea-about>).first()]]")
         front = f"""#page(margin: 0pt, header: none, footer: none)[
 #block(fill: ink, width: 100%, inset: (x: 2.2cm, top: 2.6cm, bottom: 1.3cm))[
+  #set par(justify: false)
+  #show link: set text(fill: rgb("#9cc3f0"))
   {f'#place(top + right, dy: -1.2cm, link("{KEA_URL}", box(fill: rgb("#f4f1e8"), radius: 6pt, inset: 3pt, image("{logo}", width: 1.5cm))))' if logo else ''}
-  #text(font: sans, size: 30pt, weight: "bold", fill: white)[{text(title)}]
-  {f'#v(4pt) #text(font: sans, size: 13pt, fill: rgb("#c9d2e3"))[{text(heading)}]' if heading and heading != title else ''}
+  #pad(right: {'2.4cm' if logo else '0cm'})[#text(font: sans, size: 30pt, weight: "bold", fill: white)[{text(title)}]]
+  {f'#v(4pt) #pad(right: 2.4cm)[#text(font: sans, size: 13pt, fill: rgb("#c9d2e3"))[{text(heading)}]]' if heading and heading != title else ''}
   {f'#v(8pt) #text(font: sans, size: 11pt, fill: white)[{text(author)}]' if author else ''}
   #v(10pt)
-  {' #h(6pt) '.join(facts)}
-  #v(6pt)
-  #text(font: sans, size: 8.5pt, fill: rgb("#c9d2e3"))[#show link: set text(fill: rgb("#9cc3f0")); {' #h(4pt)·#h(4pt) '.join(links)}]
+  #stack(spacing: 7pt, {', '.join('[' + line + ']' for line in lines)})
 ]
 #pad(x: 2.2cm, top: 0.9cm, bottom: 1.2cm)[
   {'#text(font: sans, size: 12pt, weight: "bold", fill: ink)[Summary]' if summary_markup else ''}
   #v(2pt)
   #set text(size: 10.5pt)
   {summary_markup}
-  #v(8pt)
-  #text(font: sans, size: 8pt, fill: muted)[What the colours, tags and numbers mean: #link(<kea-about>)[About this document],
-  page #context counter(page).at(<kea-about>).first().]
 ]]
 """
         if not self.single:
@@ -964,11 +1335,13 @@ evidence, reviewed in cycles by readers and an AI agent.]
 #counter(page).update(1)
 #text(font: sans, size: 19pt, weight: "bold", fill: ink)[Contents]
 #v(6pt)
-#outline(title: none, depth: 2, indent: auto)
+#outline(title: none, depth: 2, indent: OUTLINE_INDENT)
 """
+        front = front.replace("OUTLINE_INDENT", "0pt" if self.single else "auto")
         preamble = (PREAMBLE.replace("SANS_FONTS", sans_fonts()).replace("TITLE_MARKUP", text(title)).replace("TITLE", string(title))
                     .replace("VERSION_MARKUP", text(f"{title} · {version} · {commit}")))
-        return preamble + "\n" + front + "\n\n" + "\n\n".join(chapters) + "\n\n" + \
+        changed = self.what_changed()
+        return preamble + "\n" + front + "\n\n" + "\n\n".join(chapters) + "\n\n" + changed + "\n\n" + \
             self.about(version, commit, today) + "\n"
 
 
@@ -1050,6 +1423,8 @@ def site_pdf(tree: Tree, site: Path) -> dict | None:
                   f"{result.stderr.strip()[:2000]}", file=sys.stderr)
             return None
         meta_path.write_text(json.dumps({**writer.stamp, "inputs": inputs}))
+        for note in writer.notes:
+            print(f"note    PDF {note}")
         for old in sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime)[:-CACHE_KEEP]:
             for suffix in (".pdf", ".json", ".typ"):
                 old.with_suffix(suffix).unlink(missing_ok=True)
@@ -1114,6 +1489,8 @@ def main(argv: list[str] | None = None) -> int:
     typ_path.parent.mkdir(parents=True, exist_ok=True)
     typ_path.write_text(writer.document(), encoding="utf-8")
     print(f"wrote {typ_path.relative_to(PROJECT_ROOT)}")
+    for note in writer.notes:
+        print(f"note    {note}")
     if args.typ_only:
         return 0
     command = typst_command()

@@ -65,8 +65,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.6.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.6.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.7.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.7.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -78,7 +78,7 @@ targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skil
 
 ## Commands
 
-`kea init | build | context <question|experiment> [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
+`kea init | build | context <question|experiment> [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | cite [--write] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
 
 `kea context <question>` prints what an analysis run on that question must take into account: its answer so far,
@@ -97,18 +97,26 @@ project's summary, its version (the version of the pages; the site and the PDF a
 experiment, page 2 summarises each experiment and each is a chapter; with one, the PDF reads as that experiment.
 Then:
 
-- *At a glance* (every question with its answer in short and its conclusions) and *Key terms*;
+- *At a glance* (every question with its answer in short and its conclusions, each conclusion in full once, and
+  the open caveats), *Key terms* and term groups such as *Genes* (`group:` on a term page);
 - background and premises;
 - methods (steps, each followed by its decisions);
 - one part per question: a table of its hypotheses, then the results with their figures;
 - conclusions and caveats;
-- an appendix: hypotheses in full, data and figure files, the glossary, and the references without abstracts.
+- an appendix: overview tables (one per kind of page: tag, one line, status, question, linked pages), hypotheses in
+  full, data and figure files, the glossary, the references and what changed (versions and run entries).
 
-A standard closing chapter, *About this document*, explains the page types (in the site's colours), the numbers,
-the statuses and the page references. Every link to a page shows its page number.
+References are numbered B1, B2 … in order of first citation, shown in the text as small superscript tags, and listed
+like a journal's reference list from each page's `citation:` (`kea cite --write` fills it from Europe PMC, Nature
+style). Full names read as the kind in its colour followed by the tag (Question [Q1]); lists of pages carry the
+status and page number at the end of each line. Figures are printed at their own size (from the PNG's dpi), at most
+the text width and 19 cm high; the build notes figures it has to shrink below 80 %.
 
-It leaves out comments, plans, the review history, the change log, code listings, the relations graph and the
-contents of data files, so no donor-level rows reach the PDF. It needs
+A standard closing chapter, *About this document*, explains the parts present, the page types (in the site's
+colours), the numbers, the statuses and the page references. Every link to a page shows its page number.
+
+It leaves out comments, plans, code listings, the relations graph (the overview tables are its printed form) and
+the contents of data files, so no donor-level rows reach the PDF. It needs
 [Typst](https://github.com/typst/typst/releases) (a single binary; or `typst:` in `kea.yaml`). Without it the
 `.typ` source is still written. Output goes to `report/pdf/<title>_<date>_<version>_<commit>.pdf` and is never
 overwritten. A figure page may set `pdf_width:` (`100%`, `12cm`) to override the automatic size.
