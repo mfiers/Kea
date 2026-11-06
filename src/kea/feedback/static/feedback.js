@@ -60,12 +60,20 @@
     return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + " " +
       date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
+  // One key per submit (this page load + what is sent): a submit sent again (double click, retry after a slow
+  // server) carries the same key, and the server stores it once.
+  const LOAD_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  function requestKey(method, url, payload) {
+    let hash = 2166136261;                       // FNV-1a over method, url and body
+    const text = method + " " + url + " " + payload;
+    for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619) >>> 0; }
+    return LOAD_ID + "-" + hash.toString(36);
+  }
   async function api(method, url, body) {
-    const response = await fetch(url, {
-      method, credentials: "same-origin",
-      headers: body ? { "Content-Type": "application/json" } : {},
-      body: body ? JSON.stringify(body) : undefined
-    });
+    const payload = body ? JSON.stringify(body) : undefined;
+    const headers = body ? { "Content-Type": "application/json" } : {};
+    if (method !== "GET") headers["X-Kea-Request"] = requestKey(method, url, payload || "");
+    const response = await fetch(url, { method, credentials: "same-origin", headers, body: payload });
     let data = {};
     try { data = await response.json(); } catch (error) { /* not JSON */ }
     if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
@@ -356,8 +364,12 @@
         el("button", { onclick: () => { if (input.value.trim()) { setName(input.value.trim()); renderName(); } } }, "Save"));
     }
   }
+  let sending = false;                           // no second submit while one is on its way
   async function send(action) {
     if (!getName()) { openPanel(); alertIn("Set your name first."); return null; }
+    if (sending) { alertIn("Still saving the previous message…"); return null; }
+    sending = true;
+    document.querySelectorAll(".fb-panel button, .fb-pop button").forEach(button => button.disabled = true);
     try {
       await action();
       await reload();
@@ -365,6 +377,9 @@
     } catch (error) {
       alertIn("Could not save: " + error.message);
       return null;
+    } finally {
+      sending = false;
+      document.querySelectorAll(".fb-panel button, .fb-pop button").forEach(button => button.disabled = false);
     }
   }
   function alertIn(message) {

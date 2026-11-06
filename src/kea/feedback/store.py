@@ -129,14 +129,24 @@ def load_events(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
-    """Validate and append one event (with an exclusive file lock and fsync). Returns the stored event."""
+    """Validate and append one event (with an exclusive file lock and fsync). Returns the stored event.
+
+    Idempotent per ``request_id`` (a key the browser makes for each submit): when an event with the same key is
+    already stored (the request was sent again, e.g. after a stalled disk), that event is returned and nothing is
+    written."""
     path = path or default_path()
+    request_id = _clean(event.get("request_id"), 80, "request_id")
     event_type = event.get("type")
     if event_type not in EVENT_TYPES:
         raise FeedbackError(f"unknown event type {event_type!r}")
     stored: dict[str, Any] = {"event_id": new_id("e"), "type": event_type, "created_at": now_iso(),
                               "author": _clean(event.get("author"), MAX_NAME, "author", required=True)}
     with _write_lock:
+        if request_id:
+            for earlier in load_events(path):
+                if earlier.get("request_id") == request_id:
+                    return earlier
+            stored["request_id"] = request_id
         existing = {thread.thread_id for thread in threads(path)} if event_type != "create" else set()
         if event_type == "create":
             stored.update({

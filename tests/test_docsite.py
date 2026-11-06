@@ -177,3 +177,25 @@ def test_resources_and_terms_are_numbered_with_schema_defaults(toy_doc):
     assert tree.nodes["proj:t-x"].number == "T1" and tree.nodes["proj:o-db"].number == "O1"
     assert tree.nodes["proj:o-db"].incoming == {"Used in": ["proj:s-a"]}
     assert any("resource without retrieved, sha256" in note for note in tree.notes)
+
+
+def test_a_submit_sent_twice_is_stored_once(tmp_path):
+    """The browser sends one key per submit (X-Kea-Request); a repeat (double click, retry after a stalled disk)
+    returns the stored event instead of writing it again."""
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<main>hi</main>")
+    events = tmp_path / "events.jsonl"
+    client = TestClient(server.make_app(site, events, "secret-password", tmp_path / "cycle.jsonl"))
+    client.post("/login", data={"password": "secret-password", "name": "reader", "next": "/"}, follow_redirects=False)
+    created = client.post("/api/threads", json={"page": "proj/q-a.html", "text": "why?"},
+                          headers={"X-Kea-Request": "load1-a"})
+    again = client.post("/api/threads", json={"page": "proj/q-a.html", "text": "why?"},
+                        headers={"X-Kea-Request": "load1-a"})
+    assert created.json()["thread"]["thread_id"] == again.json()["thread"]["thread_id"]
+    thread_id = created.json()["thread"]["thread_id"]
+    for _ in range(3):
+        client.post(f"/api/threads/{thread_id}/reply", json={"text": "more"}, headers={"X-Kea-Request": "load1-b"})
+    client.post(f"/api/threads/{thread_id}/reply", json={"text": "more"}, headers={"X-Kea-Request": "load2-b"})
+    replies = [event for event in store.load_events(events) if event["type"] == "reply"]
+    assert len(store.load_events(events)) == 3 and len(replies) == 2   # one create, the reply once per key

@@ -48,6 +48,7 @@ from urllib.parse import quote, unquote
 
 from dotenv import load_dotenv
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -194,7 +195,7 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
             new_text = new_text.replace("\r\n", "\n")
             diff = "".join(difflib.unified_diff(base_text.splitlines(keepends=True), new_text.splitlines(keepends=True),
                                                 fromfile=f"a/{relative}", tofile=f"b/{relative}", n=2))
-            event = store.append_event({
+            event = await append(request, {
                 "type": "create", "page": page_key, "page_title": body.get("page_title"), "page_commit": commit,
                 "text": str(body.get("text") or "").strip() or "Suggested edit (no comment).",
                 "author": _author(request),
@@ -202,7 +203,7 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
                                "diff": diff}}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
-        return JSONResponse({"thread": store.fold(store.load_events(events_path))[event["thread_id"]].to_dict()})
+        return await thread_json(event["thread_id"])
 
     async def login(request: Request) -> Response:
         if request.method == "GET":
@@ -235,6 +236,16 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
         items.sort(key=lambda item: states.sort_key(item, info))
         return JSONResponse({"threads": items, "you": reader_name(request)})
 
+    async def append(request: Request, event: dict, path: Path) -> dict:
+        """store.append_event off the event loop (a slow fsync must not block other readers), with the
+        browser's request key (X-Kea-Request) so that a submit sent twice is stored once."""
+        key = request.headers.get("x-kea-request", "").strip()[:80]
+        return await run_in_threadpool(store.append_event, {**event, "request_id": key} if key else event, path)
+
+    async def thread_json(thread_id: str) -> Response:
+        threads = await run_in_threadpool(lambda: store.fold(store.load_events(events_path)))
+        return JSONResponse({"thread": threads[thread_id].to_dict()})
+
     async def _body(request: Request) -> dict:
         try:
             body = await request.json()
@@ -257,12 +268,12 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
             body = await _body(request)
             if (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked
-            event = store.append_event({**{key: body.get(key) for key in (
+            event = await append(request, {**{key: body.get(key) for key in (
                 "page", "page_title", "page_commit", "quote", "prefix", "suffix", "start", "end", "text")},
                 "type": "create", "author": _author(request)}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
-        return JSONResponse({"thread": store.fold(store.load_events(events_path))[event["thread_id"]].to_dict()})
+        return await thread_json(event["thread_id"])
 
     async def reply(request: Request) -> Response:
         thread_id = request.path_params["thread_id"]
@@ -270,11 +281,11 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
             return blocked
         try:
             body = await _body(request)
-            store.append_event({"type": "reply", "thread_id": thread_id, "text": body.get("text"),
+            await append(request, {"type": "reply", "thread_id": thread_id, "text": body.get("text"),
                                 "author": _author(request)}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
-        return JSONResponse({"thread": store.fold(store.load_events(events_path))[thread_id].to_dict()})
+        return await thread_json(thread_id)
 
     async def set_status(request: Request) -> Response:
         thread_id = request.path_params["thread_id"]
@@ -284,11 +295,11 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
             body = await _body(request)
             if body.get("status") not in READER_STATUSES:
                 raise store.FeedbackError(f"readers can set: {', '.join(READER_STATUSES)}")
-            store.append_event({"type": "status", "thread_id": thread_id, "status": body.get("status"),
+            await append(request, {"type": "status", "thread_id": thread_id, "status": body.get("status"),
                                 "note": body.get("note"), "author": _author(request)}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
-        return JSONResponse({"thread": store.fold(store.load_events(events_path))[thread_id].to_dict()})
+        return await thread_json(thread_id)
 
     async def download(request: Request) -> Response:
         relative = request.path_params["path"]
