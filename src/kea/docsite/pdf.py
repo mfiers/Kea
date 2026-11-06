@@ -1197,7 +1197,7 @@ class PdfWriter:
                 shown = " ".join(commits[:4]) + (f" +{len(commits) - 4}" if len(commits) > 4 else "")
                 cells += [f"[{text(run.id)}]", f"[{text(run.date)}]", f"[{text(plans.get('run:' + run.id, ''))}]",
                           f"[{text(kind_of_run.get(run.id, ''))}]", f"[#mono[{text(shown or '—', breakable=True)}]]",
-                          f"[{text(re.sub(r'^Run [0-9a-z-]+:\s*', '', run.title))}]"]
+                          f"[{text(RUN_PREFIX.sub('', run.title))}]"]
             parts.append("=== Runs")
             parts.append("#datatable(6, 7.2pt, 1, table.header([Run], [Date], [Plan], [Release], [Commits], "
                          "[What it did]), " + ", ".join(cells) + ")")
@@ -1389,6 +1389,9 @@ evidence, reviewed in cycles by readers and an AI agent.]
 
 CACHE_KEEP = 6
 KEA_URL = "https://mfiers.github.io/Kea/"
+
+
+RUN_PREFIX = re.compile(r"^Run [0-9a-z-]+:\s*")      # "Run 2026-11-06-d: " at the start of a run title
 
 
 def review_plans() -> dict[str, str]:
