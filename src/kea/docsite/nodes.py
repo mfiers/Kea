@@ -274,10 +274,13 @@ def _validate(tree: Tree) -> None:
             if missing:
                 tree.notes.append(f"{where}: resource without {', '.join(missing)} (needed to reproduce the analysis)")
             rrid = str(node.header.get("rrid") or "")
-            if rrid and not RRID_PATTERN.fullmatch(rrid):
+            if rrid.lower() == "none":          # searched, none exists
+                rrid = "none"
+            elif rrid and not RRID_PATTERN.fullmatch(rrid):
                 tree.problems.append(f"{where}: rrid {rrid!r} is not of the form RRID:SCR_0000000")
             if not rrid and node.header.get("kind") in ("software", "database"):
-                tree.notes.append(f"{where}: no rrid (look it up on scicrunch.org/resources; `kea rrid` checks it)")
+                tree.notes.append(f"{where}: no rrid (look it up on scicrunch.org/resources; `kea rrid` checks it; "
+                                  "`rrid: none` when there is none)")
         if node.type == "artefact" and not node.header.get("path"):
             tree.problems.append(f"{where}: artefact without path")
         for relation, targets in node.relations.items():

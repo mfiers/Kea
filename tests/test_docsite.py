@@ -223,3 +223,10 @@ def test_rrid_resolver(monkeypatch):
     monkeypatch.setattr(rrid.urllib.request, "urlopen",
                         lambda *args, **kwargs: io.BytesIO(json.dumps({"hits": {"hits": []}}).encode()))
     assert rrid.resolve("RRID:SCR_000000") is None
+
+
+def test_rrid_none_means_searched(toy_doc):
+    write_page(toy_doc, "proj/resource/o-f.md", "id: o-f\ntype: resource\ntitle: F\nshort: A tool.\nparent: home\n"
+               "status: current\nkind: software\nversion: '1'\nretrieved: 2026-11-06\nrrid: none")
+    tree = nodes.load_tree(toy_doc)
+    assert not any("o-f.md" in item for item in tree.notes + tree.problems)

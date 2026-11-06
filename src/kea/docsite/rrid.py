@@ -5,6 +5,8 @@ resource in a way journals ask for. Resource pages carry it as ``rrid:``. RRIDs 
 https://scicrunch.org/resources (by hand or by an agent); this command only checks that each one resolves and
 prints the name SciCrunch gives it, so a wrong or mistyped RRID is caught before it reaches a paper.
 
+A resource with ``rrid: none`` was searched for and has no RRID; it is skipped.
+
 Usage: kea rrid
 Input: doc/**/resource/*.md (rrid:). Network: scicrunch.org (resolver).
 Output: one line per resource with an RRID: ok and the registered name, or not found. Exit 1 when any is not
@@ -25,7 +27,10 @@ RESOLVER = "https://scicrunch.org/resolver/{rrid}.json"
 def resolve(rrid: str) -> str | None:
     """The registered name of an RRID, or None when SciCrunch does not know it."""
     try:
-        with urllib.request.urlopen(RESOLVER.format(rrid=rrid), timeout=30) as response:
+        request = urllib.request.Request(RESOLVER.format(rrid=rrid), headers={
+            "User-Agent": "Mozilla/5.0 (compatible; kea-rrid; https://github.com/mfiers/Kea)",
+            "Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=30) as response:
             hits = json.load(response).get("hits", {}).get("hits", [])
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -39,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     for node in sorted((node for node in tree.nodes.values() if node.type == "resource"), key=lambda node: node.key):
         rrid = str(node.header.get("rrid") or "").strip()
-        if not rrid:
+        if not rrid or rrid.lower() == "none":
             continue
         try:
             name = resolve(rrid)

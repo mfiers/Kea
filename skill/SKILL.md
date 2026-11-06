@@ -126,7 +126,7 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   `kind: software` resource with the exact version from the lock file, `part_of:` a resource for the environment
   (the lock file with its sha256), and its RRID: find it on scicrunch.org/resources (never from memory) and run
   `kea rrid`, which checks every RRID against the SciCrunch resolver. Each step `uses:` the tools its scripts
-  import; the PDF's Methods list them with their RRIDs. A tool without an RRID keeps its version and URL. The build notes resources without kind, version, retrieved date or (files, datasets)
+  import; the PDF's Methods list them with their RRIDs. A tool with none gets `rrid: none` (searched, none registered) and keeps its version, URL and, where there is one, the paper it `cites:`. The build notes resources without kind, version, retrieved date or (files, datasets)
   checksum. Keep them apart from references (papers): a resource is what you need to rerun the analysis.
 - **A source and each record taken from it are separate resources.** A website, catalog, database, API or MCP
   server is one resource (its URL, release or version, the date it was queried, the client and its version). Each

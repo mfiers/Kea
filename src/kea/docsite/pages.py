@@ -44,7 +44,8 @@ def resource_panel(node: Node) -> str:
         elif key in ("sha256", "local"):
             shown = f"<code>{esc(value)}</code>"
         elif key == "rrid":
-            shown = f"<a href='https://scicrunch.org/resolver/{esc(value)}'>{esc(value)}</a>"
+            shown = ("none registered" if str(value).lower() == "none" else
+                     f"<a href='https://scicrunch.org/resolver/{esc(value)}'>{esc(value)}</a>")
         rows.append(f"<tr><th>{label}</th><td>{shown}</td></tr>")
     return f"<table class='resource-facts not-annotatable'>{''.join(rows)}</table>"
 

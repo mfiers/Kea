@@ -718,7 +718,8 @@ class PdfWriter:
             if tools:
                 lines.append("#strong[Uses:] " + ", ".join(
                     f"{self.link(tool)} {text(tool.title)}" + (f" ({text(str(tool.header['rrid']))})"
-                                                              if tool.header.get("rrid") else "") for tool in tools))
+                                                              if str(tool.header.get("rrid") or "none").lower() != "none"
+                                                              else "") for tool in tools))
             for name, keys in (("Used for", used_for), ("Results", results), ("Conclusions", conclusions)):
                 if keys:
                     lines.append(f"#strong[{name}:] {self.links(keys)}")
