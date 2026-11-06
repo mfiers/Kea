@@ -145,6 +145,33 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - A date in the text always comes with its release: "written 2026-11-04 (v0.1.0)".
 - `make site` must report 0 problems.
 
+## Scientific language
+
+Every page is written as a careful paper would be. The wording must not claim more than the evidence does.
+- **Verbs match the design.** Use "is associated with", "is consistent with", "predicts" or "does not support".
+  Causal verbs (causes, drives, regulates, explains, leads to) need an intervention or a design that justifies
+  them; otherwise say why the link is only an association.
+- **Effects carry their size and uncertainty**: estimate, interval or spread, and n of the unit of replication
+  (donors, not cells). Write "significant" only with the test and the corrected p or q. Never write "trend towards
+  significance", "marginally significant" or "highly significant".
+- **Null results are stated as such**: "no difference was detected (n, estimate, interval)". Write "there is no
+  effect" only after an equivalence test or with a stated detectable effect size. Absence of evidence is not
+  evidence of absence.
+- **Say how sure, and why.** Tie it to the evidence: one cohort, n = 40 donors, not replicated, a post-hoc test.
+  Do not hedge with empty words ("may potentially", "might suggest") and do not oversell ("clearly", "robust"
+  without the robustness check, "novel", "striking", "remarkable", "powerful").
+- **Label exploratory and confirmatory work in the text, not only in the front matter.** Hypotheses formed after
+  the results are called post hoc.
+- **Keep the literature apart from the data.** Write "Smith et al. (2023) report …" and "in our data …"; never
+  present a claim from a paper as a finding here. Cite only from fetched records (see References).
+- **Be precise and consistent.** Define a term once (a term page) and use the same word for the same thing
+  throughout. Give numbers with units and the rounding of the source file. Limits go in caveats and are named in
+  the conclusion they limit, not buried.
+- **Keep the tone neutral.** No conversational or promotional phrasing ("interestingly", "it is worth noting", "we
+  believe", "exciting").
+- Before a release, reread every `answer:`, conclusion and executive summary for words stronger than the evidence,
+  and fix them in the same commit.
+
 ## Builds
 
 `kea build` (review, with comments), `kea build --mode local` (no comments, data links into the project folder,

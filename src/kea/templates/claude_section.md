@@ -18,5 +18,8 @@
 - Figure captions: title, take-home, then per panel take-home / Shows / Method / Statistics, written by the figure
   script from the saved table.
 - Every number on a page comes from a file named in `sources:` or an artefact page.
+- Scientific language (skill: "Scientific language"): verbs no stronger than the design (association, not
+  cause), effect sizes with uncertainty and n of the replicate unit, nulls stated as nulls, post hoc labelled, literature kept
+  apart from our data, no hype or empty hedges.
 - Summary lines are written for the reader, without internal labels; dates in the text carry their version.
 <!-- kea:end -->
