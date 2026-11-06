@@ -220,7 +220,7 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 - **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
   to install Typst rather than working around it.
 - **`kea build` adds the PDF to the site**, linked from the menu bar of every page. It is recompiled only when its inputs change
-  (source, images, Kea, Typst; the build says why); `--no-pdf` skips it.
+  (source, images, Kea, Typst; the build says why); `--no-pdf` skips compiling it and keeps the PDF of the last full build on the site.
 
 The PDF is read on paper by people outside the review cycle. Keep review-process notes ("plan v0.4 #2", "Mark's
 comment", thread ids) out of page bodies and summaries, or confine them to one short closing section; keep

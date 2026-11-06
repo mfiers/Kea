@@ -1,4 +1,5 @@
 """Tests for the PDF export (kea.docsite.pdf): HTML-to-Typst conversion, and a full compile when Typst is present."""
+import json
 import shutil
 import subprocess
 
@@ -193,3 +194,22 @@ def test_methods_steps_name_their_questions_results_and_conclusions(toy_doc):
     source = writer.document({"version": "-", "commit": "-", "built": "-"})
     methods = source.split("== Methods")[1]
     assert "#strong[Used for:]" in methods and "#strong[Results:]" in methods and "#strong[Conclusions:]" in methods
+
+
+def test_no_pdf_build_keeps_the_last_built_pdf(tmp_path, monkeypatch):
+    """`kea build --no-pdf` puts the PDF of the last full build on the site instead of dropping it."""
+    monkeypatch.setattr(pdf, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setitem(pdf.SETTINGS, "title", "My Project")
+    site = tmp_path / "site"
+    site.mkdir()
+    assert pdf.last_pdf(site) is None                       # nothing built yet
+    cache = tmp_path / "report" / "pdf" / "_cache"
+    cache.mkdir(parents=True)
+    for key, version in (("older", "v0.1.0"), ("served", "v0.2.0")):
+        (cache / f"{key}.pdf").write_bytes(b"%PDF " + version.encode())
+        (cache / f"{key}.json").write_text(json.dumps({"version": version, "commit": "abc", "built": "x",
+                                                        "inputs": {}}))
+    (cache / pdf.LAST).write_text(json.dumps({"key": "served"}))
+    kept = pdf.last_pdf(site)
+    assert kept["file"] == "my-project-v0.2.0.pdf" and kept["reused"]
+    assert (site / "my-project-v0.2.0.pdf").read_bytes() == b"%PDF v0.2.0"

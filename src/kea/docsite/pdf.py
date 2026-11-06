@@ -1548,13 +1548,43 @@ def site_pdf(tree: Tree, site: Path) -> dict | None:
         for old in sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime)[:-CACHE_KEEP]:
             for suffix in (".pdf", ".json", ".typ"):
                 old.with_suffix(suffix).unlink(missing_ok=True)
-    meta = json.loads(meta_path.read_text())
+    (cache / LAST).write_text(json.dumps({"key": digest}))
+    return publish_cached(cached, site, reused, reason)
+
+
+LAST = "_last.json"         # in report/pdf/_cache: the key of the PDF the last full build put on the site
+
+
+def publish_cached(cached: Path, site: Path, reused: bool, reason: str) -> dict:
+    """Copy a compiled PDF from the cache into the site under <title>-<version>.pdf; its build record."""
+    import json
+    meta = json.loads(cached.with_suffix(".json").read_text())
     meta.pop("inputs", None)
     title = re.sub(r"[^a-z0-9]+", "-", str(SETTINGS.get("title") or PROJECT_ROOT.name).lower()).strip("-")
     name = f"{title}-{meta['version']}.pdf"
     shutil.copy2(cached, site / name)
     print(f"pdf     {name} {reason}")
     return {"file": name, **meta, "reused": reused, "reason": reason}
+
+
+def last_pdf(site: Path) -> dict | None:
+    """The PDF of the last full build, for `kea build --no-pdf`: the site keeps its PDF (and the menu link) instead
+    of losing it until the next full build. It may be older than the pages; the build says so. None when no PDF was
+    ever built."""
+    import json
+    cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
+    candidates = []
+    try:
+        key = json.loads((cache / LAST).read_text())["key"]
+        candidates.append(cache / f"{key}.pdf")
+    except (OSError, ValueError, KeyError):
+        pass
+    candidates += sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for cached in candidates:
+        if cached.is_file() and cached.with_suffix(".json").is_file():
+            return publish_cached(cached, site, True, "kept from the last full build (--no-pdf: not checked "
+                                                      "against the current pages)")
+    return None
 
 
 def changed_inputs(cache: Path, inputs: dict[str, str]) -> str:

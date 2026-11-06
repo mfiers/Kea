@@ -12,7 +12,8 @@ Usage: kea build [--strict]   (`make site`)
 Input: doc/**, doc/_schema.yaml, doc/_cycles/cycle-NNN.md (plans), artefact and figure files named in the pages,
 git, data/feedback/events.jsonl and cycle.jsonl.
 Output: report/site/ (HTML, copied figure images, _feedback/ and _assets/ files, _files.json download allow-list,
-        <title>-<version>.pdf of all pages when Typst is installed: docsite.pdf.site_pdf; --no-pdf skips it).
+        <title>-<version>.pdf of all pages when Typst is installed: docsite.pdf.site_pdf; --no-pdf does not
+        compile it and keeps the last built one: docsite.pdf.last_pdf).
 """
 from __future__ import annotations
 
@@ -43,9 +44,8 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     for asset in [*ASSETS.glob("*.js"), *ASSETS.glob("*.png"), *ASSETS.glob("*.ico")]:
         shutil.copy2(asset, site / "_assets" / asset.name)
     renderer = SiteRenderer(tree, site)
-    if with_pdf:
-        from kea.docsite import pdf
-        renderer.pdf = pdf.site_pdf(tree, site)
+    from kea.docsite import pdf
+    renderer.pdf = pdf.site_pdf(tree, site) if with_pdf else pdf.last_pdf(site)
     from kea.docsite import render
     render.PDF = renderer.pdf               # the menu bar links it on every page
     renderer.render_all()
@@ -72,7 +72,8 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
                "downloads": len(renderer.downloads), "problems": len(tree.problems) + len(renderer.broken),
                "notes": len(tree.notes),
                "pdf": (renderer.pdf or {}).get("file", "none (typst not installed)" if with_pdf else "skipped")
-               + (" (reused)" if (renderer.pdf or {}).get("reused") else "")}
+               + ((" (kept from the last build)" if not with_pdf else " (reused)")
+                  if (renderer.pdf or {}).get("reused") else "")}
     return summary, tree.problems + renderer.broken
 
 
@@ -85,8 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", "--site", dest="site", type=Path, default=None,
                         help="output folder (default: kea.yaml site_dir; local: report/site-local; public: "
                              "report/site-public)")
-    parser.add_argument("--no-pdf", action="store_true", help="skip the PDF of all pages (built with Typst "
-                        "when installed, recompiled only when the pages changed)")
+    parser.add_argument("--no-pdf", action="store_true", help="do not compile the PDF of all pages; the site "
+                        "keeps the PDF of the last full build (and its menu link)")
     parser.add_argument("--with-changelog", action="store_true",
                         help="public: include run and commit pages (run entries may quote comments)")
     args = parser.parse_args(argv)
