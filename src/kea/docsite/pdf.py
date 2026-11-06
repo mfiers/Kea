@@ -983,9 +983,10 @@ class PdfWriter:
                       f"#datatable(4, 7.5pt, 1, table.header([Figure], [Image], [Script], [Table]), " + ", ".join(cells) + ")"]
         if data_parts:
             parts += ["== Data and resources",
-                      "#intro[What the analysis takes from outside (resources: databases, servers, files, with the "
-                      "version, date and checksum needed to get the same input again), then the files it made and "
-                      "figure files are in the next chapter.]"] + data_parts
+                      "#intro[What the analysis takes from outside (resources: sources such as databases and servers, "
+                      "and each dataset, study or file taken from them, with the version, date and checksum needed to "
+                      "get the same input again), then the data files it made. The figure files have a chapter of "
+                      "their own.]"] + data_parts
         parts += figure_parts
         parts += self.glossary(project)
         parts += self.bibliography(project)
