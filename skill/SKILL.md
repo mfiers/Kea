@@ -8,6 +8,11 @@ The tool does the work; this skill says when and how to use it. Never copy kea's
 
 ## When the user says "use Kea" (start-up routine)
 
+**One agent per project, always.** Before any other step in a project that has `kea.yaml`, run `kea lease take`.
+If it refuses (exit 2: another agent works on this project), stop: tell the user which session holds it and do
+nothing else in the project. Take over with `--force` only when the user says that session is finished. Every
+command that writes (reply, status, cycle, watch, apply-suggestion, publish) checks the lease too.
+
 When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start analysing before step 5:
 
 1. **Outline.** Read what the project already says (README, CLAUDE.md, reports, the conversation). Ask only for
@@ -21,7 +26,8 @@ When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start
    - only the user on this machine: `localhost`;
    - colleagues on a trusted network or VPN: `make serve HOST=<ip>` (plain http; ask before opening firewall
      ports);
-   - outside readers: `kea build --mode public --out DIR` on any static host (no comments).
+   - readers anywhere, with comments: a **Kea hub** (below, "Hosting on a Kea hub");
+   - outside readers without comments: `kea build --mode public --out DIR` on any static host.
 
    If in doubt, run `kea serve` on `127.0.0.1` and a free port (`kea.yaml` `port:`) as a background process of the
    session.
@@ -226,6 +232,27 @@ The PDF is read on paper by people outside the review cycle. Keep review-process
 comment", thread ids) out of page bodies and summaries, or confine them to one short closing section; keep
 hypothesis numbers in captions and titles current after renumbering. Look at a few rendered pages (figures, tables) after a large change to the pages.
 
+## Hosting on a Kea hub
+
+A hub (`kea hub serve`, behind an https reverse proxy) hosts many projects at `https://<hub>/p/<project>/` and keeps
+their comments; the agent works locally and talks to the hub only over https.
+
+1. **The owner** runs `kea hub add <project>` on the hub and gives you the project key; it prints a site password
+   (readers comment under any name) and an iteration password (also freeze, unfreeze, Implement). Put
+   `KEA_REMOTE_KEY=<key>` in `.env` (never print or commit it) and in `kea.yaml`:
+   `remote: {url: https://<hub>, project: <project>}`.
+2. **Data files: ask first, in one batch.** Run `kea publish --files`: it lists every data file the site links to,
+   its size and whether it would go up. Files that may hold identifiers (donor, subject, sample … columns) or that
+   kea cannot inspect (h5ad, parquet, npz) stay home unless named. Ask the owner one question, e.g. "Upload the
+   12 small files (< 100 kB) without identifier columns? These 9 stay home: …", and record the answer in
+   `kea.yaml` (`upload_max_kb`, `upload_include`, `upload_exclude`). Default: nothing goes up. Controlled-access
+   data never goes up without the owner's explicit yes, file by file. On the hub, files that stay home show no
+   download link and no preview.
+3. **Publish** after every `make site`: `kea publish` (it sends the site, the Markdown for the editor and the chosen
+   files; the first time also the existing comments). Tell the owner the link and the two passwords' roles.
+4. **Watch** as usual: `kea watch`, `kea list`, `kea reply` and `kea cycle` read and write the hub's record; the
+   local `data/feedback/*.jsonl` are kept as an exact mirror (commit them as before).
+
 ## Every agent run
 
 Pick a run id `YYYY-MM-DD-<letter>`; put `Run: <id>` in every commit; `Answers-comment: <thread>` when a commit
@@ -250,7 +277,7 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    - Write the run entry and commit.
    - Run `kea cycle release --run <id> --commit <sha> --version X.Y.Z --kind major|minor|patch --reason "…"
      [--experiment NAME=X.Y.Z]`. It writes the git tags.
-   - Run `make site`. Restart `kea serve` if kea itself changed.
+   - Run `make site` (and `kea publish` with a hub). Restart `kea serve` if kea itself changed.
 
    Version rules: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages,
    PATCH for wording only. Before 1.0 a major change counts as minor.

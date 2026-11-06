@@ -17,8 +17,9 @@
   const PAGE = script.dataset.page;
   const COMMIT = script.dataset.commit || "";
   const TITLE = script.dataset.title || document.title;
-  const API = "/api/threads";
   const ASSET_BASE = script.src.replace(/[^/]*$/, "");      // .../_feedback/
+  const BASE = ASSET_BASE.replace(/_feedback\/$/, "");      // the site root (also under a hub prefix /p/<name>/)
+  const API = BASE + "api/threads";
   let editable = false;
   const CONTEXT = 40;
   const NOT = "not-annotatable";
@@ -229,7 +230,7 @@
   }
   async function openEditor(section) {
     let source;
-    try { source = await api("GET", "/api/source?page=" + encodeURIComponent(PAGE)); }
+    try { source = await api("GET", BASE + "api/source?page=" + encodeURIComponent(PAGE)); }
     catch (error) { alert(error.message); return; }
     await loadMarked().catch(() => null);
     let before = "", after = "", original = source.text;
@@ -267,7 +268,7 @@
           el("button", { onclick: async () => {
             if (area.value === original) { status.textContent = "Nothing changed."; return; }
             try {
-              await api("POST", "/api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: whole(area.value) });
+              await api("POST", BASE + "api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: whole(area.value) });
               overlay.remove(); await reload(); openPanel();
             } catch (error) { status.textContent = error.message; }
           } }, "Save as suggestion"),
@@ -298,7 +299,7 @@
     if (thread.suggestion) box.append(diffView(thread.suggestion));
     for (const reply of thread.replies) box.append(messageView(reply.author, reply.text, reply.created_at));
     if (thread.status !== "open" && thread.status_by) {
-      const commitLink = sha => el("a", { href: "/commits/" + sha.split("+")[0] + ".html" }, sha);
+      const commitLink = sha => el("a", { href: BASE + "commits/" + sha.split("+")[0] + ".html" }, sha);
       const note = thread.status === "page-changed" && thread.commit
         ? el("span", {}, "Page changed in commit ", commitLink(thread.commit),
             thread.status_note ? ": " + thread.status_note : "")
@@ -310,8 +311,8 @@
     }
     if (thread.page_commit && COMMIT && thread.page_commit !== COMMIT) {
       box.append(el("div", { class: "fb-version" },
-        "Asked on version ", el("a", { href: "/commits/" + thread.page_commit.split("+")[0] + ".html" }, thread.page_commit),
-        "; this page is now version ", el("a", { href: "/commits/" + COMMIT.split("+")[0] + ".html" }, COMMIT), "."));
+        "Asked on version ", el("a", { href: BASE + "commits/" + thread.page_commit.split("+")[0] + ".html" }, thread.page_commit),
+        "; this page is now version ", el("a", { href: BASE + "commits/" + COMMIT.split("+")[0] + ".html" }, COMMIT), "."));
     }
     // reply + resolve
     const textarea = el("textarea", { rows: "2", placeholder: "Reply…" });
@@ -500,7 +501,7 @@
     for (const node of document.querySelectorAll(".fb-static")) node.hidden = true;
     await reload();
     try {
-      const probeSource = await fetch("/api/source?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
+      const probeSource = await fetch(BASE + "api/source?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
       editable = probeSource.ok;
     } catch (error) { editable = false; }
     const editButton = panel.querySelector(".fb-edit-btn");

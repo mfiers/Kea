@@ -65,8 +65,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.9.2"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.9.2
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.10.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.10.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -75,6 +75,46 @@ kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep 
 `kea init` never overwrites a file; it adds `kea.yaml`, `doc/_schema.yaml`, a first experiment, `.env`, Makefile
 targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skill/SKILL.md`); copy that folder to
 `~/.claude/skills/kea/` to make it available in every project.
+
+## Hosting on a Kea hub
+
+One server can host the sites of many projects and collect their comments, while each project's agent works on
+its own machine. The hub runs on any Linux host behind an https reverse proxy (Caddy, nginx); kea talks to it only
+over https.
+
+```
+# on the hub
+kea hub init --dir /srv/kea-hub --url https://kea.example.org
+kea hub add trajectories --title Trajectories    # prints the project key, site password, iteration password
+kea hub serve --host 127.0.0.1 --port 8300       # behind the proxy, e.g. Caddy: kea.example.org { reverse_proxy 127.0.0.1:8300 }
+```
+
+```
+# in the project: kea.yaml
+remote:
+  url: https://kea.example.org
+  project: trajectories
+  upload_max_kb: 100                 # data files up to this size go up (default 0: none) …
+  upload_include: []                 # … plus these (also flagged ones), never these:
+  upload_exclude: []
+# .env: KEA_REMOTE_KEY=<project key>
+kea publish --files                  # what would go up, and why not
+kea publish                          # after every build
+```
+
+- **Readers** open `https://kea.example.org/p/trajectories/`. The site password lets them comment under any name;
+  the iteration password also lets them freeze the site and ask Claude to implement the plan.
+- **The agent** publishes the built site (with the Markdown for the editor), and `kea watch`, `list`, `reply`
+  and `cycle` read and write the hub's record. The local `data/feedback/*.jsonl` stay an exact mirror.
+- **Data** stays home unless chosen: files that may hold identifiers or that kea cannot inspect are flagged, and
+  on the hub a file that stayed home has no download link and no preview.
+- **One agent per project**: the hub keeps a lease. A second agent (another session, another machine) is refused
+  until the first one's lease expires (2 h after its last action) or the owner says to take over (`kea lease take
+  --force`). The same lease protects projects without a hub (`data/feedback/agent_lease.json`).
+- **Secrets**: the hub stores only hashes of the key and passwords. Renew them with `kea hub passwords` and `kea hub
+  rotate-key`. Wrong passwords are throttled (10 per 10 minutes per address). Cookies are per project and secure
+  over https.
+- Locally, `SITE_STEER_PASSWORD` in `.env` gives `kea serve` the same second password.
 
 ## Commands
 

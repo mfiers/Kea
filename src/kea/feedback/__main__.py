@@ -19,6 +19,13 @@ Usage:
         every --report-every seconds and writes only its heartbeat (data/feedback/watch_heartbeat.json, shown on
         the plan page).
     kea watch --status  is a watcher running, when did it last look, what is it waiting for (exit 0 if alive, 1 if not)
+    kea lease status|take|release [--force]
+        one agent per project (feedback.agent): every command that writes (reply, status, cycle, watch,
+        apply-suggestion, publish) takes or renews the lease; another agent is refused (exit 2). Take it at the
+        start of a session; --force only when the owner says the other session is finished.
+
+With a hub (kea.yaml `remote:`, feedback.backend) the same commands read and write the hub's record; the local
+data/feedback/*.jsonl files are kept as an exact mirror.
 
 Replies and status changes are written as author "claude" (the server refuses that name for readers).
 A status of page-changed needs --commit: the commit that rewrote the page.
@@ -39,7 +46,7 @@ from pathlib import Path
 import time
 
 from kea.config import PROJECT_ROOT
-from kea.feedback import cycle, store
+from kea.feedback import agent, backend, cycle, store
 
 AUTHOR = "claude"
 PROJECT = PROJECT_ROOT
@@ -68,12 +75,24 @@ def watch(args: argparse.Namespace) -> int:
     """
     started = last_report = time.time()
     polls = 0
+    client = backend.get(args.events, args.cycle_log)
+    client.take_lease(watching=True)                 # refused (LeaseHeld) when another agent works on the project
     while True:
+        try:
+            client.sync()
+        except backend.RemoteError as error:
+            print(f"watching: {error}; trying again", flush=True)
         current = cycle.state(args.cycle_log)
         polls += 1
-        if args.heartbeat:
-            cycle.write_heartbeat(extra={"pid": os.getpid(), "deadline": args.deadline, "state": current.state,
-                                         "cycle": current.cycle, "started": started})
+        extra = {"pid": os.getpid(), "deadline": args.deadline, "state": current.state, "cycle": current.cycle,
+                 "started": started}
+        try:
+            if args.heartbeat:
+                client.heartbeat(extra)              # also renews the lease
+            else:
+                client.take_lease(watching=True)
+        except backend.RemoteError as error:
+            print(f"watching: {error}", flush=True)
         if time.time() - last_report >= args.report_every:
             last_report = time.time()
             print(f"watching: {time.strftime('%Y-%m-%d %H:%M')}, cycle {current.cycle} {current.state}, "
@@ -316,12 +335,56 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("status", choices=store.STATUSES)
     status_parser.add_argument("--commit", default="")
     status_parser.add_argument("--note", default="")
+    lease_parser = sub.add_parser("lease", help="one agent per project: status, take or release the lease")
+    lease_parser.add_argument("action", choices=["status", "take", "release"])
+    lease_parser.add_argument("--force", action="store_true",
+                              help="take or release a lease another agent holds (only on the owner's word)")
     args = parser.parse_args(argv)
+    try:
+        return run(args, parser)
+    except agent.LeaseHeld as held:
+        print(held, file=sys.stderr)
+        return 2
+    except backend.RemoteError as error:
+        print(error, file=sys.stderr)
+        return 1
+
+
+def lease_command(args: argparse.Namespace) -> int:
+    client = backend.get(args.events)
+    if args.action == "take":
+        lease = client.take_lease(force=args.force)
+        print(f"lease held by this agent ({lease['agent']}) since {lease['since']}"
+              + (f"; taken over from {lease['took_over_from']}" if lease.get("took_over_from") else ""))
+        return 0
+    if args.action == "release":
+        client.release_lease(force=args.force)
+        print("lease released")
+        return 0
+    lease = client.lease()
+    if not lease:
+        print(f"no agent holds the lease ({client.describe()})")
+        return 0
+    mine = lease.get("agent") == agent.agent_id()
+    free = agent.is_free_for(lease, agent.agent_id(), check_process=not client.remote)
+    print(f"lease: {lease.get('agent')} on {lease.get('host')} ({lease.get('path')}), since {lease.get('since')}, "
+          f"renewed {lease.get('renewed_at')}{', watching' if lease.get('watching') else ''} — "
+          + ("this agent" if mine else "free to take (expired or ended)" if free else "ANOTHER AGENT"))
+    return 0 if mine or free else 2
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.command == "lease":
+        return lease_command(args)
+    client = backend.get(args.events, getattr(args, "cycle_log", None))
+    if client.remote and args.command in ("list", "show", "cycle", "apply-suggestion", "reply", "status"):
+        client.sync()
 
     if args.command == "cycle":
         if args.action == "status":
             print(json.dumps(cycle.state(args.cycle_log).to_dict(), indent=1))
             return 0
+        client.take_lease()
         kind = {"plan-updated": "plan-updated", "start": "implementing", "release": "released"}[args.action]
         if args.action == "release":
             problem = check_release(args)
@@ -329,8 +392,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(problem, file=sys.stderr)
                 return 1
         try:
-            current = cycle.append(kind, AUTHOR, args.cycle_log, run=args.run, commit=args.commit,
-                                   version=args.version if args.action == "release" else "")
+            current = client.append_cycle(kind, AUTHOR, run=args.run, commit=args.commit,
+                                          version=args.version if args.action == "release" else "")
         except store.FeedbackError as error:
             print(error, file=sys.stderr)
             return 1
@@ -365,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown thread {args.thread_id}", file=sys.stderr)
         return 1
     if args.command == "apply-suggestion":
+        client.take_lease()
         outcome = apply_suggestion(all_threads[args.thread_id])
         return 1 if outcome < 0 else outcome
     if args.command == "show":
@@ -374,11 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     if status == "page-changed" and not args.commit:
         print("page-changed needs --commit <sha of the commit that rewrote the page>", file=sys.stderr)
         return 1
+    client.take_lease()
     if args.command == "reply":
-        store.append_event({"type": "reply", "thread_id": args.thread_id, "text": args.text, "author": AUTHOR},
-                           args.events)
-    store.append_event({"type": "status", "thread_id": args.thread_id, "status": status, "note": args.note,
-                        "commit": args.commit, "author": AUTHOR}, args.events)
+        client.append_event({"type": "reply", "thread_id": args.thread_id, "text": args.text, "author": AUTHOR})
+    client.append_event({"type": "status", "thread_id": args.thread_id, "status": status, "note": args.note,
+                         "commit": args.commit, "author": AUTHOR})
     print(describe(store.fold(store.load_events(args.events))[args.thread_id], page_sources()))
     return 0
 

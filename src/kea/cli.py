@@ -12,12 +12,16 @@
     kea context <question|experiment> what to take into account before working on it (premises, decisions,
                                       caveats, evidence so far, open comments, gaps)
     kea check                         validate doc/ against doc/_schema.yaml without building
+    kea lease status|take|release     one agent per project (take it at the start of a session)
+    kea publish [--files]             send the built site to the project's Kea hub (kea.yaml remote:)
+    kea hub init|add|list|passwords|rotate-key|remove|serve
+                                      run a Kea hub: one https server hosting many projects' sites
 """
 from __future__ import annotations
 
 import sys
 
-FEEDBACK_COMMANDS = {"list", "show", "reply", "status", "cycle", "watch", "apply-suggestion"}
+FEEDBACK_COMMANDS = {"list", "show", "reply", "status", "cycle", "watch", "apply-suggestion", "lease"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     if command == "context":
         from kea.docsite import context
         return context.main(rest)
+    if command == "hub":
+        from kea.feedback import hub
+        return hub.main(rest)
+    if command == "publish":
+        from kea.feedback import publish
+        return publish.main(rest)
     if command == "serve":
         from kea.feedback import server
         return server.main(rest)

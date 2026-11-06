@@ -66,7 +66,8 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     editable = {key: str(source.relative_to(PROJECT_ROOT)) for key, source in renderer.pages.values()
                 if source is not None and ":" in key and source.is_relative_to(PROJECT_ROOT / "doc")}
     (site / "_sources.json").write_text(json.dumps(editable, indent=1, sort_keys=True))   # pages with an Edit button
-    (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit,
+    (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
+                                                  "previews_marked": True,      # kea publish relies on this
                                                   "built_at": dt.datetime.now().isoformat(timespec="seconds")}))
     summary = {"pages": len(renderer.pages), "injected": counts["pages"], "with_history": counts["with_history"],
                "downloads": len(renderer.downloads), "problems": len(tree.problems) + len(renderer.broken),

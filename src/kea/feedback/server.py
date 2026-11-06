@@ -28,9 +28,15 @@ API (JSON):
     POST /api/cycle/implement       a reader asks Claude to implement the plan (only from frozen, and only when
                                     every comment is in the plan: 409 otherwise)
     POST /api/cycle/cancel          a reader withdraws that request (before Claude has started; back to frozen)
+    POST /api/steer                 {password}: the iteration password; when one is set (SITE_STEER_PASSWORD, or the
+                                    hub's per-project one) the four cycle actions need it (403 {need_steer} without)
+
+Two passwords: the site password makes a reader a commenter; the iteration password (optional locally, always on
+the hub) also lets them freeze, unfreeze, ask Claude to implement the plan, or cancel that request.
+All paths are relative to the site root, so the same app serves a project under a prefix (kea hub: /p/<name>/).
 
 Usage: kea serve [--host <ip>] [--port <port>]   (defaults from kea.yaml)
-Security: meant for the KU Leuven network only; plain http; one password for everybody.
+Security: `kea serve` is meant for a trusted network (plain http); `kea hub serve` runs behind an https proxy.
 """
 
 from __future__ import annotations
@@ -43,7 +49,10 @@ import html
 import json
 import os
 import subprocess
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote, unquote
 
 from dotenv import load_dotenv
@@ -61,15 +70,52 @@ from kea.feedback import cycle, states, store
 
 PROJECT = PROJECT_ROOT
 AUTH_COOKIE = "fb_auth"
+STEER_COOKIE = "fb_steer"
 NAME_COOKIE = "fb_name"
 COOKIE_DAYS = 90
 READER_STATUSES = ("resolved", "open")
 
 
-def auth_token(password: str) -> str:
+def default_salt() -> str:
+    return str(SETTINGS.get("cookie_salt") or f"kea-site:{PROJECT_ROOT.name}")          # per site, kea.yaml
+
+
+def auth_token(password: str, salt: str | None = None) -> str:
     """Cookie value proving the password was entered; changes when the password changes."""
-    salt = str(SETTINGS.get("cookie_salt") or f"kea-site:{PROJECT_ROOT.name}").encode()   # per site, kea.yaml
-    return hmac.new(password.encode(), salt, hashlib.sha256).hexdigest()
+    salt_bytes = (salt if salt is not None else default_salt()).encode()
+    return hmac.new(password.encode(), salt_bytes, hashlib.sha256).hexdigest()
+
+
+def steer_token(password: str, salt: str | None = None) -> str:
+    """Cookie value proving the iteration password was entered (a different value from the site password's)."""
+    return auth_token(password, (salt if salt is not None else default_salt()) + ":steer")
+
+
+def site_root(request: Request) -> str:
+    """The prefix this site is served under ('' for kea serve, '/p/<name>' on a hub)."""
+    return str(request.scope.get("root_path", "")).rstrip("/")
+
+
+def local_path(request: Request) -> str:
+    """The request path relative to the site root ('/login', '/api/status', …)."""
+    root, path = site_root(request), request.url.path
+    return path[len(root):] or "/" if root and path.startswith(root) else path
+
+
+class LoginThrottle:
+    """At most LIMIT wrong passwords per client address per WINDOW seconds (in memory; resets on restart)."""
+    LIMIT, WINDOW = 10, 600
+
+    def __init__(self):
+        self.failures: dict[str, list[float]] = {}
+
+    def blocked(self, client: str) -> bool:
+        recent = [moment for moment in self.failures.get(client, []) if moment > time.time() - self.WINDOW]
+        self.failures[client] = recent
+        return len(recent) >= self.LIMIT
+
+    def failed(self, client: str) -> None:
+        self.failures.setdefault(client, []).append(time.time())
 
 
 def reader_name(request: Request) -> str:
@@ -84,7 +130,7 @@ h1{{font-size:19px;margin:0 0 6px}}p{{color:#555;font-size:13.5px;margin:0 0 16p
 input{{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit}}
 button{{margin-top:16px;padding:8px 16px;border:0;border-radius:6px;background:#1f5fa8;color:#fff;font:inherit;cursor:pointer}}
 .err{{color:#a00;font-size:13px}}</style>
-<form method='post' action='/login'>
+<form method='post' action='{action}'>
 <h1>{title}</h1>
 <p>Internal working site. Enter the shared password. Your name is used to sign your comments.</p>
 {error}
@@ -95,24 +141,69 @@ button{{margin-top:16px;padding:8px 16px;border:0;border-radius:6px;background:#
 
 
 class PasswordGate(BaseHTTPMiddleware):
-    def __init__(self, app, password: str):
+    def __init__(self, app, token: str):
         super().__init__(app)
-        self.token = auth_token(password) if password else ""
+        self.token = token
 
     async def dispatch(self, request: Request, call_next):
-        if not self.token or request.url.path in ("/login", "/favicon.ico"):
+        path = local_path(request)
+        if not self.token or path in ("/login", "/favicon.ico"):
             return await call_next(request)
         if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), self.token):
             return await call_next(request)
-        if request.url.path.startswith("/api/"):
+        if path.startswith("/api/"):
             return JSONResponse({"error": "not signed in"}, status_code=401)
-        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-        return RedirectResponse(f"/login?next={quote(target)}", status_code=303)
+        target = path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"{site_root(request)}/login?next={quote(target)}", status_code=303)
+
+
+@dataclass
+class SiteSpec:
+    """Everything one hosted site needs (kea serve: this project; kea hub: one project's current release)."""
+    site_dir: Path
+    events_path: Path
+    cycle_path: Path | None = None
+    heartbeat_path: Path | None = None
+    reader_token: str = ""                 # auth_token(site password); '' = no password (local testing)
+    steer_token: str = ""                  # steer_token(iteration password); '' = any signed-in reader may steer
+    title: str = ""
+    salt: str | None = None                # cookie salt; None = kea.yaml's (kea serve)
+    source_root: Path = PROJECT_ROOT       # where the doc/*.md of _sources.json live
+    files_root: Path = PROJECT_ROOT        # where the downloads of _files.json live
+    source_commit: Callable[[str], str] = field(default=lambda relative: "")
+    states_context: Callable[[], dict] = field(default=lambda: states.context())
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
-             heartbeat_path: Path | None = None) -> Starlette:
-    token = auth_token(password) if password else ""
+             heartbeat_path: Path | None = None, steer_password: str = "") -> Starlette:
+    """The app of `kea serve`: this project, passwords from .env."""
+    return make_site_app(SiteSpec(site_dir=site_dir, events_path=events_path, cycle_path=cycle_path,
+                                  heartbeat_path=heartbeat_path, title=str(SETTINGS["title"]),
+                                  reader_token=auth_token(password) if password else "",
+                                  steer_token=steer_token(steer_password) if steer_password else "",
+                                  source_root=PROJECT, files_root=PROJECT, source_commit=git_commit_of))
+
+
+def git_commit_of(relative: str) -> str:
+    """Commit of the last change of a project file (kea serve; the hub takes it from the published bundle)."""
+    return subprocess.run(["git", "log", "-1", "--format=%h", "--", relative], cwd=PROJECT, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def make_site_app(spec: SiteSpec) -> Starlette:
+    site_dir, events_path, cycle_path, heartbeat_path = (spec.site_dir, spec.events_path, spec.cycle_path,
+                                                         spec.heartbeat_path)
+    token = spec.reader_token
+    throttle = LoginThrottle()
+
+    def auth_token_for(password: str) -> str:
+        return auth_token(password, spec.salt)
+
+    def steer_token_for(password: str) -> str:
+        return steer_token(password, spec.salt)
+
+    def secure(request: Request) -> bool:
+        return request.url.scheme == "https"
 
     def frozen_response(page_key: str) -> Response | None:
         current = cycle.state(cycle_path)
@@ -136,10 +227,34 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
                              "threads": len(threads),
                              "open": sum(cycle.needs_attention(thread) for thread in threads),
                              "unplanned": len(cycle.needs_planning(threads, current)),
-                             "watcher_seen_at": cycle.read_heartbeat(heartbeat_path)})
+                             "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
+                             "can_steer": may_steer(request)})
+
+    def may_steer(request: Request) -> bool:
+        return not spec.steer_token or hmac.compare_digest(request.cookies.get(STEER_COOKIE, ""), spec.steer_token)
+
+    async def steer(request: Request) -> Response:
+        client = request.client.host if request.client else "?"
+        if throttle.blocked(client):
+            return JSONResponse({"error": "too many wrong passwords; try again in ten minutes"}, status_code=429)
+        try:
+            body = await _body(request)
+        except store.FeedbackError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
+        if not spec.steer_token:
+            return JSONResponse({"ok": True, "note": "this site has no iteration password"})
+        if not hmac.compare_digest(steer_token_for(str(body.get("password") or "")), spec.steer_token):
+            throttle.failed(client)
+            return JSONResponse({"error": "wrong iteration password"}, status_code=403)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(STEER_COOKIE, spec.steer_token, max_age=COOKIE_DAYS * 86400, httponly=True,
+                            samesite="lax", secure=secure(request), path=site_root(request) + "/")
+        return response
 
     async def cycle_action(request: Request) -> Response:
         action = request.path_params["action"]
+        if not may_steer(request):
+            return JSONResponse({"error": "this needs the iteration password", "need_steer": True}, status_code=403)
         try:
             name = _author(request)
             kind = {"freeze": "frozen", "unfreeze": "unfrozen", "implement": "implement-requested",
@@ -165,12 +280,11 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
         relative = editable_sources().get(page_key)
         if not relative:
             return None
-        target = (PROJECT / relative).resolve()
-        if not target.is_relative_to(PROJECT / "doc") or not target.is_file():
+        root = spec.source_root.resolve()
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root / "doc") or not target.is_file():
             return None
-        commit = subprocess.run(["git", "log", "-1", "--format=%h", "--", relative], cwd=PROJECT,
-                                capture_output=True, text=True).stdout.strip()
-        return relative, target.read_text(encoding="utf-8"), commit
+        return relative, target.read_text(encoding="utf-8"), spec.source_commit(relative)
 
     async def get_source(request: Request) -> Response:
         found = source_text(request.query_params.get("page", ""))
@@ -205,28 +319,38 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
             return JSONResponse({"error": str(error)}, status_code=400)
         return await thread_json(event["thread_id"])
 
+    def login_page(request: Request, error: str, name: str, next_url: str, status: int = 200) -> HTMLResponse:
+        return HTMLResponse(LOGIN_PAGE.format(title=html.escape(spec.title or "Kea site"), error=error,
+                                              name=html.escape(name), next=html.escape(next_url),
+                                              action=html.escape(site_root(request) + "/login")), status_code=status)
+
     async def login(request: Request) -> Response:
+        root = site_root(request)
         if request.method == "GET":
-            next_url = request.query_params.get("next", "/")
-            return HTMLResponse(LOGIN_PAGE.format(title=html.escape(SETTINGS["title"]), error="", name=html.escape(reader_name(request)),
-                                                  next=html.escape(next_url)))
+            return login_page(request, "", reader_name(request), request.query_params.get("next", "/"))
         form = await request.form()
         next_url = str(form.get("next") or "/")
         if not next_url.startswith("/") or next_url.startswith("//"):
             next_url = "/"
         name = str(form.get("name") or "").strip()[: store.MAX_NAME]
-        if not token or not hmac.compare_digest(auth_token(str(form.get("password") or "")), token):
-            return HTMLResponse(LOGIN_PAGE.format(title=html.escape(SETTINGS["title"]), error="<p class='err'>Wrong password.</p>", name=html.escape(name),
-                                                  next=html.escape(next_url)), status_code=401)
-        response = RedirectResponse(next_url, status_code=303)
-        response.set_cookie(AUTH_COOKIE, token, max_age=COOKIE_DAYS * 86400, httponly=True, samesite="lax")
+        client = request.client.host if request.client else "?"
+        if throttle.blocked(client):
+            return login_page(request, "<p class='err'>Too many wrong passwords; try again in ten minutes.</p>", name,
+                              next_url, 429)
+        if not token or not hmac.compare_digest(auth_token_for(str(form.get("password") or "")), token):
+            throttle.failed(client)
+            return login_page(request, "<p class='err'>Wrong password.</p>", name, next_url, 401)
+        response = RedirectResponse(root + next_url, status_code=303)
+        response.set_cookie(AUTH_COOKIE, token, max_age=COOKIE_DAYS * 86400, httponly=True, samesite="lax",
+                            secure=secure(request), path=root + "/")
         if name:
-            response.set_cookie(NAME_COOKIE, quote(name), max_age=365 * 86400, samesite="lax")
+            response.set_cookie(NAME_COOKIE, quote(name), max_age=365 * 86400, samesite="lax", secure=secure(request),
+                                path=root + "/")
         return response
 
     async def list_threads(request: Request) -> Response:
         page = request.query_params.get("page")
-        info = states.context()
+        info = spec.states_context()
         items = []
         for thread in store.threads(events_path):
             if page is None or thread.page == page:
@@ -307,8 +431,9 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
         allowed = set(json.loads(allowed_file.read_text())) if allowed_file.exists() else set()
         if relative not in allowed:
             return JSONResponse({"error": "not a published artefact"}, status_code=404)
-        target = (PROJECT / relative).resolve()
-        if not target.is_relative_to(PROJECT) or not target.is_file():
+        root = spec.files_root.resolve()
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
             return JSONResponse({"error": "missing"}, status_code=404)
         return FileResponse(target, filename=target.name)
 
@@ -317,6 +442,7 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
         Route("/files/{path:path}", download, methods=["GET"]),
         Route("/api/status", status, methods=["GET"]),
         Route("/api/cycle/{action}", cycle_action, methods=["POST"]),
+        Route("/api/steer", steer, methods=["POST"]),
         Route("/api/source", get_source, methods=["GET"]),
         Route("/api/suggest", suggest, methods=["POST"]),
         Route("/api/threads", list_threads, methods=["GET"]),
@@ -325,7 +451,7 @@ def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path 
         Route("/api/threads/{thread_id}/status", set_status, methods=["POST"]),
         Mount("/", StaticFiles(directory=site_dir, html=True, check_dir=False)),
     ]
-    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, password=password)])
+    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token)])
 
 
 def service_name() -> str:
@@ -382,7 +508,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("SITE_PASSWORD is not set in .env (or pass --no-password for local testing)")
     import uvicorn
 
-    uvicorn.run(make_app(args.site, args.events, password, args.cycle), host=args.host, port=args.port, log_level="warning")
+    steer = "" if args.no_password else os.environ.get("SITE_STEER_PASSWORD", "")
+    if not steer and not args.no_password:
+        print("note: no SITE_STEER_PASSWORD in .env: every signed-in reader may freeze the site and ask Claude to "
+              "implement the plan")
+    uvicorn.run(make_app(args.site, args.events, password, args.cycle, steer_password=steer), host=args.host,
+                port=args.port, log_level="warning")
     return 0
 
 

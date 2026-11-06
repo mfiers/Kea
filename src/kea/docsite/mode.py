@@ -41,7 +41,7 @@ def data_links() -> bool:
 def file_href(relative: str, prefix: str) -> str | None:
     """Link from a page (with `prefix` back to the site root) to a project file, or None when not allowed."""
     if MODE == "review":
-        return f"/files/{relative}"
+        return f"{prefix}files/{relative}"     # relative: works under a hub prefix (/p/<name>/) too
     if MODE == "local":
         to_root = os.path.relpath(PROJECT_ROOT, SITE).replace(os.sep, "/")
         return f"{prefix}{to_root}/{relative}"

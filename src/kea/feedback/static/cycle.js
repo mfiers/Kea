@@ -15,6 +15,7 @@
   const script = document.currentScript;
   const BUILD = script.dataset.build || "";
   const PREFIX = script.dataset.prefix || "";
+  const BASE = script.src.replace(/_feedback\/[^/]*$/, "");   // the site root (also under a hub prefix)
   const POLL_MS = 20000;
   let banner = null;
   let lastState = null;
@@ -47,9 +48,41 @@
   }
   function hideBanner() { if (banner) banner.hidden = true; }
 
-  async function post(action) {
-    const response = await fetch("/api/cycle/" + action, { method: "POST", credentials: "same-origin" });
+  // Freeze, Unfreeze, Implement and Cancel need the iteration password (a second password besides the site's);
+  // the server answers 403 {need_steer: true} until it has been entered once (a cookie remembers it).
+  function askSteerPassword() {
+    return new Promise(resolve => {
+      const input = el("input", { type: "password", autocomplete: "off", class: "fb-steer-input" });
+      const error = el("p", { class: "fb-steer-error" });
+      const dialog = el("dialog", { class: "fb-steer not-annotatable" },
+        el("p", {}, el("strong", {}, "Iteration password")),
+        el("p", { class: "fb-steer-help" }, "Starting or stopping a review round and asking Claude to implement the " +
+          "plan need the iteration password (not the site password). Ask the site owner for it."),
+        input, error,
+        el("div", { class: "fb-steer-buttons" },
+          el("button", { class: "fb-secondary", onclick: () => { dialog.close(); resolve(false); } }, "Cancel"),
+          el("button", { onclick: submit }, "Unlock")));
+      async function submit() {
+        const response = await fetch(BASE + "api/steer", { method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) });
+        if (response.ok) { dialog.close(); dialog.remove(); resolve(true); return; }
+        const data = await response.json().catch(() => ({}));
+        error.textContent = data.error || ("HTTP " + response.status);
+      }
+      input.addEventListener("keydown", event => { if (event.key === "Enter") submit(); });
+      document.body.append(dialog);
+      dialog.showModal();
+      input.focus();
+    });
+  }
+
+  async function post(action, retried) {
+    const response = await fetch(BASE + "api/cycle/" + action, { method: "POST", credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
+    if (response.status === 403 && data.need_steer && !retried) {
+      if (await askSteerPassword()) return post(action, true);
+      return;
+    }
     if (!response.ok) alert(data.error || ("HTTP " + response.status));
     poll();
   }
@@ -143,7 +176,7 @@
 
   async function poll() {
     try {
-      const response = await fetch("/api/status", { credentials: "same-origin", cache: "no-store" });
+      const response = await fetch(BASE + "api/status", { credentials: "same-origin", cache: "no-store" });
       if (!response.ok) return false;
       apply(await response.json());
       return true;

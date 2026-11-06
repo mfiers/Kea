@@ -145,7 +145,8 @@ def artefact_panel(relative: str, prefix: str, access: str | None = None,
     readme_link = (f"<div><b>Folder manifest:</b> <code>{esc(readme.relative_to(PROJECT_ROOT))}</code></div>"
                    if readme.exists() else "")
     if mode.preview_allowed(access):
-        preview_html = f"<h2>Preview</h2><div class='not-annotatable'>{preview(path)}</div>"
+        preview_html = (f"<h2>Preview</h2><div class='not-annotatable kea-preview' data-file='{esc(relative)}'>"
+                        f"{preview(path)}</div><!--/kea-preview-->")     # kea publish keeps it only with the file
     else:
         mode.omit("preview", relative)
         preview_html = ("<h2>Preview</h2><p class='help not-annotatable'>Not shown in this public copy (the file "

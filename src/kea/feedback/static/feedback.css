@@ -105,3 +105,12 @@ border:1px solid #c5cad3;background:#fff;color:#1f5fa8;border-radius:5px;padding
 article h2:hover .fb-sec-edit,.fb-sec-edit:focus{opacity:1}
 @media (hover:none){.fb-sec-edit{opacity:.8}}
 .fb-sec-edit:hover{background:#eef3fb}
+/* iteration-password dialog (cycle.js) */
+.fb-steer{border:0;border-radius:10px;box-shadow:0 4px 24px #0004;padding:20px 24px;max-width:380px;font:14px/1.5 system-ui,sans-serif}
+.fb-steer::backdrop{background:#0004}
+.fb-steer .fb-steer-help{color:#555;font-size:13px;margin:4px 0 12px}
+.fb-steer input{width:100%;box-sizing:border-box;padding:7px;border:1px solid #bbb;border-radius:6px;font:inherit}
+.fb-steer .fb-steer-error{color:#a00;font-size:13px;min-height:1em;margin:6px 0}
+.fb-steer .fb-steer-buttons{display:flex;gap:8px;justify-content:flex-end}
+.fb-steer button{padding:6px 14px;border:0;border-radius:6px;background:#1f5fa8;color:#fff;font:inherit;cursor:pointer}
+.fb-steer button.fb-secondary{background:#e8ebf0;color:#1d2330}

@@ -1,11 +1,14 @@
 <!-- kea:start -->
 ## Documentation site and review cycle (kea)
 
+- One agent per project: run `kea lease take` before anything else; if it refuses, stop and tell the owner.
 - `doc/` is the source of truth: `doc/<experiment>/<type>/<id>.md` with typed front matter (`doc/_schema.yaml`).
   Every agent run writes `doc/_changes/<run id>.md` and puts `Run: <run id>` in its commit messages; commits that
   answer comments carry `Answers-comment: <thread>`.
 - `make site` (`kea build --strict`) builds the site; `make serve` (`kea serve`) serves it with comments
-  (`SITE_PASSWORD` in `.env`, never printed or committed).
+  (`SITE_PASSWORD` in `.env`, never printed or committed). With a Kea hub (`remote:` in kea.yaml,
+  `KEA_REMOTE_KEY` in .env): `kea publish` after every build; ask the owner before data files go up
+  (`kea publish --files`).
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
   the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.
