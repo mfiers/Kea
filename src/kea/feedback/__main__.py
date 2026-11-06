@@ -11,11 +11,14 @@ Usage:
     kea cycle status|plan-updated|start|release [--run R --commit C]
         release also needs --version X.Y.Z --kind major|minor|patch --reason "…" [--experiment NAME=X.Y.Z …]
         and writes annotated git tags (vX.Y.Z, NAME/vX.Y.Z) on the release commit
-    kea watch --deadline <epoch> [--interval 5 --slow-interval 60 --quiet-after 3600 --settle 120]
+    kea watch --deadline <when> [--interval 5 --slow-interval 60 --quiet-after 3600 --settle 120 --report-every 3600]
         waits (fast polling while readers are active, slow after an hour of quiet; comments are reported once a
         burst has settled); exit 10 = comments to fold into the plan (while collecting, or on the plan while
-        frozen), 20 = a reader pressed "Implement the plan", 3 = deadline reached. Writes only its heartbeat
-        (data/feedback/watch_heartbeat.json, shown on the plan page).
+        frozen), 20 = a reader pressed "Implement the plan", 30 = deadline reached. <when> is epoch seconds, a
+        duration from now (90m, 12h, 3d) or an ISO date/time (2026-11-09T18:00, local time). Prints a status line
+        every --report-every seconds and writes only its heartbeat (data/feedback/watch_heartbeat.json, shown on
+        the plan page).
+    kea watch --status  is a watcher running, when did it last look, what is it waiting for (exit 0 if alive, 1 if not)
 
 Replies and status changes are written as author "claude" (the server refuses that name for readers).
 A status of page-changed needs --commit: the commit that rewrote the page.
@@ -27,6 +30,7 @@ from __future__ import annotations
 import argparse
 import calendar
 import json
+import os
 import re
 import sys
 import textwrap
@@ -59,12 +63,23 @@ def watch(args: argparse.Namespace) -> int:
     --slow-interval. Comments to plan are reported only after --settle seconds without new reader activity,
     so a burst of comments is folded in one pass. An Implement request is reported at once.
     Exit 10 = comments to fold into the plan (also while frozen: comments on the plan), 20 = implement requested,
-    3 = deadline reached. Writes only the heartbeat file (unless --no-heartbeat).
+    30 = deadline reached. Writes only the heartbeat file (unless --no-heartbeat) and a status line every
+    --report-every seconds, so whoever started it can see it is alive.
     """
+    started = last_report = time.time()
+    polls = 0
     while True:
         current = cycle.state(args.cycle_log)
+        polls += 1
         if args.heartbeat:
-            cycle.write_heartbeat()
+            cycle.write_heartbeat(extra={"pid": os.getpid(), "deadline": args.deadline, "state": current.state,
+                                         "cycle": current.cycle, "started": started})
+        if time.time() - last_report >= args.report_every:
+            last_report = time.time()
+            print(f"watching: {time.strftime('%Y-%m-%d %H:%M')}, cycle {current.cycle} {current.state}, "
+                  f"{len(cycle.needs_planning(store.threads(args.events), current))} thread(s) waiting to be "
+                  f"planned (reported after {args.settle:.0f} s of quiet), {polls} polls so far, deadline "
+                  f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(args.deadline))}", flush=True)
         if current.state == "implement-requested":
             print(f"implement requested by {current.by} at {current.since} (cycle {current.cycle})")
             return 20
@@ -77,9 +92,53 @@ def watch(args: argparse.Namespace) -> int:
                       f"cycle {current.cycle}")
                 return 10
         if time.time() >= args.deadline:
-            print("deadline reached")
-            return 3
+            print("deadline reached", flush=True)
+            return DEADLINE_EXIT
         time.sleep(args.interval if quiet_for < args.quiet_after else args.slow_interval)
+
+
+DEADLINE_EXIT = 30
+
+
+def parse_deadline(value: str, now: float | None = None) -> float:
+    """Epoch seconds from epoch seconds, a duration from now (90m, 12h, 3d, 1w) or an ISO date/time (local)."""
+    import datetime as dt
+    now = time.time() if now is None else now
+    value = value.strip()
+    duration = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([smhdw])", value)
+    if duration:
+        seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}[duration.group(2)]
+        return now + float(duration.group(1)) * seconds
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        return dt.datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"--deadline {value!r}: give epoch seconds, a duration (90m, 12h, 3d) or "
+                                         "an ISO date/time (2026-11-09T18:00)") from None
+
+
+def watch_status() -> int:
+    """Print what the last watcher wrote in its heartbeat; 0 if its process is alive and polled recently."""
+    info = cycle.read_heartbeat_info()
+    if not info:
+        print("no watcher has run here (no data/feedback/watch_heartbeat.json)")
+        return 1
+    age = time.time() - calendar.timegm(time.strptime(info["at"], "%Y-%m-%dT%H:%M:%SZ"))
+    alive = False
+    if info.get("pid"):
+        try:
+            os.kill(int(info["pid"]), 0)
+            alive = True
+        except (OSError, ValueError):
+            alive = False
+    deadline = info.get("deadline")
+    print(f"watcher pid {info.get('pid', '?')}: {'running' if alive else 'not running'}; last poll {age:.0f} s ago "
+          f"({info['at']}); cycle {info.get('cycle', '?')} {info.get('state', '?')}"
+          + (f"; deadline {time.strftime('%Y-%m-%d %H:%M', time.localtime(deadline))}" if deadline else ""))
+    return 0 if alive and age < 600 else 1
 
 
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
@@ -232,7 +291,10 @@ def main(argv: list[str] | None = None) -> int:
                               help="release: also tag an experiment version (repeatable)")
     cycle_parser.add_argument("--no-tag", action="store_true", help="release: record only, do not create git tags")
     watch_parser = sub.add_parser("watch")
-    watch_parser.add_argument("--deadline", type=float, required=True, help="epoch seconds")
+    watch_parser.add_argument("--deadline", type=parse_deadline, default=None,
+                              help="epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time")
+    watch_parser.add_argument("--status", action="store_true", help="report on the running watcher and exit")
+    watch_parser.add_argument("--report-every", type=float, default=3600, help="seconds between status lines")
     watch_parser.add_argument("--interval", type=float, default=5, help="poll interval while readers are active")
     watch_parser.add_argument("--slow-interval", type=float, default=60, help="poll interval after --quiet-after")
     watch_parser.add_argument("--quiet-after", type=float, default=3600, help="seconds without reader activity")
@@ -277,6 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(current.to_dict(), indent=1))
         return 0
     if args.command == "watch":
+        if args.status:
+            return watch_status()
+        if args.deadline is None:
+            parser.error("watch needs --deadline (epoch seconds, 90m, 12h, 3d or an ISO date/time) or --status")
         return watch(args)
 
     all_threads = store.fold(store.load_events(args.events))

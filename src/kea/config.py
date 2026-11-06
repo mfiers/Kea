@@ -7,6 +7,8 @@ settings; everything else (types, relations, statuses) is in ``doc/_schema.yaml`
 kea.yaml (all keys optional):
     title: Trajectories                     # site name in the menu bar
     heading: "Trajectories: …"              # heading of the site home
+    author: Mark Fiers                      # author(s) on the PDF's title page
+    repository: https://github.com/x/y      # optional; default: the git remote `origin`, as an https address
     port: 8210                              # kea serve
     host: 127.0.0.1
     site_dir: report/site                   # built site (never edited by hand)

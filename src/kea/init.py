@@ -43,11 +43,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=8210)
     parser.add_argument("--experiment", default="", help="folder name of a first experiment (e.g. donor-recall)")
     parser.add_argument("--question", default="What does this experiment ask?")
+    parser.add_argument("--author", default="", help="author(s) for the PDF's title page (ask the owner)")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     title = args.title or root.name
     done: list[str] = []
-    _write_new(root / "kea.yaml", f"title: {title}\nheading: {title}\nport: {args.port}\nhost: 127.0.0.1\n"
+    author_line = f"author: {args.author}\n" if args.author else "# author: Your Name   # title page of the PDF\n"
+    _write_new(root / "kea.yaml", f"title: {title}\nheading: {title}\n{author_line}port: {args.port}\nhost: 127.0.0.1\n"
                                   "site_dir: report/site\nfeedback_dir: data/feedback\n", done)
     _write_new(root / "doc" / "_schema.yaml", (TEMPLATES / "_schema.yaml").read_text(), done)
     for folder in ("_changes", "_cycles"):

@@ -58,8 +58,18 @@ def test_links_render_and_code_spans_are_left_alone(toy_doc):
     html_text = render_markdown("See [[q-a]] and `[[q-a]]` and [[q-a|this|why]].", context)
     assert "href='../proj/q-a.html'" in html_text and ">Q1</a>" in html_text
     assert "<code>[[q-a]]</code>" in html_text
-    assert ">this</a>" in html_text and "why" in html_text
+    assert "this <a class='tag t-question'" in html_text and "why" in html_text   # text plain, the tag links
     assert context.broken == []
+
+
+def test_link_rules_tagline_lists_and_heading_links(toy_doc):
+    tree = nodes.load_tree(toy_doc)
+    context = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: (None, target))
+    listed = render_markdown("- [[q-a]] a short line\n- [[q-a]]: " + "long " * 60 + "\n", context)
+    assert listed.count("class='tagline'") == 1                  # tag + one line: one link
+    assert "<span class='tl-text'>a short line</span></a>" in listed
+    heading = render_markdown("### [[q-a]]\n\ntext", context)
+    assert "<h3><a class='tag t-question'" in heading and "Q1</a> Q</h3>" in heading      # tag + the page's title
 
 
 def test_store_is_append_only_and_validates(tmp_path):

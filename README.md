@@ -28,6 +28,11 @@ comments, review cycles run by an agent, and semantic versions.
     3. *Implement*, or *Unfreeze*. On Implement, the agent implements, writes the change log, answers every
        thread with its commit and releases a semantic version (`kea cycle release`, git tags).
     4. A History page shows comments → plan items → commits → pages per version.
+- **Executive summaries** at three levels: the project (`doc/_summary.md`), each experiment (its home page's text
+  before the first `##` heading) and each question (front-matter `answer:`, two or three sentences). The experiment
+  page lists every question with its answer in short; a question page leads with its conclusions and results.
+- **Tags**: every page has a coloured tag with its type's icon and number (Q1, C2). The tag is always the link; in
+  lists of pages the whole line is the link.
 
 ## Small enough to change while you use it
 
@@ -54,8 +59,8 @@ into Kea, with a test, as a new tagged version.
 ## Use in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.3.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.3.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.4.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.4.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -70,12 +75,19 @@ targets and a section in `CLAUDE.md`. The agent's routine is in the skill (`skil
 `kea init | build [--strict] [--mode review|local|public] [--out DIR] | pdf [--out FILE] [--no-pdf on build] | serve [--install-service] | check | list [--unplanned] | show | reply | status | cycle
 status|plan-updated|start|release | watch | apply-suggestion`
 
+`kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when there are comments to plan, 20
+when a reader pressed Implement and 30 at the deadline; it prints a status line every hour (`--report-every`).
+`kea watch --status` says whether a watcher is running and when it last looked.
+
 ## PDF
 
-`kea pdf` (or `make pdf`) puts every page into one PDF, ordered for a reader on paper. Each experiment is a
-chapter:
+`kea pdf` (or `make pdf`) puts every page into one PDF, ordered for a reader on paper. The title page has the
+project's summary, its version (the version of the pages; the site and the PDF are two views of it), the author
+(`author:` in `kea.yaml`), the repository (`repository:`, or the git remote) and a link to Kea. With more than one
+experiment, page 2 summarises each experiment and each is a chapter; with one, the PDF reads as that experiment.
+Then:
 
-- *At a glance* (every conclusion's summary) and *Key terms*;
+- *At a glance* (every question with its answer in short and its conclusions) and *Key terms*;
 - background and premises;
 - methods (steps, each followed by its decisions);
 - one part per question: a table of its hypotheses, then the results with their figures;
@@ -92,7 +104,9 @@ contents of data files, so no donor-level rows reach the PDF. It needs
 overwritten. A figure page may set `pdf_width:` (`100%`, `12cm`) to override the automatic size.
 
 `kea build` also puts the PDF into the site, linked from the home page, when Typst is installed. It is recompiled
-only when the pages change (cache in `report/pdf/_cache/`); `--no-pdf` skips it.
+only when something in it changes: the cache key (`report/pdf/_cache/`) covers the whole Typst source, every image
+file's bytes, the Kea version and the Typst version, and the build prints why it reused or rebuilt the PDF.
+`--no-pdf` skips it.
 
 ## Third-party files (copied, pinned)
 

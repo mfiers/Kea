@@ -15,7 +15,8 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
    - Python project with `pyproject.toml` (uv): `uv add "kea @ git+https://github.com/mfiers/Kea.git@vX.Y.Z"`.
    - Any other project (R, plain folder): `uv tool install git+https://github.com/mfiers/Kea.git@vX.Y.Z` once on
      the machine; the Makefile then calls `kea` directly (`kea init` detects this).
-2. `kea init --title "<title>" --experiment <first-experiment> --question "<question>"` in the project root. It
+2. Ask the owner for the author name(s) for the PDF's title page unless you already know them, then run
+   `kea init --title "<title>" --author "<name>" --experiment <first-experiment> --question "<question>"` in the project root. It
    never overwrites files; read what it reports. It adds `kea.yaml`, `doc/_schema.yaml`, `.env` with a random
    password, Makefile targets and a section in CLAUDE.md.
 3. Tell the user the password is in `.env` (`SITE_PASSWORD`); never print it, never commit `.env`.
@@ -41,6 +42,17 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   panel take-home / Shows / Method / Statistics (`kea build` notes missing parts).
 - Terms (`aliases:`) are linked automatically from first use; reference pages carry the abstract fetched from
   Europe PMC / PubMed (never from memory) and why the paper is there.
+- **Executive summaries**, written for a biologist (or whoever the reader is) who has five minutes:
+  - the project: `doc/_summary.md` (with a single experiment, that experiment's summary serves);
+  - each experiment: the text of its home page before the first `##` heading: what was asked, what was found, how
+    sure. Below it the site lists every question with its answer; put Scope, data and other detail in later `##`
+    sections;
+  - each question: front-matter `answer:` (two or three plain sentences: the answer, how sure, the main limit).
+    The build notes answered questions without one.
+  Keep them current: update them in the same commit that changes a conclusion.
+- **Links**: write `[[c-x]]`; the tag (icon + C1) is the link. In a list of pages write `- [[r-x]] one line`: the
+  whole line becomes the link. `[[id|text]]` shows the text with the tag after it (only the tag links). A heading
+  `### [[q-x]]` shows the question's tag and title. Run entries may link other runs: `[[2026-11-05-a]]`.
 - Summary lines (`short:`) are written for the reader (e.g. biologists): one plain sentence with the finding and why
   it matters; no internal labels (P1, H5, W2) or test names; numbers only where they carry the message. The
   build notes summary lines with internal labels or more than ~45 words.
@@ -56,15 +68,18 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 `kea pdf` (`make pdf`): one PDF of every page, typeset with Typst, into `report/pdf/` under a new name each time
 (title, date, site version, commit).
 
-- **Order of each chapter:** at a glance (conclusions), key terms, background, premises, methods, then per
-  question a hypothesis table and the results with their figures, then conclusions and caveats.
+- **Title page:** project summary, version, author (`author:` in `kea.yaml`), repository, Kea link. With several
+  experiments page 2 summarises them; with one, the PDF reads as that experiment.
+- **Order of each chapter:** at a glance (each question with its answer and conclusions), key terms, background
+  (the home page after its summary), premises, methods, then per question its answer, a hypothesis table and the
+  results with their figures, then conclusions and caveats.
 - **Appendix:** hypotheses in full, data and figure files, the glossary, the references; then a standard
   "About this document".
 - **No data-file contents.**
 - **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
   to install Typst rather than working around it.
-- **`kea build` adds the PDF to the site** with a home page link. It is recompiled only when the pages change;
-  `--no-pdf` skips it.
+- **`kea build` adds the PDF to the site** with a home page link. It is recompiled only when its inputs change
+  (source, images, Kea, Typst; the build says why); `--no-pdf` skips it.
 
 The PDF is read on paper by people outside the review cycle. Keep review-process notes ("plan v0.4 #2", "Mark's
 comment", thread ids) out of page bodies and summaries, or confine them to one short closing section; keep
@@ -77,8 +92,9 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
 
 ## Review cycle
 
-1. **Watch:** `kea watch --deadline <epoch>` in the background (token-free; fast polling while readers are active;
-   reports a burst once it has settled). Exit 10: fold the new comments (and suggested edits, and direct edit
+1. **Watch:** `kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) in the background (token-free;
+   fast polling while readers are active; reports a burst once it has settled; a status line every hour; check it
+   with `kea watch --status`). Exit 30: deadline reached, start it again if the owner still wants it. Exit 10: fold the new comments (and suggested edits, and direct edit
    commits) into `doc/_cycles/cycle-NNN.md`, with one `### N. title` item per change, the threads it answers, the
    kind of change and the proposed version (front matter `version:`). Commit, then run `kea cycle plan-updated
    --commit <sha>`. Reply to each thread with its item (`kea reply <thread> "…" --status planned`), run

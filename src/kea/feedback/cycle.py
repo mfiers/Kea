@@ -160,11 +160,21 @@ def heartbeat_path() -> Path:
     return default_path().parent / "watch_heartbeat.json"
 
 
-def write_heartbeat(path: Path | None = None) -> None:
+def write_heartbeat(path: Path | None = None, extra: dict | None = None) -> None:
     path = path or heartbeat_path()
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"at": now_iso()}))
+    temporary.write_text(json.dumps({"at": now_iso(), **(extra or {})}))
     os.replace(temporary, path)
+
+
+def read_heartbeat_info(path: Path | None = None) -> dict:
+    """Everything the watcher wrote ({} when no watcher has run): at, pid, deadline, state, cycle, started."""
+    path = path or heartbeat_path()
+    try:
+        info = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return info if isinstance(info, dict) and info.get("at") else {}
 
 
 def read_heartbeat(path: Path | None = None) -> str:

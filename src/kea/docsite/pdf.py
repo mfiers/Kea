@@ -44,7 +44,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts
+from kea.docsite import artefacts, icons, questions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree
 from kea.docsite.render import LinkContext, render_markdown
 
@@ -324,10 +324,16 @@ class Converter:
         if tag == "a":
             inner = self.inlines(node.children)
             href = node.attrs.get("href", "")
+            classes = node.attrs.get("class", "").split()
             if href.startswith(SENTINEL):
                 key = self.urls.get(href[len(SENTINEL):].split("#")[0])
                 if not key:
                     return inner
+                if "tag" in classes:              # the tag is the link (site's link rules)
+                    kind = next((name[2:] for name in classes if name.startswith("t-")), "page")
+                    return f"#nlink({label(key)})[{tag_markup(kind, node.text_content().strip())}]"
+                if "tagline" in classes:          # tag and one line: the whole line is the link
+                    return f"#nlink({label(key)})[{inner}]"
                 return f"#tlink({label(key)})[{inner}]" if "term" in node.attrs.get("class", "").split() \
                     else f"#nlink({label(key)})[{inner}]"
             if href.startswith(("http://", "https://", "mailto:")):
@@ -335,8 +341,13 @@ class Converter:
             return inner
         if tag in BLOCK_TAGS:            # a block inside inline content (rare): keep its text
             return " " + self.blocks(node.children) + " "
-        if tag in ("script", "style", "button"):
+        if tag in ("script", "style", "button", "svg"):
             return ""
+        if tag == "span" and "tag" in node.attrs.get("class", "").split():
+            kind = next((name[2:] for name in node.attrs.get("class", "").split() if name.startswith("t-")), "page")
+            return tag_markup(kind, node.text_content().strip()) + " "
+        if tag == "span" and "tl-text" in node.attrs.get("class", "").split():
+            return f"#text(fill: ink)[{self.inlines(node.children)}]"
         return self.inlines(node.children)
 
 
@@ -385,6 +396,8 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
 }
 #let nlink(target, body) = { link(target, body); pageref(target) }
 #let tlink(target, body) = link(target, underline(stroke: (paint: luma(150), thickness: 0.5pt, dash: "dotted"), offset: 2pt, text(fill: ink, body)))
+#let tag(colour, icon, body) = box(fill: rgb(colour), inset: (x: 3.4pt, y: 1.2pt), outset: (y: 0.3pt), radius: 5pt,
+  text(font: sans, fill: white, size: 7.3pt, weight: "bold", { box(height: 0.95em, baseline: 0.12em, image(bytes(icon), format: "svg")); h(2pt); body }))
 #let badge(colour, body) = box(fill: rgb(colour), inset: (x: 4.5pt, y: 2.2pt), outset: (y: 0.5pt), radius: 2.5pt, text(font: sans, fill: white, size: 7.5pt, weight: "bold", body))
 #let pill(colour, body) = box(stroke: 0.6pt + rgb(colour), fill: rgb(colour).lighten(92%), inset: (x: 4.5pt, y: 1.8pt), outset: (y: 0.5pt), radius: 7pt, text(font: sans, size: 7.5pt, fill: rgb(colour).darken(10%), body))
 #let summary(colour, body) = block(fill: rgb(colour).lighten(91%), inset: (x: 9pt, y: 7pt), radius: 3pt, width: 100%, below: 0.9em, text(size: 9.6pt, body))
@@ -431,8 +444,19 @@ def status_pill(status: str | None) -> str:
     return f"#pill({string(STATUS_COLOURS.get(str(status), '#666677'))})[{text(str(status).replace('_', ' '))}]"
 
 
+def icon_bytes(kind: str) -> str:
+    """The type's icon as a Typst string holding an SVG, drawn in white."""
+    return string(icons.standalone(kind if kind in icons.PATHS else "page", "#ffffff"))
+
+
+def tag_markup(kind: str, label_text: str) -> str:
+    """A tag as on the site: the type's colour, its icon and the number (Q1, C2)."""
+    return f"#tag({string(TYPE_COLOURS.get(kind, '#555566'))}, {icon_bytes(kind)})[{text(label_text)}]"
+
+
 def type_badge(node: Node) -> str:
-    return (f"#badge({string(TYPE_COLOURS.get(node.type, '#555566'))})[{text(TYPE_LABELS.get(node.type, node.type))}"
+    return (f"#badge({string(TYPE_COLOURS.get(node.type, '#555566'))})[#box(height: 0.95em, baseline: 0.12em, "
+            f"image(bytes({icon_bytes(node.type)}), format: \"svg\")) #h(1pt){text(TYPE_LABELS.get(node.type, node.type))}"
             f"{' ' + text(node.number) if node.number else ''}]")
 
 
@@ -453,6 +477,7 @@ class PdfWriter:
         self.artefact_by_path = {str(node.header.get("path", "")).rstrip("/"): node
                                  for node in tree.nodes.values() if node.type == "artefact"}
         self.placed: set[str] = set()
+        self.single = len(tree.projects) == 1        # one experiment: read as a single-experiment document
 
     # ------------------------------------------------------------------ helpers
     def markdown(self, node: Node, source: str, level: int) -> str:
@@ -465,7 +490,31 @@ class PdfWriter:
         return (f"{prefix}{node.url}", f"{node.number} {target}") if node else (None, target)
 
     def link(self, node: Node) -> str:
-        return f"#nlink({label(node.key)})[{text(node.number or node.title)}]"
+        """The tag is the link (as on the site); pages without a number are linked by their title."""
+        if node.number:
+            return f"#nlink({label(node.key)})[{tag_markup(node.type, node.number)}]"
+        return f"#nlink({label(node.key)})[{text(node.title)}]"
+
+    def tagline(self, node: Node, words: str | None = None) -> str:
+        """Tag and one line as ONE link (lists of pages)."""
+        return (f"#nlink({label(node.key)})[{tag_markup(node.type, node.number) if node.number else ''} "
+                f"#text(fill: ink)[{text(node.title if words is None else words)}]]")
+
+    def answer_block(self, question: Node, with_question: bool) -> str:
+        """A question's executive summary: (the question,) its answer: text, its conclusions as tag + line."""
+        _, _, conclusions = questions.evidence(self.tree, question)
+        parts = []
+        if with_question:
+            parts.append(f"#block(sticky: true, above: 1.1em, below: 0.5em)[{self.link(question)} "
+                         f"{status_pill(question.status)} #h(3pt) #text(font: sans, weight: \"bold\", fill: ink)"
+                         f"[{text(question.title)}]]")
+        summary = questions.answer(question)
+        if summary:
+            parts.append(self.markdown(question, summary, 4))
+        if conclusions:
+            parts.append("#list(" + ", ".join(f"[{self.tagline(conclusion, conclusion.short)} "
+                                               f"{status_pill(conclusion.status)}]" for conclusion in conclusions) + ")")
+        return "\n\n".join(parts)
 
     def links(self, keys: list[str]) -> str:
         return ", ".join(self.link(self.tree.nodes[key]) for key in keys if key in self.tree.nodes)
@@ -577,15 +626,23 @@ class PdfWriter:
         return parts
 
     def at_a_glance(self, project: str, home: Node) -> list[str]:
-        parts = ["== At a glance", f"#summary(\"#333333\")[{text(home.short)}]"]
-        conclusions = self.of_type(project, "conclusion")
-        if conclusions:
-            parts.append("#intro[What the experiment concludes. Each conclusion lists its evidence and its limits on "
-                         "the page given.]")
-            for conclusion in conclusions:
-                parts.append(f"#card({string(TYPE_COLOURS['conclusion'])}, [{type_badge(conclusion)} "
-                             f"{status_pill(conclusion.status)} #h(4pt) #strong[{text(conclusion.title)}] "
-                             f"{'#h(1fr) ' + self.link(conclusion)}], [{text(conclusion.short)}])")
+        """The experiment's executive summary (unless it is already on the title page), then every question with
+        its answer in short and its conclusions; open caveats; key terms."""
+        parts = ["== At a glance"]
+        intro, _ = questions.split_intro(home.body)
+        if not self.single:
+            parts.append(f"#summary(\"#333333\")[{text(home.short)}]")
+            if intro:
+                parts.append(self.markdown(home, intro, 3))
+        question_list = questions.questions(self.tree, project)
+        if question_list:
+            parts.append("#intro[Each question with its answer in short and the conclusions that give it; the "
+                         "conclusions list their evidence and limits on the page given.]")
+            parts += [self.answer_block(question, True) for question in question_list]
+        else:
+            conclusions = self.of_type(project, "conclusion")
+            if conclusions:
+                parts.append("#list(" + ", ".join(f"[{self.tagline(item, item.short)}]" for item in conclusions) + ")")
         caveats = [caveat for caveat in self.of_type(project, "caveat") if caveat.status != "addressed"]
         if caveats:
             parts.append("#meta[Open caveats: " + ", ".join(f"{self.link(caveat)} {text(caveat.title)}"
@@ -607,11 +664,14 @@ class PdfWriter:
         own = versions.releases(project)
         pills = " ".join(part for part in ([f"#pill(\"#f0b429\")[{text(own[-1].label)}]"] if own else []) +
                          [status_pill(home.status)] if part)
-        parts = [f"#chapter({string(project)})[\n= {text(home.title)} {label(home.key)}\n]",
-                 pills.replace("#pill(", "#pill(") if pills else ""]
+        if self.single:      # one experiment: the document is that experiment; no chapter page of its own
+            parts = [f"#metadata(none) {label(home.key)}"]
+        else:
+            parts = [f"#chapter({string(project)})[\n= {text(home.title)} {label(home.key)}\n]", pills]
         parts += self.at_a_glance(project, home)
-        if home.body.strip():
-            parts += ["== Background", self.markdown(home, home.body, 3)]
+        _, rest = questions.split_intro(home.body)
+        if rest.strip():
+            parts += ["== Background", self.markdown(home, rest, 3)]
         premises = self.of_type(project, "premise")
         if premises:
             parts += ["== Starting points",
@@ -634,6 +694,7 @@ class PdfWriter:
         for question in self.of_type(project, "question"):
             parts.append(self.head(question, 2))
             self.placed.add(question.key)
+            parts.append(self.answer_block(question, False))
             parts.append(self.body(question, 2))
             own_hypotheses = [hypothesis for hypothesis in hypotheses if self.question_of(hypothesis) == question.key]
             if own_hypotheses:
@@ -713,7 +774,7 @@ class PdfWriter:
     def about(self, version: str, commit: str, today: str) -> str:
         used_types = [node_type for node_type in TYPE_MEANINGS
                       if any(node.type == node_type for node in self.tree.nodes.values())]
-        type_rows = ", ".join(f"[#badge({string(TYPE_COLOURS[node_type])})[{text(TYPE_LABELS[node_type])}]], "
+        type_rows = ", ".join(f"[{tag_markup(node_type, TYPE_LABELS[node_type])}], "
                               f"[{text(TYPE_MEANINGS[node_type])}]" for node_type in used_types)
         used_statuses = sorted({str(node.status) for node in self.tree.nodes.values() if node.status},
                                key=lambda status: (STATUS_COLOURS.get(status, "z"), status))
@@ -728,24 +789,27 @@ class PdfWriter:
 
 == What this document is
 
-This is a printed copy of the project's documentation site, made by Kea on {text(today)} from site version
-{text(version)} (commit #raw({string(commit)})). The site is the working record of the analysis: every claim sits on
-its own small page, linked to the evidence behind it. This document holds the same pages, ordered as a story. The
-site and this document are written from the same source files, so they say the same thing; when the site has moved
-on, the site is the newer one.
+The project is a set of small linked pages, one claim per page, each tied to the evidence behind it. Its version
+({text(version)}, commit #raw({string(commit)})) is the version of that set of pages: it changes when a claim, a
+result or a page changes. The website and this document are two views of the same version, written from the same
+source files on {text(today)}; the website also carries the comments and the review history. When the website shows a
+newer version, that one replaces this document.
 
 == How each chapter is ordered
 
-Each experiment is one chapter: #emph[At a glance] (the conclusions in one line each), #emph[Key terms],
+{'The document is one experiment.' if self.single else 'Each experiment is one chapter.'} #emph[At a glance]
+gives every question with its answer in short and the conclusions that give it; then #emph[Key terms],
 #emph[Background], #emph[Starting points] (premises), #emph[Methods] (steps and the decisions taken in them), then
-one part per #emph[question]: the question, a table of its hypotheses, and the results that answer it, each followed
-by its figures. #emph[Conclusions] and #emph[Caveats] close the chapter. The appendix holds the hypotheses in full,
-the data and figure files, the glossary and the references. To read quickly: At a glance, then the conclusions; to
-check a claim, follow its evidence.
+one part per #emph[question]: the question and its answer in short, a table of its hypotheses, and the results that
+answer it, each followed by its figures. #emph[Conclusions] and #emph[Caveats] close the
+{'document' if self.single else 'chapter'}. The appendix holds the hypotheses in full, the data and figure files, the
+glossary and the references. To read quickly: the summary on the title page and At a glance; to check a claim,
+follow its evidence.
 
 == Kinds of page
 
-Every page has a coloured badge that says what kind of page it is; the same colours mark the stripe beside its
+Every page has a kind, shown as a coloured tag with an icon and its number (for example
+{tag_markup("question", "Q1")} or {tag_markup("conclusion", "C2")}); the same colour marks the stripe beside its
 heading.
 
 #block[#set par(justify: false)
@@ -753,9 +817,10 @@ heading.
 
 == Numbers, links and page references
 
-Pages are numbered per experiment and kind ({text(numbering)}); the numbers are the same as on the site. A link
-such as #text(fill: accent)[R3]#text(size: 0.72em, fill: muted)[#h(1.5pt)p.12] leads to that page, and the small
-number gives the page of this document (left out when it is the same page). #tlink(<kea-about>)[Words with a dotted
+Pages are numbered per experiment and kind ({text(numbering)}); the numbers are the same as on the website. The tag
+is the link: {tag_markup("result", "R3")}#text(size: 0.72em, fill: muted)[#h(1.5pt)p.12] leads to that page, and
+the small number gives the page of this document (left out when it is the same page). In lists of pages the whole
+line, tag and text, is the link. #tlink(<kea-about>)[Words with a dotted
 underline] are glossary terms: the link leads to their definition.
 
 == Status
@@ -778,41 +843,72 @@ Numbers in the text come from those files; the appendix lists them.
 evidence, reviewed in cycles by readers and an AI agent.]
 """
 
-    def document(self) -> str:
+    def document(self, stamp: dict | None = None) -> str:
+        """The whole Typst source. `stamp` ({"version", "commit", "built"}) replaces the release, commit and date
+        (the site cache hashes a source made with a fixed stamp, so only real content changes count)."""
         from kea.docsite import comments, versions
+        self.placed = set()                      # document() may run twice (the site cache hashes a fixed-stamp copy)
         title = str(SETTINGS.get("title") or PROJECT_ROOT.name)
         heading = str(SETTINGS.get("heading") or "")
-        releases = versions.releases("")
-        version = releases[-1].label if releases else "unreleased"
-        commit = comments.source_version(None)
-        today = dt.date.today().isoformat()
+        if stamp is None:
+            releases = versions.releases("")
+            version = releases[-1].label if releases else "unreleased"
+            commit = comments.source_version(None)
+            today = dt.date.today().isoformat()
+        else:
+            version, commit, today = stamp["version"], stamp["commit"], stamp["built"]
         chapters = [self.chapter(project) for project in sorted(self.tree.projects)]
         self.content = "\n\n".join(chapters)            # what the site cache keys on (not the date or commit)
         self.stamp = {"version": version, "commit": commit, "built": today}
-        experiments = "".join(
-            f"#card(\"#333333\", [#box(fill: amber, inset: (x: 5pt, y: 2pt), radius: 3pt, text(font: sans, size: 8pt, "
-            f"weight: \"bold\", fill: ink)[{text(project)}]) #h(4pt) #strong[{text(home.title)}] #h(1fr) "
-            f"#link({label(home.key)})[page #context counter(page).at({label(home.key)}).first()]], [{text(home.short)}])\n"
-            for project, home in sorted(self.tree.projects.items()))
+        author = str(SETTINGS.get("author") or "").strip()
+        repository = repository_url()
+        logo = pdf_logo()
+        summary = questions.project_summary(self.tree)
+        summary_markup = ""
+        if summary:
+            home = next(iter(self.tree.projects.values()))
+            summary_markup = Converter(self.urls, heading_level=3).convert(render_markdown(summary, LinkContext(
+                self.tree, home.project, SENTINEL, lambda target, prefix: None, self.data_href)))
+        facts = [f"#box(fill: amber, inset: (x: 7pt, y: 3pt), radius: 3pt, text(font: sans, size: 9pt, weight: "
+                 f"\"bold\", fill: ink)[Version {text(version)}])",
+                 f"#text(font: sans, size: 9pt, fill: rgb(\"#c9d2e3\"))[commit {text(commit)} · {text(today)}]"]
+        links = []
+        if repository:
+            links.append(f"#link({string(repository)})[{text(repository.removeprefix('https://'))}]")
+        links.append(f"made with #link(\"{KEA_URL}\")[Kea]")
         front = f"""#page(margin: 0pt, header: none, footer: none)[
-#block(fill: ink, width: 100%, inset: (x: 2.2cm, top: 3.2cm, bottom: 1.4cm))[
+#block(fill: ink, width: 100%, inset: (x: 2.2cm, top: 2.6cm, bottom: 1.3cm))[
+  {f'#place(top + right, dy: -1.2cm, link("{KEA_URL}", box(fill: rgb("#f4f1e8"), radius: 6pt, inset: 3pt, image("{logo}", width: 1.5cm))))' if logo else ''}
   #text(font: sans, size: 30pt, weight: "bold", fill: white)[{text(title)}]
   {f'#v(4pt) #text(font: sans, size: 13pt, fill: rgb("#c9d2e3"))[{text(heading)}]' if heading and heading != title else ''}
+  {f'#v(8pt) #text(font: sans, size: 11pt, fill: white)[{text(author)}]' if author else ''}
   #v(10pt)
-  #box(fill: amber, inset: (x: 7pt, y: 3pt), radius: 3pt, text(font: sans, size: 9pt, weight: "bold", fill: ink)[Site version {text(version)}])
-  #h(6pt) #text(font: sans, size: 9pt, fill: rgb("#c9d2e3"))[commit {text(commit)} · {text(today)}]
+  {' #h(6pt) '.join(facts)}
+  #v(6pt)
+  #text(font: sans, size: 8.5pt, fill: rgb("#c9d2e3"))[#show link: set text(fill: rgb("#9cc3f0")); {' #h(4pt)·#h(4pt) '.join(links)}]
 ]
-#pad(x: 2.2cm, top: 1cm)[
-  #text(font: sans, size: 12pt, weight: "bold", fill: ink)[Experiments]
-  #v(4pt)
-  {experiments}
-  #v(10pt)
-  #text(size: 9.5pt)[The whole documentation of the project, ordered for reading: for each experiment its conclusions
-  first, then the methods, the questions with their results and figures, and the caveats. How to read it, and what
-  the colours, numbers and labels mean: #link(<kea-about>)[About this document], page
-  #context counter(page).at(<kea-about>).first().]
+#pad(x: 2.2cm, top: 0.9cm, bottom: 1.2cm)[
+  {'#text(font: sans, size: 12pt, weight: "bold", fill: ink)[Summary]' if summary_markup else ''}
+  #v(2pt)
+  #set text(size: 10.5pt)
+  {summary_markup}
+  #v(8pt)
+  #text(font: sans, size: 8pt, fill: muted)[What the colours, tags and numbers mean: #link(<kea-about>)[About this document],
+  page #context counter(page).at(<kea-about>).first().]
 ]]
-
+"""
+        if not self.single:
+            cards = []
+            for project, home in sorted(self.tree.projects.items()):
+                intro, _ = questions.split_intro(home.body)
+                body = self.markdown(home, intro, 4) if intro else text(home.short)
+                cards.append(f"#card(\"#333333\", [#box(fill: amber, inset: (x: 5pt, y: 2pt), radius: 3pt, "
+                             f"text(font: sans, size: 8pt, weight: \"bold\", fill: ink)[{text(project)}]) #h(4pt) "
+                             f"#strong[{text(home.title)}] #h(1fr) #link({label(home.key)})[page #context "
+                             f"counter(page).at({label(home.key)}).first()]], [{body}])")
+            front += ("#page(header: none, footer: none)[#text(font: sans, size: 19pt, weight: \"bold\", fill: ink)"
+                      "[Experiments]\n#v(6pt)\n" + "\n".join(cards) + "]\n")
+        front += """
 #set page(numbering: "1")
 #counter(page).update(1)
 #text(font: sans, size: 19pt, weight: "bold", fill: ink)[Contents]
@@ -826,29 +922,74 @@ evidence, reviewed in cycles by readers and an AI agent.]
 
 
 CACHE_KEEP = 6
+KEA_URL = "https://mfiers.github.io/Kea/"
+
+
+def repository_url() -> str:
+    """The project's repository for the title page: `repository:` in kea.yaml, else the git remote `origin` as an
+    https address ('' when there is none)."""
+    configured = str(SETTINGS.get("repository") or "").strip()
+    if configured:
+        return configured
+    try:
+        remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=PROJECT_ROOT, capture_output=True,
+                                text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    match = re.match(r"^(?:git@|ssh://git@)([^:/]+)[:/](.+?)(?:\.git)?$", remote)
+    if match:
+        return f"https://{match.group(1)}/{match.group(2)}"
+    return remote.removesuffix(".git") if remote.startswith("https://") else ""
+
+
+def pdf_logo() -> str:
+    """Copy the kea icon next to the PDFs (Typst reads files only inside the project) and return its path."""
+    from kea.config import PACKAGE_DIR
+    source = PACKAGE_DIR / "docsite" / "static" / "kea-icon-512.png"
+    target = PROJECT_ROOT / "report" / "pdf" / "_assets" / "kea-icon.png"
+    if not source.is_file():
+        return ""
+    if not target.is_file() or target.stat().st_size != source.stat().st_size:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    return "/" + str(target.relative_to(PROJECT_ROOT))
 
 
 def site_pdf(tree: Tree, site: Path) -> dict | None:
     """The PDF for a site build (`kea build`), or None when Typst is not installed or the compile fails.
 
-    The same PDF for every build mode: it prints no data-file contents. It is compiled only when its content
-    changed: compiled files are kept in report/pdf/_cache/<content hash>.pdf (the last CACHE_KEEP), so a reused PDF
-    carries the version and commit of the build that compiled it. Returns {"file", "version", "commit", "built",
-    "reused"}; the PDF is copied to <site>/<file>.
+    The same PDF for every build mode: it prints no data-file contents. It is compiled only when an input changed.
+    The cache key covers everything that reaches the PDF: the whole Typst source (made with a fixed stamp, so the
+    date and commit do not count), the bytes of every image it includes, the Kea version and the Typst version.
+    Compiled files are kept in report/pdf/_cache/<key>.pdf (the last CACHE_KEEP) with a manifest of the inputs; a
+    reused PDF carries the version and commit of the build that compiled it. The build prints why the PDF was
+    reused or rebuilt. Returns {"file", "version", "commit", "built", "reused", "reason"}; the PDF is copied to
+    <site>/<file>.
     """
     import hashlib
     import json
+    import kea
     command = typst_command()
     if command is None:
         return None
     writer = PdfWriter(tree)
-    source = writer.document()
-    digest = hashlib.sha256((writer.content + PREAMBLE + (writer.about("", "", ""))).encode()).hexdigest()[:16]
+    fixed = writer.document({"version": "-", "commit": "-", "built": "-"})
+    source = writer.document()                  # second, so writer.stamp holds the real version and commit
+    typst_version = subprocess.run([command, "--version"], capture_output=True, text=True).stdout.strip()
+    inputs = {"(typst source)": hashlib.sha256(fixed.encode()).hexdigest()[:16],
+              "(kea)": kea.__version__, "(typst)": typst_version}
+    for image in sorted(set(re.findall(r'image\("/([^"]+)"', fixed))):
+        path = PROJECT_ROOT / image
+        inputs[image] = hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.is_file() else "missing"
+    digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()[:16]
     cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
     cache.mkdir(parents=True, exist_ok=True)
     cached, meta_path = cache / f"{digest}.pdf", cache / f"{digest}.json"
     reused = cached.exists() and meta_path.exists()
-    if not reused:
+    if reused:
+        reason = f"reused: none of its {len(inputs) - 3} image(s), its source, Kea or Typst changed (key {digest})"
+    else:
+        reason = "rebuilt: " + changed_inputs(cache, inputs)
         typ_path = cache / f"{digest}.typ"
         typ_path.write_text(source, encoding="utf-8")
         result = subprocess.run([command, "compile", "--root", str(PROJECT_ROOT), str(typ_path), str(cached)],
@@ -857,15 +998,35 @@ def site_pdf(tree: Tree, site: Path) -> dict | None:
             print(f"note    PDF not built (typst failed; source {typ_path.relative_to(PROJECT_ROOT)}):\n"
                   f"{result.stderr.strip()[:2000]}", file=sys.stderr)
             return None
-        meta_path.write_text(json.dumps(writer.stamp))
+        meta_path.write_text(json.dumps({**writer.stamp, "inputs": inputs}))
         for old in sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime)[:-CACHE_KEEP]:
             for suffix in (".pdf", ".json", ".typ"):
                 old.with_suffix(suffix).unlink(missing_ok=True)
     meta = json.loads(meta_path.read_text())
+    meta.pop("inputs", None)
     title = re.sub(r"[^a-z0-9]+", "-", str(SETTINGS.get("title") or PROJECT_ROOT.name).lower()).strip("-")
     name = f"{title}-{meta['version']}.pdf"
     shutil.copy2(cached, site / name)
-    return {"file": name, **meta, "reused": reused}
+    print(f"pdf     {name} {reason}")
+    return {"file": name, **meta, "reused": reused, "reason": reason}
+
+
+def changed_inputs(cache: Path, inputs: dict[str, str]) -> str:
+    """What differs from the newest cached PDF's inputs, in a few words (for the build's log)."""
+    import json
+    manifests = sorted(cache.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    previous = {}
+    for manifest in manifests:
+        previous = json.loads(manifest.read_text()).get("inputs") or {}
+        if previous:
+            break
+    if not previous:
+        return "no earlier PDF in the cache"
+    changed = [name for name in inputs if previous.get(name) != inputs[name]]
+    removed = [name for name in previous if name not in inputs]
+    words = changed[:4] + [f"{name} (gone)" for name in removed[:2]]
+    more = len(changed) + len(removed) - len(words)
+    return "changed " + ", ".join(words) + (f" and {more} more" if more > 0 else "")
 
 
 def default_output() -> Path:

@@ -98,3 +98,9 @@ body.fb-frozen .fb-select,body.fb-frozen .fb-new,body.fb-frozen .fb-thread .fb-a
 .fb-thread-addressed{opacity:.72;background:#fafbfc}
 .fb-thread-resolved{opacity:.5;background:#fafbfc}
 details.fb-resolved>summary{cursor:pointer;color:#6b7280;font-size:13px;margin:8px 0}
+.fb-sec-edit{opacity:0;margin-left:10px;vertical-align:middle;display:inline-flex;align-items:center;gap:4px;border:1px solid #c5cad3;
+background:#fff;color:#1f5fa8;border-radius:5px;padding:1px 7px;font:600 12px system-ui,sans-serif;cursor:pointer;transition:opacity .15s}
+.fb-sec-edit .ico{width:13px;height:13px}
+article h2:hover .fb-sec-edit,.fb-sec-edit:focus{opacity:1}
+@media (hover:none){.fb-sec-edit{opacity:.8}}
+.fb-sec-edit:hover{background:#eef3fb}

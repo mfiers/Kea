@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 from kea.docsite.nodes import DOC, PROJECT_ROOT, Tree, split_front_matter
-from kea.docsite.render import esc, node_link
+from kea.docsite.render import esc, tagline
 from kea.feedback import store
 
 DIFF_LINE_LIMIT = 500
@@ -88,7 +88,7 @@ def file_link(path: str, tree: Tree, code_href, prefix: str) -> str:
     full = (PROJECT_ROOT / path).resolve()
     for node in tree.nodes.values():
         if node.source.resolve() == full:
-            return f"{node_link(node, prefix)} {esc(node.title)}"
+            return tagline(node, prefix)
     href = code_href(path, prefix)
     return f"<a href='{esc(href)}'><code>{esc(path)}</code></a>" if href else f"<code>{esc(path)}</code>"
 

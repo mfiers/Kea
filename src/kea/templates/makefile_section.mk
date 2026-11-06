@@ -12,7 +12,8 @@ pdf:
 # feedback: comments that need attention
 feedback:
 	uv run --locked kea list
-# watch-comments: wait until there is work in the review cycle (DEADLINE = epoch seconds)
+# watch-comments: wait until there is work in the review cycle (DEADLINE = 3d, 12h, an ISO date/time or epoch
+#   seconds); exit 10: comments to plan, 20: Implement pressed, 30: deadline reached. `kea watch --status` checks it
 watch-comments:
 	uv run --locked kea watch --deadline $(DEADLINE)
 # cycle-status: where the review cycle stands

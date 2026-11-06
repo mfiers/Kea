@@ -6,3 +6,6 @@
   (`<experiment>/relations.html`); copied so the site makes no outside requests.
 - `kea-icon-64.png`, `favicon.ico`: the kea icon (made by `packages/kea/branding/make_assets.py` from an image
   generated with google/gemini-3-pro-image on OpenRouter, 2026-11-05; prompts in `branding/candidates/record.json`).
+- `kea-icon-512.png`: the same icon at 512 px (from `branding/icon-512.png`), for the PDF's title page.
+- Page-type icons (`src/kea/docsite/icons.py`): inline SVG line drawings in the style of Feather Icons (MIT
+  licence, https://feathericons.com); several shapes follow Feather's.

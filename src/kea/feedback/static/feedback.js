@@ -178,13 +178,59 @@
     const match = text.match(/^---\n([\s\S]*?)\n---\n?/);
     return match ? [match[1], text.slice(match[0].length)] : ["", text];
   }
-  async function openEditor() {
+  // The nth "## " heading of the Markdown body (outside code fences) to the next "## " or "# " heading: the
+  // section that the nth <h2> inside the page's <article> elements shows.
+  function sectionRange(text, index) {
+    const lines = text.split("\n");
+    let first = 0;
+    if (lines[0] === "---") { const close = lines.indexOf("---", 1); if (close > 0) first = close + 1; }
+    let fence = false, count = -1, start = -1, end = lines.length;
+    for (let i = first; i < lines.length; i++) {
+      if (/^(```|~~~)/.test(lines[i])) fence = !fence;
+      if (fence) continue;
+      if (/^## /.test(lines[i])) {
+        count++;
+        if (count === index) start = i;
+        else if (start >= 0) { end = i; break; }
+      } else if (start >= 0 && /^# /.test(lines[i])) { end = i; break; }
+    }
+    if (start < 0) return null;
+    return [lines.slice(0, start).join("\n"), lines.slice(start, end).join("\n"), lines.slice(end).join("\n")];
+  }
+  const PENCIL = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/>'
+    + '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+  function addEditButtons() {
+    const tools = document.querySelector(".topbar .page-tools");
+    if (tools && !tools.querySelector(".fb-top-edit")) {
+      const button = el("button", { class: "fb-top-edit " + NOT, title: "Edit this page (saved as a suggestion)",
+        onclick: () => openEditor(null) });
+      button.innerHTML = PENCIL + "<span>Edit</span>";
+      tools.append(button);
+      if (window.keaFitTopbar) window.keaFitTopbar();
+    }
+    document.querySelectorAll("main article h2").forEach((heading, index) => {
+      if (heading.querySelector(".fb-sec-edit")) return;
+      const button = el("button", { class: "fb-sec-edit " + NOT, title: "Edit just this section (saved as a suggestion)",
+        onclick: event => { event.preventDefault(); openEditor({ index, title: heading.textContent.trim() }); } });
+      button.innerHTML = PENCIL + "<span>edit section</span>";
+      heading.append(button);
+    });
+  }
+  async function openEditor(section) {
     let source;
     try { source = await api("GET", "/api/source?page=" + encodeURIComponent(PAGE)); }
     catch (error) { alert(error.message); return; }
     await loadMarked().catch(() => null);
+    let before = "", after = "", original = source.text;
+    if (section) {
+      const parts = sectionRange(source.text, section.index);
+      if (!parts) { alert("This section could not be found in the page's Markdown; the whole page opens instead."); section = null; }
+      else { [before, original, after] = parts; }
+    }
+    const whole = value => section ? [before, value, after].filter((part, i) => i === 1 || part !== "").join("\n") : value;
     const area = el("textarea", { class: "fb-editor-text", spellcheck: "true" });
-    area.value = source.text;
+    area.value = original;
     const preview = el("div", { class: "fb-editor-preview" });
     const why = el("textarea", { rows: "2", placeholder: "Why this change? (optional)" });
     const status = el("span", { class: "fb-help" });
@@ -193,14 +239,15 @@
       const linked = body.replace(/\[\[([^\]|]+)(?:\|([^\]|]*))?(?:\|[^\]]*)?\]\]/g, (all, target, text) => `[${text || target}](#)`);
       preview.innerHTML = (front ? "<pre class='fb-front'>" + front.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]) + "</pre>" : "")
         + (window.marked ? window.marked.parse(linked) : "<pre>" + linked.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]) + "</pre>");
-      status.textContent = area.value === source.text ? "No changes yet." : "Changed (not saved).";
+      status.textContent = area.value === original ? "No changes yet." : "Changed (not saved).";
     }
     let timer = null;
     area.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(refresh, 250); });
     const overlay = el("div", { class: "fb-editor " + NOT },
       el("div", { class: "fb-editor-box" },
-        el("div", { class: "fb-editor-head" }, el("b", {}, "Suggest an edit"), " ",
-          el("code", {}, source.path), el("span", { class: "fb-help" }, " · version " + source.commit)),
+        el("div", { class: "fb-editor-head" }, el("b", {}, section ? "Suggest an edit of one section" : "Suggest an edit"), " ",
+          el("code", {}, source.path), section ? el("span", {}, " · section “" + section.title.replace(/edit section$/, "").trim() + "”") : null,
+          el("span", { class: "fb-help" }, " · version " + source.commit)),
         el("p", { class: "fb-help" }, "Your edit is saved as a comment with the changes shown as a diff; the page itself is "
           + "not changed. Claude takes it into the plan of the review cycle, merges it, checks every number against its "
           + "source file and commits it with you as co-author."),
@@ -208,14 +255,14 @@
         why,
         el("div", { class: "fb-actions" },
           el("button", { onclick: async () => {
-            if (area.value === source.text) { status.textContent = "Nothing changed."; return; }
+            if (area.value === original) { status.textContent = "Nothing changed."; return; }
             try {
-              await api("POST", "/api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: area.value });
+              await api("POST", "/api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: whole(area.value) });
               overlay.remove(); await reload(); openPanel();
             } catch (error) { status.textContent = error.message; }
           } }, "Save as suggestion"),
           el("button", { class: "fb-secondary", onclick: () => {
-            if (area.value !== source.text && !confirm("Discard your changes?")) return;
+            if (area.value !== original && !confirm("Discard your changes?")) return;
             overlay.remove();
           } }, "Cancel"), status)));
     document.body.append(overlay);
@@ -392,7 +439,7 @@
     panel.append(
       el("div", { class: "fb-head" }, el("b", {}, "Comments on this page"),
         el("a", { href: "/feedback.html", class: "fb-all" }, "all comments"),
-        el("button", { class: "fb-edit-btn fb-secondary", hidden: "hidden", onclick: openEditor,
+        el("button", { class: "fb-edit-btn fb-secondary", hidden: "hidden", onclick: () => openEditor(null),
           title: "Edit the Markdown of this page; saved as a suggestion" }, "Suggest an edit"),
         el("button", { class: "fb-close", title: "Close", onclick: closePanel }, "×")),
       el("div", { class: "fb-body" }, nameBox,
@@ -441,6 +488,7 @@
     } catch (error) { editable = false; }
     const editButton = panel.querySelector(".fb-edit-btn");
     if (editable && editButton) editButton.hidden = false;
+    if (editable) addEditButtons();
     const match = location.hash.match(/^#fb-(.+)$/);
     if (match) openPanel(match[1]);
   }

@@ -33,6 +33,7 @@ details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;backgrou
 details summary{cursor:pointer;font-weight:600}
 #skill-text{max-height:520px;overflow:auto;white-space:pre-wrap;font-size:12.5px}
 footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
+.tag{display:inline-flex;align-items:center;gap:4px;color:#fff;font:700 12px system-ui,sans-serif;border-radius:11px;padding:1px 8px 1px 6px;white-space:nowrap}.tag .ico{width:13px;height:13px}table.kinds td{padding:3px 8px;vertical-align:top;font-size:14px}
 </style>
 </head>
 <body>
@@ -63,7 +64,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
   <p>The skill tells Claude how to set up Kea in a project and how to run the review cycle. Install it once, and
     it is available in every project:</p>
   <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.3.0/skill/SKILL.md \
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.4.0/skill/SKILL.md \
      -o ~/.claude/skills/kea/SKILL.md</code></pre>
   <p>Then, in any project, ask Claude something like <i>"set up a kea site for this analysis"</i>. Claude
     installs the tool, runs <code>kea init</code>, writes the first pages and starts the comment server and the
@@ -76,15 +77,50 @@ curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.3.0/skill/SKILL.md \
 
   <h2>Install the tool</h2>
   <h3>A Python project (uv)</h3>
-  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.3.0"</code></pre>
+  <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.4.0"</code></pre>
   <h3>Any other project (R, a plain folder)</h3>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.3.0</code></pre>
+  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.4.0</code></pre>
   <h3>Start</h3>
   <pre><code>kea init --title "My analysis" --experiment first-experiment --question "What do we ask?"
 make site       # build the site from doc/
 make serve      # serve it with comments; the password is in .env</code></pre>
   <p class="note">Install a <b>tagged</b> version, so a project does not change when Kea does. The newest tags are
     on the <a href="https://github.com/mfiers/Kea/tags">tags page</a>.</p>
+
+  <h2 id="reading">Reading a Kea site</h2>
+  <p>A Kea site documents one analysis as small pages, one idea per page, linked by typed relations (supports,
+    opposes, answers, tests, limits). The project's home page has its summary; each experiment's page has its own
+    summary and every question with its answer in short; a question page leads with its conclusions and results;
+    the details sit one click further down.</p>
+  <table class="kinds">
+      <tr><td><span class='tag' style='background:#333333'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='12' r='5.5'/><circle cx='12' cy='12' r='1.6'/></svg>Goal</span></td><td>the experiment's home page: its summary and every question with its answer in short</td></tr>
+      <tr><td><span class='tag' style='background:#6a4c93'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M12 2 2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>Premise</span></td><td>what the analysis takes as given</td></tr>
+      <tr><td><span class='tag' style='background:#1f77b4'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/><path d='M12 17h.01'/></svg>Question</span></td><td>what is asked; leads with its answer in short, its conclusions and results</td></tr>
+      <tr><td><span class='tag' style='background:#9467bd'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z'/></svg>Hypothesis</span></td><td>what was expected, and whether it was written before its test</td></tr>
+      <tr><td><span class='tag' style='background:#2a7f62'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7 12h10'/><path d='M13 8l4 4-4 4'/></svg>Step</span></td><td>what was done (methods)</td></tr>
+      <tr><td><span class='tag' style='background:#7f7f7f'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='6' cy='19' r='2.5'/><circle cx='18' cy='6' r='2.5'/><path d='M6 3v13.5'/><path d='M18 8.5a9 9 0 0 1-9 9'/></svg>Decision</span></td><td>a choice made along the way, why, and the alternatives</td></tr>
+      <tr><td><span class='tag' style='background:#8c564b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M3 21h18'/><path d='M6 21v-7'/><path d='M11 21V7'/><path d='M16 21v-11'/><path d='M21 21V4'/></svg>Result</span></td><td>what a file shows; every number comes from a named file</td></tr>
+      <tr><td><span class='tag' style='background:#c0392b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7.5 12.5l3 3 6-7'/></svg>Conclusion</span></td><td>what the results mean, with the evidence for and against</td></tr>
+      <tr><td><span class='tag' style='background:#17818a'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.6'/><path d='M21 15l-5-5L5 21'/></svg>Figure</span></td><td>a figure with its full caption</td></tr>
+      <tr><td><span class='tag' style='background:#b8860b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/><path d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/></svg>Artefact</span></td><td>a data file, with checksum and download</td></tr>
+      <tr><td><span class='tag' style='background:#d35400'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg>Caveat</span></td><td>what limits a result or a conclusion</td></tr>
+      <tr><td><span class='tag' style='background:#556677'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>Term</span></td><td>a glossary entry; words with a dotted underline link to it</td></tr>
+      <tr><td><span class='tag' style='background:#556677'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/></svg>Reference</span></td><td>a paper, with its abstract and why it is cited</td></tr>
+  </table>
+  <ul>
+    <li><b>Tags are links.</b> Every page has a coloured tag with its type's icon and a number (Q1, R2, C3). The tag
+      is always the link to that page, and hovering it shows the page's one-line summary. In a list of pages the
+      whole line is the link; in running text only the tag is.</li>
+    <li><b>Status.</b> The pill next to a tag is the page's status: green settled or supported, amber exploratory
+      or open, red rejected. Hypotheses say whether they were written before their test or after the results.</li>
+    <li><b>The menu bar</b> shows where you are: <i>Kea</i> (home) / project / experiment / page. When space is
+      short, the menu folds first and the page title stays longest. The kea logo opens the site's help page.</li>
+    <li><b>Comments and edits.</b> Select text and press Comment. The Edit button in the menu bar opens the page's
+      Markdown; the pencil beside a section heading edits only that section. Edits are saved as suggestions and
+      folded into the next review cycle.</li>
+    <li><b>Versions.</b> The project's version belongs to its set of pages. The site and the PDF are two views of the
+      same version; the PDF carries it on its title page.</li>
+  </ul>
 
   <h2>The review cycle</h2>
   <ol class="cycle">
@@ -113,7 +149,8 @@ make serve      # serve it with comments; the password is in .env</code></pre>
   <p><code>kea pdf</code> puts every page into one PDF, typeset with <a href="https://typst.app">Typst</a> and ordered for
     a reader on paper. Each experiment opens with its conclusions; the methods follow, then each question with its
     hypotheses, results and figures, then the caveats. Cross-references carry page numbers, and a closing chapter
-    explains how to read it. <code>kea build</code> adds it to the site, linked from the home page, and recompiles it only when the pages
+    explains how to read it. The title page carries the project's summary, its version, the author and the
+    repository; with more than one experiment the next page summarises each. <code>kea build</code> adds it to the site, linked from the home page, and recompiles it only when the pages
     change. Typst is optional; without it Kea writes the source file and says how to install it.</p>
 
   <h2>About</h2>

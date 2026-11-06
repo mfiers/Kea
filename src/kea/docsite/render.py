@@ -12,7 +12,10 @@ import re
 import markdown
 
 from kea.config import SETTINGS
-from kea.docsite.nodes import LINK_PATTERN, TYPE_LABELS, Node, Tree
+from kea.docsite import icons
+from kea.docsite.nodes import DOC, LINK_PATTERN, TYPE_LABELS, Node, Tree
+
+RUN_ID = re.compile(r"\d{4}-\d{2}-\d{2}-[\w-]+")
 
 SITE_TITLE = SETTINGS["title"]     # the project (kea.yaml); its parts (doc/<folder>/) are experiments
 SKIP_AUTOLINK_TAGS = {"a", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "table", "script", "style"}
@@ -24,26 +27,31 @@ CSS = """
 body{margin:0;font:15.5px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);background:var(--bg)}
 main{max-width:980px;margin:0 auto;padding:12px 18px 60px}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:16px;flex-wrap:nowrap;
+.topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:14px;flex-wrap:nowrap;
 align-items:center;position:relative}
+.topbar a{color:#dfe6f2}
 .topbar .trail{display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden}
-.topbar .sep{color:#6f7a8e}.topbar .kea{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#fff}
-.topbar .kea img{background:#f4f1e8;border-radius:4px;padding:1px}.topbar .project{color:#fff;font-weight:600}
-.topbar .here{display:inline-flex;align-items:center;gap:6px;min-width:0}
-.topbar .here .badge{margin:0}.topbar .here-title{color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;max-width:34ch}
+.topbar .seg{display:inline-flex;align-items:center;gap:7px;min-width:0;flex:0 0 auto}
+.topbar .seg.here{flex:1 1 auto}
+.topbar .sep{color:#6f7a8e}.topbar .home{font-weight:800;color:#fff;letter-spacing:.02em;flex:0 0 auto}
+.topbar .project{color:#fff;font-weight:600}
+.topbar .experiment{background:#f0b429;color:#1d2330;font-weight:700;border-radius:4px;padding:1px 10px;
+overflow:hidden;text-overflow:ellipsis}
+.topbar .experiment:hover{text-decoration:none;background:#f7c948}
+.topbar .here .tag{margin:0;flex:0 0 auto}
+.topbar .here-title{display:block;color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}
 .topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
 cursor:pointer;flex:0 0 auto}
-.topbar .links{overflow:hidden}.topbar.folded .links{display:none}
+.topbar.folded .links{display:none}
 .topbar.folded.open .links{display:flex;flex-direction:column;gap:8px;position:absolute;right:12px;top:100%;
 background:#1d2330;padding:10px 16px;border-radius:0 0 8px 8px;z-index:2000;box-shadow:0 6px 18px rgba(0,0,0,.25)}
-.topbar a{color:#dfe6f2}.topbar .brand{font-weight:600;color:#fff}
-.topbar .experiment{background:#f0b429;color:#1d2330;font-weight:700;border-radius:4px;padding:1px 10px;flex:0 1 auto;
-min-width:0;overflow:hidden;text-overflow:ellipsis}
-.topbar .here-group{display:inline-flex;align-items:center;gap:7px;min-width:0}
-@media (max-width:560px){.topbar{padding:7px 12px;gap:10px}.topbar .kea-word,.topbar .here-group{display:none}}
-.topbar .experiment:hover{text-decoration:none;background:#f7c948}.topbar .kind{color:#9aa6ba;font-size:12px;margin-right:-10px}
-.topbar .spacer{margin-left:auto}.topbar .kea-mark img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
+.topbar .page-tools{display:flex;gap:8px;flex:0 0 auto}.topbar .page-tools:empty{display:none}
+.topbar .page-tools button{background:#2c3446;border:1px solid #4a5468;color:#fff;border-radius:5px;cursor:pointer;
+display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-serif;padding:2px 9px}
+.topbar .page-tools button:hover{background:#1f5fa8}.topbar .page-tools .ico{width:15px;height:15px}
+.topbar .kea-mark{flex:0 0 auto;display:flex}.topbar .kea-mark img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
+.topbar.no-mark .kea-mark,.topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
 h1{font-size:25px;line-height:1.25;margin:6px 0 8px}h2{font-size:19px;margin:28px 0 8px;border-bottom:1px solid var(--line);padding-bottom:3px}
 h3{font-size:16px;margin:20px 0 6px}
@@ -52,6 +60,16 @@ h3{font-size:16px;margin:20px 0 6px}
 .t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#7f7f7f}
 .t-figure{background:#17818a}.t-artefact{background:#b8860b}.t-caveat{background:#d35400}
 .t-term,.t-reference,.t-dataset,.t-page{background:#556}
+.badge .ico,.tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
+a.tag,span.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:11px;
+padding:1px 8px 1px 6px;line-height:1.45;vertical-align:baseline;white-space:nowrap;box-shadow:0 1px 0 rgba(0,0,0,.18);
+text-decoration:none}
+a.tag:hover{text-decoration:none;filter:brightness(1.12);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+a.tagline{color:var(--fg);display:inline}a.tagline:hover{text-decoration:none;background:#eef3fb}
+a.tagline .tag{margin-right:6px}a.tagline .tl-text{border-bottom:1px dotted #8a94a6}
+.qhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.qblock{margin:6px 0 18px}.qblock .answer{margin:4px 0 6px}.qblock ul{margin:4px 0}
+article h2{position:relative}
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
 .pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 8px;color:var(--muted);vertical-align:middle}
 .s-supported,.s-done,.s-answered,.s-current,.s-active{border-color:var(--ok);color:var(--ok)}
@@ -113,9 +131,10 @@ def node_href(node: Node, prefix: str) -> str:
 
 
 def type_badge(node: Node) -> str:
+    """The page-type badge at the head of a page: icon, type name and number (not a link)."""
     label = TYPE_LABELS.get(node.type, node.type)
     number = f" {node.number}" if node.number else ""
-    return f"<span class='badge t-{esc(node.type)}'>{esc(label)}{esc(number)}</span>"
+    return f"<span class='badge t-{esc(node.type)}'>{icons.svg(node.type)}{esc(label)}{esc(number)}</span>"
 
 
 def status_pill(node: Node) -> str:
@@ -124,43 +143,72 @@ def status_pill(node: Node) -> str:
     return f"<span class='pill s-{esc(node.status)}'>{esc(str(node.status).replace('_', ' '))}</span>"
 
 
+def hover_text(node: Node, note: str | None = None) -> str:
+    hover = f"{node.number + ' · ' if node.number else ''}{node.title} — {node.short}"
+    return hover + (f" | {note}" if note else "")
+
+
+def tag_inner(node: Node, from_project: str | None = None) -> str:
+    project_part = f"{node.project}: " if from_project and node.project != from_project else ""
+    return f"{icons.svg(node.type)}{esc(project_part + (node.number or node.title))}"
+
+
 def node_link(node: Node, prefix: str, text: str | None = None, note: str | None = None,
               from_project: str | None = None) -> str:
-    """A link to a node; the hover shows number, title and short (plus an optional note)."""
+    """A link to a node; the hover shows number, title and short (plus an optional note).
+
+    Link rules (the same everywhere): a numbered page is linked by its tag (a coloured button with the type's icon
+    and the number, Q1, C2). Text given with the link ([[id|text]]) stays plain text, followed by the tag; only
+    the tag is the link. Pages without a number (terms, references, the experiment home) are linked by their text.
+    """
+    if node.number:
+        anchor = (f"<a class='tag t-{esc(node.type)}' href='{esc(node_href(node, prefix))}' "
+                  f"title='{esc(hover_text(node, note))}'>{tag_inner(node, from_project)}</a>")
+        return f"{esc(text)} {anchor}" if text else anchor
     project_part = f"{node.project}: " if from_project and node.project != from_project else ""
-    label = text if text else f"{project_part}{node.number or node.title}"
-    hover = f"{node.number + ' · ' if node.number else ''}{node.title} — {node.short}"
-    if note:
-        hover += f" | {note}"
-    return f"<a class='ref' href='{esc(node_href(node, prefix))}' title='{esc(hover)}'>{esc(label)}</a>"
+    label = text if text else f"{project_part}{node.title}"
+    return f"<a class='ref' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node, note))}'>{esc(label)}</a>"
+
+
+def tagline(node: Node, prefix: str, text: str | None = None, from_project: str | None = None) -> str:
+    """Tag plus one line (the title by default) as ONE link: for lists of pages."""
+    words = node.title if text is None else text
+    if not node.number:
+        return node_link(node, prefix, words, from_project=from_project)
+    return (f"<a class='tagline' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node))}'>"
+            f"<span class='tag t-{esc(node.type)}'>{tag_inner(node, from_project)}</span>"
+            f"<span class='tl-text'>{esc(words)}</span></a>")
 
 
 def card(node: Node, prefix: str) -> str:
-    return (f"<div class='card'><div class='ct'>{type_badge(node)}{status_pill(node)} "
-            f"<a href='{esc(node_href(node, prefix))}'>{esc(node.title)}</a></div>"
+    return (f"<div class='card'><div class='ct'>{tagline(node, prefix)} {status_pill(node)}</div>"
             f"<div class='cs'>{esc(node.short)}</div></div>")
 
 
 def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, node: Node | None = None,
            here: str | None = None) -> str:
-    """Path on the left: Kea / project / experiment / [badge] page; navigation on the right, folded into a menu
-    button only when it does not fit (see TOPBAR_JS)."""
-    trail = [f"<a class='kea' href='{prefix}index.html' title='Kea: the documentation tool'>"
-             f"<img src='{prefix}_assets/kea-icon-64.png' alt='' width='20' height='20'><span class='kea-word'>Kea</span></a>",
-             f"<a class='project' href='{prefix}index.html'>{esc(SITE_TITLE)}</a>"]
+    """Menu bar. Left: "Kea" (home) / project / experiment / [tag] page title. Right: the menu, the page tools
+    (filled in by the comment script: edit) and the kea logo (help). When space runs out (TOPBAR_JS), in this
+    order: the menu folds into a menu button, the logo goes, the project name goes, the experiment goes, and
+    finally the page title is cut from the right; the page title is what stays longest."""
+    segments = [f"<a class='home' href='{prefix}index.html' title='Home of this site'>Kea</a>",
+                f"<span class='seg project'><span class='sep'>/</span><a class='project' href='{prefix}index.html'>"
+                f"{esc(SITE_TITLE)}</a></span>"]
     right = []
     if project and tree and project in tree.projects:
         home = tree.projects[project]
-        trail.append(f"<a class='experiment' href='{prefix}{project}/home.html' title='{esc(home.title)}'>"
-                     f"{esc(project)}</a>")
+        segments.append(f"<span class='seg experiment-seg'><span class='sep'>/</span><a class='experiment' "
+                        f"href='{prefix}{project}/home.html' title='{esc(home.title)}'>{esc(project)}</a></span>")
         right += [f"<a href='{prefix}{project}/map.html'>Map</a>",
                   f"<a href='{prefix}{project}/relations.html'>Relations</a>"]
         if node is not None and node.id != "home":
-            label = f"{node.number}" if node.number else TYPE_LABELS.get(node.type, node.type)
-            trail.append(f"<span class='here'><span class='badge t-{esc(node.type)}'>{esc(label)}</span>"
-                         f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
+            badge = (f"<span class='tag t-{esc(node.type)}'>{tag_inner(node)}</span>" if node.number else
+                     f"<span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}"
+                     f"{esc(TYPE_LABELS.get(node.type, node.type))}</span>")
+            segments.append(f"<span class='seg here'><span class='sep'>/</span>{badge}"
+                            f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
     if here:
-        trail.append(f"<span class='here'><span class='here-title'>{esc(here)}</span></span>")
+        segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
     from kea.docsite import mode
     if mode.MODE == "public":
         right += ([f"<a href='{prefix}changes/index.html'>What changed</a>"] if mode.WITH_CHANGELOG else []) + [
@@ -169,21 +217,30 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
                   f"<a href='{prefix}changes/index.html'>What changed</a>", f"<a href='{prefix}data.html'>Data</a>",
                   f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
-    joined = trail[0] + "".join(
-        (f"<span class='here-group'><span class='sep'>/</span>{item}</span>" if "class='here'" in item
-         else f"<span class='sep'>/</span>{item}") for item in trail[1:])
-    return (f"<nav class='topbar not-annotatable'><div class='trail'>{joined}</div>"
+    right.append(f"<a href='{prefix}help.html'>Help</a>")
+    return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
-            f"<div class='links'>{''.join(right)}</div></nav><script>{TOPBAR_JS}</script>")
+            f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>"
+            f"<a class='kea-mark' href='{prefix}help.html' title='Help: how to read this site, and about Kea'>"
+            f"<img src='{prefix}_assets/kea-icon-64.png' alt='Kea' width='22' height='22'></a>"
+            f"</nav><script>{TOPBAR_JS}</script>")
 
 
+# Fold in steps until the page title has room: 1 menu into the button, 2 logo, 3 project, 4 experiment; the title
+# is then cut with an ellipsis. A title counts as cramped when it is cut and narrower than ROOM pixels (so a very
+# long title on a wide screen does not fold everything); pages without a title fold when the trail overflows.
 TOPBAR_JS = """(function(){var nav=document.currentScript.previousElementSibling;var button=nav.querySelector('.menu-button');
-function fit(){nav.classList.remove('folded','open');button.hidden=true;var links=nav.querySelector('.links');
-var trail=nav.querySelector('.trail');
-if(links.scrollWidth>links.clientWidth+1||trail.scrollWidth>trail.clientWidth+1&&trail.clientWidth<260){
-nav.classList.add('folded');button.hidden=false;}}
+var STEPS=['folded','no-mark','no-project','no-experiment'];var ROOM=[520,380,380,380];
+function cramped(step){var trail=nav.querySelector('.trail');var title=nav.querySelector('.here-title');
+if(title){return title.scrollWidth>title.clientWidth+1&&title.clientWidth<ROOM[Math.min(step,3)];}
+return trail.scrollWidth>trail.clientWidth+1;}
+function fit(){nav.classList.remove('open');STEPS.forEach(function(name){nav.classList.remove(name);});button.hidden=true;
+var links=nav.querySelector('.links');var step=0;
+while(step<STEPS.length&&(cramped(step)||(step===0&&links.scrollWidth>links.clientWidth+1))){
+nav.classList.add(STEPS[step]);if(step===0){button.hidden=false;}step++;}}
 button.addEventListener('click',function(){nav.classList.toggle('open');});
-window.addEventListener('resize',fit);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();}})();"""
+window.addEventListener('resize',fit);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();}
+window.keaFitTopbar=fit;})();"""
 
 
 def crumbs(trail: list[tuple[str, str | None]], prefix: str) -> str:
@@ -227,6 +284,12 @@ class LinkContext:
             return (f"<a class='ref' href='{esc(href)}'><code>{esc(text or label)}</code></a>" if href
                     else f"<code>{esc(text or target[5:])}</code>")
         node = self.tree.resolve(target, self.project)
+        if node is None and RUN_ID.fullmatch(target) and (DOC / "_changes" / f"{target}.md").exists():
+            from kea.docsite import mode        # a run entry ([[2026-11-05-a]]): its change-log page
+            if mode.WITH_CHANGELOG:
+                return (f"<a class='ref' href='{esc(self.prefix)}changes/{esc(target)}.html' "
+                        f"title='{esc(note or 'run ' + target)}'>{esc(text or 'run ' + target)}</a>")
+            return f"<code>{esc(text or target)}</code>"
         if node is None:
             project = target.split(":", 1)[0] if ":" in target else self.project
             if project not in self.tree.projects:
@@ -308,10 +371,40 @@ def callouts(text: str) -> str:
     return "\n".join(output)
 
 
+HEADING_LINK = re.compile(r"^(#{2,6})[ \t]+\[\[([^\]|]+)\]\][ \t]*:?[ \t]*$", re.M)
+TAGLINE_ITEM = re.compile(r"<li><a class='tag (t-[\w-]+)' href='([^']*)' title='([^']*)'>(.*?)</a>"
+                          r"((?:(?!</?(?:a|ul|ol|li|p)\b)[^<]|<(?!/?(?:a|ul|ol|li|p)\b)[^>]*>)*)</li>")
+TAGLINE_MAX = 220      # characters of text after the tag: longer items are summaries, where only the tag links
+
+
+def heading_links(text: str, context: LinkContext) -> str:
+    """A heading that is only a link (``### [[q-x]]``) shows the tag and the page's title."""
+    def expand(match: re.Match) -> str:
+        node = context.tree.resolve(match.group(2).strip(), context.project)
+        if node is None:
+            return match.group(0)
+        return f"{match.group(1)} [[{match.group(2).strip()}]] {esc(node.title)}"
+    return HEADING_LINK.sub(expand, text)
+
+
+def tagline_items(html_text: str) -> str:
+    """List items made of a tag and one line ("- [[r-x]] what it shows") become one link, tag and text."""
+    def join(match: re.Match) -> str:
+        type_class, href, title, inner, rest = match.groups()
+        plain = re.sub(r"<[^>]+>", "", rest)
+        if not plain.strip() or len(plain) > TAGLINE_MAX:
+            return match.group(0)
+        rest = re.sub(r"^\s*(?:[:\u2014\u2013-]\s*)?", "", rest)
+        return (f"<li><a class='tagline' href='{href}' title='{title}'><span class='tag {type_class}'>{inner}</span>"
+                f"<span class='tl-text'>{rest}</span></a></li>")
+    return TAGLINE_ITEM.sub(join, html_text)
+
+
 def render_markdown(text: str, context: LinkContext) -> str:
     """Markdown to HTML with [[links]] resolved and the first use of each term linked to its page.
-    Links inside `code spans` are left alone."""
+    Links inside `code spans` are left alone. Link rules: see node_link and tagline_items."""
+    text = heading_links(text, context)
     pieces = re.split(r"(`[^`\n]*`)", text)
     linked = "".join(piece if piece.startswith("`") else LINK_PATTERN.sub(context.replace, piece) for piece in pieces)
-    return link_terms(markdown.markdown(callouts(linked), extensions=["tables", "fenced_code", "sane_lists",
-                                                                     "md_in_html"]), context)
+    html_text = markdown.markdown(callouts(linked), extensions=["tables", "fenced_code", "sane_lists", "md_in_html"])
+    return link_terms(tagline_items(html_text), context)

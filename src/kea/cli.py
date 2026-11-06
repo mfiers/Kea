@@ -1,6 +1,7 @@
 """The kea command: one entry point for building, serving and the review cycle.
 
-    kea init [--title T] [--port N]   set up doc/, kea.yaml, .env, Makefile targets and the CLAUDE.md section
+    kea init [--title T] [--author A] [--port N]
+                                      set up doc/, kea.yaml, .env, Makefile targets and the CLAUDE.md section
     kea build [--strict]              build the site (report/site/ by default)
     kea serve [--host H --port P]     serve it with comments (password in .env: SITE_PASSWORD)
     kea list | show | reply | status | cycle | watch | apply-suggestion …

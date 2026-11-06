@@ -97,7 +97,7 @@ def test_server_freezes_comments_and_reports_status(tmp_path):
 def test_watch_exit_codes(tmp_path, capsys):
     events, log = tmp_path / "events.jsonl", tmp_path / "cycle.jsonl"
     common = ["--events", str(events), "watch", "--interval", "0.05", "--no-heartbeat", "--cycle-log", str(log), "--settle", "0"]
-    assert cli.main(common + ["--deadline", str(time.time() - 1)]) == 3
+    assert cli.main(common + ["--deadline", str(time.time() - 1)]) == 30
     store.append_event({"type": "create", "page": "p:a", "text": "x", "author": "Mark"}, events)
     assert cli.main(common + ["--deadline", str(time.time() + 5)]) == 10
     cycle.append("frozen", "Mark", log)
@@ -109,7 +109,7 @@ def test_watch_waits_for_a_burst_to_settle(tmp_path):
     events, log = tmp_path / "events.jsonl", tmp_path / "cycle.jsonl"
     store.append_event({"type": "create", "page": "p:a", "text": "x", "author": "Mark"}, events)
     common = ["--events", str(events), "watch", "--interval", "0.05", "--no-heartbeat", "--cycle-log", str(log)]
-    assert cli.main(common + ["--settle", "60", "--deadline", str(time.time() + 0.5)]) == 3   # still typing
+    assert cli.main(common + ["--settle", "60", "--deadline", str(time.time() + 0.5)]) == 30   # still typing
     assert cli.main(common + ["--settle", "0", "--deadline", str(time.time() + 5)]) == 10
     cycle.append("frozen", "Mark", log)
     cycle.append("implement-requested", "Mark", log)
@@ -161,3 +161,24 @@ def test_suggested_edit_is_stored_as_thread_and_merges(tmp_path, monkeypatch):
     assert page_file.read_text().endswith("line one\nline 2\nkeep\nkeep\nkeep\nline 3\n")   # both changes kept
     cycle.append("frozen", "Mark", log)
     assert client.post("/api/suggest", json={"page": "x:r-a", "new_text": "other"}).status_code == 423
+
+
+def test_deadline_accepts_durations_and_dates():
+    assert cli.parse_deadline("3d", now=1000.0) == 1000.0 + 3 * 86400
+    assert cli.parse_deadline("90m", now=0.0) == 5400.0
+    assert cli.parse_deadline("1762000000") == 1762000000.0
+    assert abs(cli.parse_deadline("2026-11-09T18:00") - __import__("datetime").datetime(2026, 11, 9, 18).timestamp()) < 1
+    with __import__("pytest").raises(Exception):
+        cli.parse_deadline("soon")
+
+
+def test_watch_reports_and_status(tmp_path, capsys, monkeypatch):
+    events, log = tmp_path / "events.jsonl", tmp_path / "cycle.jsonl"
+    monkeypatch.setattr(cycle, "heartbeat_path", lambda: tmp_path / "heartbeat.json")
+    assert cli.main(["--events", str(events), "watch", "--status"]) == 1          # no watcher yet
+    assert cli.main(["--events", str(events), "watch", "--interval", "0.05", "--slow-interval", "0.05", "--report-every", "0", "--cycle-log",
+                     str(log), "--deadline", str(time.time() + 0.2)]) == 30
+    out = capsys.readouterr().out
+    assert "watching:" in out and "deadline reached" in out                      # a status line, then the end
+    info = cycle.read_heartbeat_info()
+    assert info["pid"] and info["deadline"] and info["state"] == "collecting"

@@ -13,10 +13,10 @@ import shutil
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts, changes, codepages, comments, history, mode, versions
+from kea.docsite import artefacts, changes, codepages, comments, history, mode, questions, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_PLURALS, Node, Tree
 from kea.docsite.render import (LinkContext, card, crumbs, esc, node_link, page, prefix_for, render_markdown,
-                            status_pill, type_badge)
+                            status_pill, tagline, type_badge)
 
 CHILD_ORDER = ["goal", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
                "artefact", "caveat", "term", "reference", "dataset", "page"]
@@ -161,7 +161,7 @@ class SiteRenderer:
                 self.tree.notes.append(f"{node.key}: caption lacks {', '.join(missing)} (caption standard)")
         if not full:
             return (f"<div class='thumb'><a href='{prefix}{node.url}'><img src='{prefix}figures/{esc(copy.name)}' "
-                    f"alt='{esc(node.title)}'></a><div>{node_link(node, prefix)} <b>{esc(node.title)}</b>"
+                    f"alt='{esc(node.title)}'></a><div><b>{tagline(node, prefix)}</b>"
                     f"<figcaption>{caption or esc(node.short)}</figcaption></div></div>")
         made = []
         if node.header.get("script"):
@@ -210,16 +210,14 @@ class SiteRenderer:
         from kea.docsite.nodes import FORWARD_LABELS
         rows = []
         for relation, keys in node.relations.items():
-            links = [node_link(self.tree.nodes[key], prefix, from_project=node.project) + " " +
-                     esc(self.tree.nodes[key].title) if key in self.tree.nodes else
+            links = [tagline(self.tree.nodes[key], prefix, from_project=node.project) if key in self.tree.nodes else
                      f"<span class='ref-missing' title='project has no pages yet'>{esc(key)}</span>" for key in keys]
             if links:
                 rows.append(f"<dt>{esc(FORWARD_LABELS.get(relation, relation))}</dt>" +
                             "".join(f"<dd>{link}</dd>" for link in links))
         for label, keys in sorted(node.incoming.items()):
             rows.append(f"<dt>{esc(label)}</dt>" + "".join(
-                f"<dd>{node_link(self.tree.nodes[key], prefix, from_project=node.project)} "
-                f"{esc(self.tree.nodes[key].title)}</dd>" for key in keys))
+                f"<dd>{tagline(self.tree.nodes[key], prefix, from_project=node.project)}</dd>" for key in keys))
         return (f"<section class='not-annotatable'><h2>Connections</h2><dl class='rel'>{''.join(rows)}</dl></section>"
                 if rows else "")
 
@@ -242,6 +240,40 @@ class SiteRenderer:
                              + "".join(card(child, prefix) for child in members) + "</div>")
         return f"<section class='not-annotatable'><h2>Below this page</h2>{''.join(parts)}</section>"
 
+    def answer_list(self, label: str, members: list[Node], prefix: str, project: str) -> str:
+        if not members:
+            return ""
+        return (f"<div class='help'>{esc(label)}</div><ul class='answer-list'>"
+                + "".join(f"<li>{tagline(member, prefix, member.short if member.type == 'conclusion' else member.title, project)} "
+                          f"{status_pill(member)}</li>" for member in members) + "</ul>")
+
+    def answer_html(self, question: Node, prefix: str, context: LinkContext) -> str:
+        """Top of a question page: its executive summary (answer:), then the conclusions and results."""
+        hypotheses, results, conclusions = questions.evidence(self.tree, question)
+        summary = questions.answer(question)
+        if not summary and conclusions:
+            self.tree.notes.append(f"{question.key}: no answer: summary (two or three sentences: the answer, how "
+                                   "sure, the main limit; shown on the question and experiment pages and in the PDF)")
+        body = (f"<div class='answer'>{render_markdown(summary, context)}</div>" if summary else "") \
+            + self.answer_list("Conclusions", conclusions, prefix, question.project) \
+            + self.answer_list("Results", results, prefix, question.project) \
+            + self.answer_list("Hypotheses", hypotheses, prefix, question.project)
+        return f"<section class='qblock not-annotatable'><h2>Answer in short</h2>{body}</section>" if body else ""
+
+    def questions_html(self, project: str, prefix: str, context: LinkContext) -> str:
+        """On an experiment page: each question as a heading with its executive summary and conclusions."""
+        blocks = []
+        for question in questions.questions(self.tree, project):
+            _, _, conclusions = questions.evidence(self.tree, question)
+            summary = questions.answer(question)
+            blocks.append(f"<div class='qblock'><h3 class='qhead'>{node_link(question, prefix)} {status_pill(question)}"
+                          f"<a href='{prefix}{question.url}'>{esc(question.title)}</a></h3>"
+                          + (f"<div class='answer'>{render_markdown(summary, context)}</div>" if summary else "")
+                          + (("<ul class='answer-list'>" + "".join(
+                              f"<li>{tagline(member, prefix, member.short, project)} {status_pill(member)}</li>"
+                              for member in conclusions) + "</ul>") if conclusions else "") + "</div>")
+        return (f"<section class='questions not-annotatable'><h2>Questions</h2>{''.join(blocks)}</section>" if blocks else "")
+
     def project_index_html(self, project: str, prefix: str) -> str:
         groups: dict[str, list[Node]] = {}
         for node in self.tree.nodes.values():
@@ -250,8 +282,8 @@ class SiteRenderer:
         parts = []
         for node_type in sorted(groups, key=lambda kind: CHILD_ORDER.index(kind) if kind in CHILD_ORDER else 99):
             members = sorted(groups[node_type], key=lambda item: (len(item.number), item.number, item.id))
-            rows = "".join(f"<tr><td>{node_link(member, prefix)}</td><td>{status_pill(member)}</td>"
-                           f"<td><a href='{prefix}{member.url}'>{esc(member.title)}</a></td></tr>" for member in members)
+            rows = "".join(f"<tr><td>{tagline(member, prefix)}</td><td>{status_pill(member)}</td></tr>"
+                           for member in members)
             parts.append(f"<h3>{TYPE_PLURALS.get(node_type, node_type)} ({len(members)})</h3><table>{rows}</table>")
         return (f"<section class='not-annotatable'><h2>All pages of this experiment</h2>"
                 f"<p class='help'>Also as a tree: <a href='{prefix}{project}/map.html'>map</a>; as a graph of "
@@ -288,7 +320,16 @@ class SiteRenderer:
             body_text = "\n".join(line for line in body_text.split("\n")
                                    if not (line.strip().startswith("![") and Path(str(node.header.get("image", ""))).name
                                            in line))
-        parts.append(f"<article>{render_markdown(body_text, context)}</article>")
+        if node.id == "home" and node.type == "goal":
+            intro, rest = questions.split_intro(body_text)
+            parts.append(f"<article>{render_markdown(intro, context)}</article>")
+            parts.append(self.questions_html(node.project, prefix, context))
+            parts.append(f"<article>{render_markdown(rest, context)}</article>" if rest.strip() else "")
+        elif node.type == "question":
+            parts.append(self.answer_html(node, prefix, context))
+            parts.append(f"<article>{render_markdown(body_text, context)}</article>")
+        else:
+            parts.append(f"<article>{render_markdown(body_text, context)}</article>")
         for figure_key in node.relations.get("shown_in", []):
             figure = self.tree.nodes.get(figure_key)
             if figure and figure.parent != node.id:
@@ -311,9 +352,8 @@ class SiteRenderer:
         def branch(node: Node) -> str:
             children = self.tree.children(node)
             info = self.stability.of(node.source)
-            line = (f"{type_badge(node)}{status_pill(node)} <span class='dot stab-{info.state}' "
-                    f"title='{esc(info.text)}'></span><a href='{prefix}{node.url}' title='{esc(node.short)}'>"
-                    f"{esc(node.title)}</a>")
+            line = (f"{tagline(node, prefix) if node.number else type_badge(node) + node_link(node, prefix)} "
+                    f"{status_pill(node)} <span class='dot stab-{info.state}' title='{esc(info.text)}'></span>")
             if not children:
                 return f"<li>{line}</li>"
             return (f"<li><details class='tree' open><summary>{line}</summary><ul class='tree'>"
@@ -484,29 +524,71 @@ class SiteRenderer:
             run = runs[0]
             latest = (f"<h2>Latest run</h2><div class='card'><div class='ct'><a href='changes/{run.id}.html'>"
                       f"{esc(run.title)}</a></div><div class='cs'>{esc(run.date)} · {len(run.commits)} commit(s)</div></div>")
+        summary = questions.project_summary(self.tree)
+        if not summary:
+            self.tree.notes.append("site: no executive summary for the project (doc/_summary.md; with one "
+                                   "experiment, the text of its home page before the first ## heading)")
+        context = self.context(next(iter(self.tree.projects), ""), "")
         body = (crumbs([], "") + f"<h1>{esc(SETTINGS['heading'])}</h1>"
-                "<div class='short'>Working documentation of the project. Each experiment is a tree of small pages: "
-                "the question, "
-                "what we take as given (premises), what we expected (hypotheses), what we did (steps), what came out "
-                "(results), what we conclude, and the files behind it (artefacts). Select any text to comment.</div>"
-                + self.pdf_line() +
-                "<h2>How to read this site</h2><ul>"
-                "<li>Start at an experiment's home page; the coloured badge says what kind of page you are on, the pill "
-                "its status (green settled, amber exploratory or open, red rejected). An experiment with comments "
-                "that are open or in the plan is marked <i>under review</i>.</li>"
-                "<li>Words with a dotted underline link to their glossary page; <b>caveat</b> pages (orange) say what "
-                "limits a result or conclusion.</li>"
-                "<li>Every link shows a one-line summary when you hover over it.</li>"
-                "<li><b>Hypothesis</b> pages say whether they were written <i>before</i> the results were seen.</li>"
-                "<li><b>Result</b> = what a file shows; <b>conclusion</b> = what we make of it, always with its evidence.</li>"
-                "<li>Every page ends with its version and its history; <a href='changes/index.html'>What changed</a> "
-                "lists each working session.</li></ul>"
-                f"<h2>Experiments</h2><div class='cards not-annotatable'>{cards}</div>{latest}"
+                + (f"<h2>Summary</h2><article>{render_markdown(summary, context)}</article>" if summary else
+                   "<div class='short'>Working documentation of the project: each experiment is a tree of small "
+                   "pages (questions, premises, hypotheses, steps, results, conclusions, caveats).</div>")
+                + self.pdf_line()
+                + "<p class='help not-annotatable'>New here? <a href='help.html'>How to read this site</a>.</p>"
+                + f"<h2>Experiments</h2><div class='cards not-annotatable'>{cards}</div>{latest}"
                 + ("<h2>About this site</h2><ul class='not-annotatable'>" + "".join(
                     f"<li><a href='{esc(href)}'>{esc(title)}</a> <span class='help'>{esc(short)}</span></li>"
                     for href, title, short in getattr(self, "site_listing", [])) + "</ul>"
                    if getattr(self, "site_listing", None) else ""))
+        self.broken += [f"doc/_summary.md: [[{target}]]" for target in context.broken]
         self.write("index.html", page(SETTINGS["title"], body, "", None, self.tree))
+
+    def help_page(self) -> None:
+        """help.html: how to read the site (the menu's Help and the kea logo), with a link to Kea's own pages."""
+        from kea.docsite import icons
+        from kea.docsite.nodes import TYPE_LABELS
+        meanings = {"goal": "the experiment's home page", "premise": "what we take as given",
+                    "question": "what we ask", "hypothesis": "what we expected, and when that was written down",
+                    "step": "what we did (methods)", "decision": "a choice made along the way, and why",
+                    "result": "what a file shows (every number from a named file)",
+                    "conclusion": "what we make of results, with the evidence for and against",
+                    "figure": "a figure with its full caption", "artefact": "a data file, with download",
+                    "caveat": "what limits a result or conclusion", "term": "a glossary entry",
+                    "reference": "a paper, with its abstract and why it is cited"}
+        rows = "".join(f"<tr><td><span class='tag t-{kind}'>{icons.svg(kind)}{esc(TYPE_LABELS.get(kind, kind))}</span>"
+                       f"</td><td>{esc(meaning)}</td></tr>" for kind, meaning in meanings.items())
+        body = (crumbs([("Help", None)], "") + "<h1>How to read this site</h1>"
+                "<div class='short'>The documentation of a data analysis as a tree of small pages, one idea per page, "
+                "linked by typed relations (supports, opposes, answers, tests, limits).</div>"
+                "<h2>Where to start</h2><ul>"
+                "<li>The home page has the project's summary; each experiment's page has its summary and every "
+                "question with its answer in short. A question page leads with its conclusions and results.</li>"
+                "<li>The menu bar shows where you are: <b>Kea</b> (home) / project / experiment / page. The kea logo "
+                "at the right opens this page.</li>"
+                "<li>Every page ends with its connections and with its version and history; "
+                "<a href='changes/index.html'>What changed</a> lists each working session.</li></ul>"
+                "<h2>Tags and colours</h2><p>Each page has a type, shown as a coloured tag with an icon and a number "
+                "(Q1, R2, C3). The tag is always the link to that page; hover it for the page's one-line summary. "
+                "In lists of pages the whole line is the link.</p>"
+                f"<table class='not-annotatable'>{rows}</table>"
+                "<p>The pill next to a tag is the page's status (green: settled or supported; amber: exploratory, "
+                "open or inconclusive; red: rejected). Hypotheses say whether they were <i>written before their "
+                "test</i> or <i>written after results</i>. Words with a dotted underline link to the glossary.</p>"
+                "<h2>Comments and edits</h2><ul>"
+                "<li>Select any text and press <b>Comment</b>; the panel at the bottom right lists the comments on "
+                "the page.</li>"
+                "<li>The <b>Edit</b> button in the menu bar opens the page's Markdown; the pencil next to a section "
+                "heading edits just that section. An edit is saved as a suggestion, shown as a diff; the agent "
+                "folds it into the plan of the review cycle.</li>"
+                "<li>Review cycles: comments are collected into a <a href='plan.html'>plan</a>; a reader freezes "
+                "it and presses Implement; the agent implements, answers every comment and releases a new version "
+                "(<a href='history.html'>History</a>).</li></ul>"
+                "<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
+                "commentable pages. More help, the page types in full and how to install it: "
+                "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
+        if mode.MODE != "review":       # no comments, editor, plans or history without the comment server
+            body = re.sub(r"<h2>Comments and edits</h2>.*?</ul>", "", body, flags=re.S)
+        self.write("help.html", page("Help", body, "", None, self.tree))
 
     def pdf_line(self) -> str:
         if not self.pdf:
@@ -647,6 +729,7 @@ class SiteRenderer:
             self.plan_pages()
         self.site_listing = self.site_pages()
         self.home_page(runs)
+        self.help_page()
         if mode.MODE != "public":
             self.feedback_page()
             self.history_page()
