@@ -161,3 +161,14 @@ def test_a_record_from_a_source_is_its_own_resource(toy_doc):
     assert tree.problems == [] and tree.nodes["proj:o-gwas"].incoming["Contains"] == ["proj:o-gcst"]
     source = pdf.PdfWriter(tree).document({"version": "-", "commit": "-", "built": "-"})
     assert "GCST90027158" in source and "[Part of]" in source and "[Paper]" in source and "[Contains]" in source
+
+
+def test_crossref_fallback_shapes_a_record(monkeypatch):
+    import io
+    import json
+    from kea.docsite import cite
+    work = {"message": {"author": [{"family": "Storey", "given": "John D."}], "title": ["A direct approach"],
+                        "short-container-title": ["J R Stat Soc B"], "volume": "64", "page": "479-498",
+                        "issued": {"date-parts": [[2002, 8]]}}}
+    monkeypatch.setattr(cite.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(json.dumps(work).encode()))
+    assert cite.nature(cite.fetch_crossref("10.1/x")) == "Storey, J. D. A direct approach. *J R Stat Soc B* **64**, 479–498 (2002)."

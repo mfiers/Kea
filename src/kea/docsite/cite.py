@@ -12,7 +12,10 @@ Up to five authors are named; more become "First, A. et al.". Preprints get the 
 Usage: kea cite [--write] [--all] [ID …]
     without --write: print what would be written; --write: insert ``citation:`` after the ``title:`` line of each
     page that has none (--all: replace existing ones too). IDs limit the run to those reference pages.
-Input: doc/**/reference/*.md (pmid:, doi:). Network: www.ebi.ac.uk (Europe PMC REST API).
+A DOI that Europe PMC does not index (statistics and computing journals, conference papers) is looked up in
+Crossref instead.
+
+Input: doc/**/reference/*.md (pmid:, doi:). Network: www.ebi.ac.uk (Europe PMC REST API), api.crossref.org.
 Output: the same files, one front-matter line added or replaced (nothing else in them changes).
 """
 from __future__ import annotations
@@ -21,6 +24,7 @@ import argparse
 import json
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -43,6 +47,28 @@ def fetch(pmid: str = "", doi: str = "") -> dict | None:
     with urllib.request.urlopen(url, timeout=30) as response:
         results = json.load(response).get("resultList", {}).get("result", [])
     return results[0] if results else None
+
+
+def fetch_crossref(doi: str) -> dict | None:
+    """A Crossref work as a record shaped like Europe PMC's (authors, title, journal, volume, pages, year)."""
+    request = urllib.request.Request(f"https://api.crossref.org/works/{urllib.parse.quote(doi)}",
+                                     headers={"User-Agent": "kea-cite (https://github.com/mfiers/Kea)"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            work = json.load(response).get("message", {})
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    authors = [{"lastName": person.get("family", ""), "initials": "".join(part[0] for part in
+                re.split(r"[\s.-]+", person.get("given", "")) if part)} if person.get("family") else
+               {"collectiveName": person.get("name", "")} for person in work.get("author", [])]
+    year = ((work.get("issued") or {}).get("date-parts") or [[None]])[0][0]
+    journal = (work.get("short-container-title") or work.get("container-title") or [""])[0]
+    return {"authorList": {"author": authors}, "title": (work.get("title") or [""])[0],
+            "journalInfo": {"journal": {"isoabbreviation": journal}, "volume": work.get("volume", ""),
+                            "yearOfPublication": year},
+            "pageInfo": work.get("page", "")}
 
 
 def author_name(author: dict) -> str:
@@ -114,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         pmid, doi = str(node.header.get("pmid") or "").strip(), str(node.header.get("doi") or "").strip()
         try:
             record = fetch(pmid, "") if pmid else None
-            record = record or fetch("", doi)
+            record = record or fetch("", doi) or (fetch_crossref(doi) if doi else None)
         except OSError as error:
             print(f"{node.key}: Europe PMC not reachable ({error})", file=sys.stderr)
             return 1

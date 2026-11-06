@@ -139,7 +139,7 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   file that is not on the server is a `kind: file` resource of its own, and the mismatch is a caveat.
 - Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
   the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
-  PMC); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.
+  PMC, or Crossref for DOIs Europe PMC does not index); the PDF numbers references B1, B2 … in order of first citation and lists them like a journal.
 - **Name pages by their link**, never as "conclusion 2" or "step 3": `[[c-x]]` shows the kind and tag
   (Conclusion C2) exactly as everywhere else; the build notes spelled-out names.
 - **Executive summaries**, written for a biologist (or whoever the reader is) who has five minutes:
