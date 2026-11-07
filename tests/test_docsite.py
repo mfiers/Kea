@@ -249,3 +249,23 @@ def test_term_with_link_every_is_linked_at_every_use(toy_doc):
     write_page(toy_doc, "proj/term/t-bad.md", "id: t-bad\ntype: term\ntitle: Bad\nshort: B.\nparent: home\n"
                "link: always")
     assert any("link: 'always'" in problem for problem in nodes.load_tree(toy_doc).problems)
+
+
+def test_inject_reaches_wide_pages(tmp_path):
+    """Pages rendered with <main class='wide'> (commit pages, history) get the comment layer too."""
+    site = tmp_path / "site"
+    (site / "commits").mkdir(parents=True)
+    page_path = site / "commits" / "abc.html"
+    page_path.write_text("<html><head><title>T</title></head><body><main class='wide'>diff</main></body></html>")
+    counts = comments.inject(site, {}, tmp_path / "events.jsonl")
+    assert counts["pages"] == 1 and "<script id='fb-script'" in page_path.read_text()
+
+
+def test_release_table_links_only_written_plans(tmp_path, monkeypatch):
+    from kea.docsite import pages
+    monkeypatch.setattr(nodes, "DOC", tmp_path)
+    (tmp_path / "_cycles").mkdir()
+    (tmp_path / "_cycles" / "cycle-002.md").write_text("---\ncycle: 2\n---\n")
+    assert pages.cycle_cell("2") == "<a href='../cycles/cycle-002.html'>cycle 2</a>"
+    assert pages.cycle_cell("5") == "cycle 5"                     # released without a written plan: no page
+    assert pages.cycle_cell("0") == ""

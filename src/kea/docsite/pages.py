@@ -557,7 +557,7 @@ class SiteRenderer:
             f"<tr><td><b>{esc(release.label)}</b></td><td>{esc(release.date.replace('T', ' ')[:16])}</td>"
             f"<td>{esc(release.kind)}</td><td>"
             + changes.run_link(release.run, prefix)
-            + f"</td><td>{('<a href=' + chr(39) + '../cycles/cycle-' + f'{int(release.cycle):03d}' + '.html' + chr(39) + '>cycle ' + esc(release.cycle) + '</a>') if release.cycle.isdigit() and int(release.cycle) > 0 and mode.MODE != 'public' else ''}</td>"
+            + f"</td><td>{cycle_cell(release.cycle)}</td>"
             f"<td><a href='../commits/{esc(release.short)}.html'><code>{esc(release.short)}</code></a></td>"
             f"<td>{esc(release.reason)}</td></tr>"
             for release in reversed(self.site_releases))
@@ -854,3 +854,14 @@ class SiteRenderer:
         key_to_href = {key: relative for relative, (key, _) in self.pages.items()}
         body = crumbs([("History", None)], "") + history.body(self.tree, "", key_to_href)
         self.write("history.html", page("History of review cycles", body, "", None, self.tree, wide=True))
+
+
+def cycle_cell(cycle: str) -> str:
+    """'cycle N' in the release table, linked to the plan page when doc/_cycles/cycle-NNN.md exists (a release can
+    come from a cycle without a written plan; its page is then not built)."""
+    from kea.docsite.nodes import DOC
+    if not (cycle.isdigit() and int(cycle) > 0) or mode.MODE == "public":
+        return ""
+    if not (DOC / "_cycles" / f"cycle-{int(cycle):03d}.md").is_file():
+        return f"cycle {esc(cycle)}"
+    return f"<a href='../cycles/cycle-{int(cycle):03d}.html'>cycle {esc(cycle)}</a>"

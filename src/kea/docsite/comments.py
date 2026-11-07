@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -152,7 +153,7 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
         if relative.startswith("_feedback/"):
             continue
         text = path.read_text(encoding="utf-8")
-        if "<main>" not in text or "<script id='fb-script'" in text:
+        if not re.search(r"<main[\s>]", text) or "<script id='fb-script'" in text:     # <main> or <main class=…>
             continue
         key, source = pages.get(relative, (relative, None))
         prefix = prefix_for(relative)

@@ -97,3 +97,13 @@ def test_placeholder_phrases_are_still_in_the_template():
     template = " ".join((PACKAGE_DIR / "templates" / "home.md").read_text().split())
     for phrase in nodes.TEMPLATE_PLACEHOLDERS:
         assert phrase in template
+
+
+def test_linkcheck_accepts_data_links(tmp_path):
+    """Review mode links data as files/<path> (served by kea serve or the hub); local mode links the project file."""
+    site = tmp_path / "site"
+    write(site / "index.html", "<a href='files/data/x.tsv'>x</a>")
+    write(site / "result" / "r.html", "<a href='../files/data/x.tsv'>x</a><a href='../../data/y.tsv'>y</a>"
+                                      "<a href='../../data/missing.tsv'>m</a>")
+    write(tmp_path / "data" / "y.tsv", "a\n")
+    assert linkcheck.broken_links(site) == ["result/r.html: link to ../../data/missing.tsv (no such file in the site)"]
