@@ -25,7 +25,7 @@ CSS = """
 --ok:#1b7f4b;--amber:#a86b00}
 *{box-sizing:border-box}
 body{margin:0;font:15.5px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);background:var(--bg)}
-main{max-width:980px;margin:0 auto;padding:12px 18px 60px}
+main{max-width:980px;margin:0 auto;padding:12px 18px 60px}main.wide{max-width:1440px}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:14px;flex-wrap:nowrap;
 align-items:center;position:relative}
@@ -40,7 +40,7 @@ overflow:hidden;text-overflow:ellipsis}
 .topbar .experiment:hover{text-decoration:none;background:#f7c948}
 .topbar .here .tag{margin:0;flex:0 0 auto}
 .topbar .here-title{display:block;color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}
+.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}
 .topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
 cursor:pointer;flex:0 0 auto}
 .topbar.folded .links{display:none}
@@ -122,7 +122,7 @@ padding-bottom:10px;border-bottom:1px solid var(--line)}
 .thumb img{width:100%;border:1px solid var(--line);border-radius:4px}.thumb figcaption{margin-top:4px}
 details.tree summary{cursor:pointer}details.tree{margin-left:14px}ul.tree{list-style:none;padding-left:14px;margin:2px 0}
 .diff .add{color:#116329;background:#e6ffec;display:block}.diff .del{color:#82071e;background:#ffebe9;display:block}
-.diff .hunk{color:#6e7781;display:block}
+.diff .hunk{color:#6e7781;display:block}.diff .ctx{display:block}
 .code-table td.linenos{color:#9aa1ad;text-align:right;user-select:none;padding-right:8px}
 .code-table pre{margin:0;background:none;padding:0}.code-wrap{overflow-x:auto;background:var(--soft);padding:8px;border-radius:6px}
 .code-table{border:0;display:table}.code-table td{border:0;padding:0 6px}
@@ -248,8 +248,6 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         home = tree.projects[project]
         segments.append(f"<span class='seg experiment-seg'><span class='sep'>/</span><a class='experiment' "
                         f"href='{prefix}{project}/home.html' title='{esc(home.title)}'>{esc(project)}</a></span>")
-        right += [f"<a href='{prefix}{project}/map.html'>Map</a>",
-                  f"<a href='{prefix}{project}/relations.html'>Relations</a>"]
         if node is not None and node.id != "home":
             badge = (f"<span class='tag t-{esc(node.type)}'>{tag_inner(node)}</span>" if node.number else
                      f"<span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}"
@@ -258,6 +256,14 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                             f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
     if here:
         segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
+    # Map and Relations always hold their place, so the menu does not shift between pages: they open the current
+    # experiment's, the only experiment's on a site with one, and are greyed out otherwise.
+    experiments = list(tree.projects) if tree else []
+    target = project if project and tree and project in tree.projects else (experiments[0] if len(experiments) == 1
+                                                                            else None)
+    for label, file in (("Map", "map.html"), ("Relations", "relations.html")):
+        right.append(f"<a href='{prefix}{target}/{file}'>{label}</a>" if target else
+                     f"<span class='off' title='Open an experiment first: each has its own {label.lower()}'>{label}</span>")
     from kea.docsite import mode
     if mode.MODE == "public":
         right += ([f"<a href='{prefix}changes/index.html'>What changed</a>"] if mode.WITH_CHANGELOG else []) + [
@@ -304,11 +310,13 @@ def crumbs(trail: list[tuple[str, str | None]], prefix: str) -> str:
 
 
 def page(title: str, body: str, prefix: str, project: str | None = None, tree: Tree | None = None,
-         node: Node | None = None, here: str | None = None) -> str:
+         node: Node | None = None, here: str | None = None, wide: bool = False) -> str:
+    """A whole HTML page. ``wide``: a wider column for tables and grids (history, commit diffs)."""
+    main = "<main class='wide'>" if wide else "<main>"
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{esc(title)}</title>"
             f"<link rel='icon' href='{prefix}_assets/favicon.ico'>"
-            f"<style>{CSS}</style></head><body>{topbar(prefix, project, tree, node, here)}<main>{body}</main></body></html>")
+            f"<style>{CSS}</style></head><body>{topbar(prefix, project, tree, node, here)}{main}{body}</main></body></html>")
 
 
 class LinkContext:

@@ -109,6 +109,18 @@ def bands(tree: Tree) -> list[Band]:
     return list(reversed(result))
 
 
+def release_meta(release: versions.Release, prefix: str) -> str:
+    """'released <date> · <kind> · run <run> · <reason>', leaving out the fields the tag does not carry."""
+    parts = [f"released {esc(release.date.replace('T', ' ')[:16])}" if release.date else "released"]
+    if release.kind:
+        parts.append(esc(release.kind))
+    if release.run:
+        parts.append(f"run {changes.run_link(release.run, prefix)}")
+    if release.reason:
+        parts.append(esc(release.reason))
+    return " · ".join(parts)
+
+
 def thread_href(thread: store.Thread, key_to_href: dict[str, str], prefix: str) -> str:
     """The thread opened in the comment panel of its page (#fb-<id>); the comments overview if the page is gone."""
     page = key_to_href.get(thread.page)
@@ -156,11 +168,15 @@ def body(tree: Tree, prefix: str, key_to_href: dict[str, str]) -> str:
             f"{esc(tree.nodes[key].number or '')} {esc(tree.nodes[key].title[:60])}</a> "
             f"<span class='help'>{esc(tree.nodes[key].project)}</span></li>" for key in changed)
         release = band.release
-        meta = (f"released {esc(release.date.replace('T', ' ')[:16])} · {esc(release.kind)} · run "
-                f"<a href='{prefix}changes/{esc(release.run)}.html'>{esc(release.run)}</a> · {esc(release.reason)}"
-                if release else "being collected or implemented now")
+        meta = release_meta(release, prefix) if release else "being collected or implemented now"
         plan_link = (f" · <a href='{plan_href}'>plan (cycle {band.cycle}"
                      f"{', no items yet' if band.release is None and not band.items else ''})</a>" if plan_href else "")
+        if not (band.threads or band.items or band.commits or changed):
+            empty = ("nothing collected yet: no comments, plan items or commits since the last release"
+                     if release is None else "no comments, plan items, commits or page changes recorded")
+            sections.append(f"<section class='band'><h2>{esc(band.label)}</h2><p class='help'>{meta}{plan_link}"
+                            f"</p><p class='help'>{empty}.</p></section>")
+            continue
         sections.append(
             f"<section class='band'><h2>{esc(band.label)}</h2><p class='help'>{meta}{plan_link}</p>"
             f"<div class='hgrid' data-links='{esc(json.dumps(links))}'>"

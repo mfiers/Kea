@@ -337,6 +337,10 @@ class SiteRenderer:
             rows = "".join(f"<tr><td>{tagline(member, prefix)}</td><td>{status_pill(member)}</td></tr>"
                            for member in members)
             parts.append(f"<h3>{TYPE_PLURALS.get(node_type, node_type)} ({len(members)})</h3><table>{rows}</table>")
+        if not parts:
+            return (f"<section class='not-annotatable'><h2>All pages of this experiment</h2><p class='help'>No pages "
+                    f"yet besides this one: add questions, premises, hypotheses and steps under "
+                    f"<code>doc/{esc(project)}/</code> (types in <code>doc/_schema.yaml</code>).</p></section>")
         return (f"<section class='not-annotatable'><h2>All pages of this experiment</h2>"
                 f"<p class='help'>Also as a tree: <a href='{prefix}{project}/map.html'>map</a>; as a graph of "
                 f"relations: <a href='{prefix}{project}/relations.html'>relations</a>.</p>{''.join(parts)}</section>")
@@ -531,7 +535,7 @@ class SiteRenderer:
             prefix = prefix_for(relative)
             body = crumbs([("What changed", f"{prefix}changes/index.html"), (f"commit {commit.short}", None)], prefix) \
                 + changes.commit_body(commit, self.tree, threads, self.code_href, prefix)
-            self.write(relative, page(f"Commit {commit.short}", body, prefix, None, self.tree))
+            self.write(relative, page(f"Commit {commit.short}", body, prefix, None, self.tree, wide=True))
         runs = changes.load_runs(commits)
         for run in runs:
             relative = f"changes/{run.id}.html"
@@ -552,7 +556,7 @@ class SiteRenderer:
         release_rows = "".join(
             f"<tr><td><b>{esc(release.label)}</b></td><td>{esc(release.date.replace('T', ' ')[:16])}</td>"
             f"<td>{esc(release.kind)}</td><td>"
-            + (f"<a href='{esc(release.run)}.html'>{esc(release.run)}</a>" if release.run else "")
+            + changes.run_link(release.run, prefix)
             + f"</td><td>{('<a href=' + chr(39) + '../cycles/cycle-' + f'{int(release.cycle):03d}' + '.html' + chr(39) + '>cycle ' + esc(release.cycle) + '</a>') if release.cycle.isdigit() and int(release.cycle) > 0 and mode.MODE != 'public' else ''}</td>"
             f"<td><a href='../commits/{esc(release.short)}.html'><code>{esc(release.short)}</code></a></td>"
             f"<td>{esc(release.reason)}</td></tr>"
@@ -560,7 +564,7 @@ class SiteRenderer:
         versions_html = ("<h2>Versions</h2><p class='help'>Semantic versions chosen at each release (MAJOR: a "
                          "conclusion changes direction or is withdrawn; MINOR: new results or pages; PATCH: wording "
                          "only; before 1.0 a major change counts as minor). Each is a git tag: <code>git checkout "
-                         "v0.2.0 &amp;&amp; make site</code> rebuilds it."
+                         f"{esc(versions.tag_name('0.2.0'))} &amp;&amp; make site</code> rebuilds it."
                          + ("" if mode.MODE == "public" else " See also the <a href='../history.html'>history of review "
                             "cycles</a>.") + "</p><table class='not-annotatable'><tr><th>version</th>"
                          "<th>released</th><th>kind</th><th>run</th><th>plan</th><th>commit</th><th>why</th></tr>"
@@ -707,8 +711,8 @@ class SiteRenderer:
                        if live else "")
             release = ""
             if header.get("run"):
-                release = (f"<div class='box not-annotatable'>Implemented in run <a href='{prefix}changes/"
-                           f"{esc(header['run'])}.html'>{esc(header['run'])}</a>.</div>")
+                release = (f"<div class='box not-annotatable'>Implemented in run "
+                           f"{changes.run_link(str(header['run']), prefix)}.</div>")
             shown = header.get("status", "open")
             if number == current.cycle and shown != "implemented":     # the live state, not the file's
                 shown = current.state
@@ -835,8 +839,10 @@ class SiteRenderer:
                 + (f"<h2>Resources</h2><table class='not-annotatable'><tr><th></th><th>what</th><th>kind</th>"
                    f"<th>RRID</th><th>version</th><th>retrieved</th><th>sha256</th></tr>{resource_rows}</table>"
                    if resource_rows else "")
-                + f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
-                f"<th>path</th><th>size</th><th></th></tr>{''.join(artefact_rows)}</table>"
+                + (f"<h2>Artefacts ({len(artefact_rows)})</h2><table class='not-annotatable'><tr><th></th><th>what</th>"
+                   f"<th>path</th><th>size</th><th></th></tr>{''.join(artefact_rows)}</table>" if artefact_rows else
+                   "<h2>Artefacts</h2><p class='help'>None yet: an artefact is a file the analysis made, with its own "
+                   "page (type <code>artefact</code>).</p>")
                 + (f"<h2>Other data files named as sources</h2><table class='not-annotatable'><tr><th>file</th>"
                    f"<th>size</th><th>sha256</th><th></th></tr>{other_rows}</table>"
                    if other_rows and mode.data_links() else "")
@@ -847,4 +853,4 @@ class SiteRenderer:
     def history_page(self) -> None:
         key_to_href = {key: relative for relative, (key, _) in self.pages.items()}
         body = crumbs([("History", None)], "") + history.body(self.tree, "", key_to_href)
-        self.write("history.html", page("History of review cycles", body, "", None, self.tree))
+        self.write("history.html", page("History of review cycles", body, "", None, self.tree, wide=True))

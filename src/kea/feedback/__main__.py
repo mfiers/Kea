@@ -46,7 +46,7 @@ from pathlib import Path
 import time
 
 from kea.config import PROJECT_ROOT
-from kea.feedback import agent, backend, cycle, store
+from kea.feedback import agent, backend, cycle, store, tags
 
 AUTHOR = "claude"
 PROJECT = PROJECT_ROOT
@@ -186,12 +186,14 @@ def check_release(args: argparse.Namespace) -> str:
 
 
 def tag_release(args: argparse.Namespace, cycle_number: int) -> None:
-    """Annotated tags vX.Y.Z (and <experiment>/vX.Y.Z) on the release commit; the message holds the metadata."""
+    """Annotated tags vX.Y.Z (and <experiment>/vX.Y.Z), after kea.yaml's tag_prefix, on the release commit; the
+    message holds the metadata."""
     import subprocess
+    from kea.docsite.versions import tag_name
     message = (f"Release v{args.version}\n\nRun: {args.run}\nCycle: {cycle_number}\nKind: {args.kind}\n"
                f"Reason: {args.reason}\n")
-    tags = [f"v{args.version}"] + [f"{name}/v{version}" for name, version in
-                                     (item.split("=", 1) for item in args.experiment)]
+    tags = [tag_name(args.version)] + [tag_name(version, name) for name, version in
+                                       (item.split("=", 1) for item in args.experiment)]
     for tag in tags:
         result = subprocess.run(["git", "tag", "-a", tag, args.commit, "-m", message], cwd=PROJECT, capture_output=True,
                                 text=True)
@@ -244,6 +246,10 @@ def describe(thread: store.Thread, sources: dict[str, str]) -> str:
         lines.append(f"   made by: {', '.join(made['code'])}")
     if made.get("inputs"):
         lines.append(f"   from: {', '.join(made['inputs'][:6])}")
+    for name in thread.tags:
+        info = tags.describe(name)
+        kind = "task" if info.get("task", True) else "mark (no work; for the manuscript)"
+        lines.append(f"   TAG {name} [{kind}]" + (f": {info['instruction']}" if info.get("instruction") else ""))
     if thread.quote:
         context = f"…{thread.prefix}⟦{thread.quote}⟧{thread.suffix}…".replace("\n", " ")
         lines.append("   on text: " + textwrap.shorten(context, 400, placeholder=" …"))
@@ -251,6 +257,8 @@ def describe(thread: store.Thread, sources: dict[str, str]) -> str:
         lines.append("   on: the whole page")
     for author, text, created in [(thread.author, thread.text, thread.created_at)] + \
             [(reply.author, reply.text, reply.created_at) for reply in thread.replies]:
+        if not text:
+            continue
         lines.append(f"   {author} ({created}):")
         lines += ["      " + line for line in text.splitlines() or [""]]
     if thread.suggestion:
@@ -335,6 +343,9 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("status", choices=store.STATUSES)
     status_parser.add_argument("--commit", default="")
     status_parser.add_argument("--note", default="")
+    tags_parser = sub.add_parser("tags", help="text and pages readers tagged (default: the manuscript marks)")
+    tags_parser.add_argument("names", nargs="*", help="only these tags (default: all tags of the manuscript group)")
+    tags_parser.add_argument("--json", action="store_true")
     lease_parser = sub.add_parser("lease", help="one agent per project: status, take or release the lease")
     lease_parser.add_argument("action", choices=["status", "take", "release"])
     lease_parser.add_argument("--force", action="store_true",
@@ -348,6 +359,33 @@ def main(argv: list[str] | None = None) -> int:
     except backend.RemoteError as error:
         print(error, file=sys.stderr)
         return 1
+
+
+def tags_command(args: argparse.Namespace, threads: list[store.Thread]) -> int:
+    """Tagged fragments per tag, in page order: the material a manuscript is assembled from."""
+    known = tags.vocabulary()
+    wanted = args.names or [tag["name"] for tag in known["tags"] if tag["group"] == "manuscript"]
+    chosen = [thread for thread in threads if thread.status not in ("resolved", "wont-fix")
+              and any(name in wanted for name in thread.tags)]
+    if args.json:
+        print(json.dumps([thread.to_dict() for thread in chosen], indent=1, ensure_ascii=False))
+        return 0
+    sources = page_sources()
+    for name in wanted:
+        members = sorted((thread for thread in chosen if name in thread.tags), key=lambda item: (item.page, item.start or 0))
+        if not members:
+            continue
+        print(f"## {name} ({len(members)})")
+        for thread in members:
+            source = source_of(thread.page, sources)
+            where = source + line_range(source, thread.quote) if source else thread.page
+            what = textwrap.shorten(thread.quote.replace("\n", " "), 300, placeholder=" …") if thread.quote else "(the whole page)"
+            print(f"- {thread.thread_id}  {where}  ({thread.page_title})\n    {what}"
+                  + (f"\n    note: {thread.text}" if thread.text else "")
+                  + (f"\n    also: {', '.join(other for other in thread.tags if other != name)}"
+                     if len(thread.tags) > 1 else ""))
+        print()
+    return 0
 
 
 def lease_command(args: argparse.Namespace) -> int:
@@ -377,7 +415,7 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.command == "lease":
         return lease_command(args)
     client = backend.get(args.events, getattr(args, "cycle_log", None))
-    if client.remote and args.command in ("list", "show", "cycle", "apply-suggestion", "reply", "status"):
+    if client.remote and args.command in ("list", "show", "cycle", "apply-suggestion", "reply", "status", "tags"):
         client.sync()
 
     if args.command == "cycle":
@@ -409,6 +447,8 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return watch(args)
 
     all_threads = store.fold(store.load_events(args.events))
+    if args.command == "tags":
+        return tags_command(args, list(all_threads.values()))
     if args.command == "list":
         chosen = [thread for thread in all_threads.values() if args.all or needs_attention(thread)]
         if args.unplanned:

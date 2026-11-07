@@ -45,7 +45,13 @@ class Commit:
 
 
 def all_commits() -> list[Commit]:
-    log = git("log", "--format=%h%x1f%H%x1f%ad%x1f%an%x1f%s%x1f%b%x1e", "--date=format:%Y-%m-%d %H:%M")
+    """Every commit, newest first; only those after kea.yaml's ``changes_since`` commit when it is set (for a
+    repository whose early history belongs to something else)."""
+    from kea.config import SETTINGS
+    since = str(SETTINGS.get("changes_since") or "")
+    revision_range = [f"{since}..HEAD"] if since else []
+    log = git("log", "--format=%h%x1f%H%x1f%ad%x1f%an%x1f%s%x1f%b%x1e", "--date=format:%Y-%m-%d %H:%M",
+              *revision_range)
     commits = []
     for record in log.split("\x1e"):
         fields = record.strip("\n").split("\x1f")
@@ -57,6 +63,13 @@ def all_commits() -> list[Commit]:
         commit.answers = re.findall(r"^Answers-comment:\s*(\S+)", commit.body, flags=re.M)
         commits.append(commit)
     return commits
+
+
+def run_link(run_id: str, prefix: str) -> str:
+    """A run id, linked to its 'What changed' page only when doc/_changes/<run>.md exists (else plain text)."""
+    if run_id and (DOC / "_changes" / f"{run_id}.md").exists():
+        return f"<a href='{prefix}changes/{esc(run_id)}.html'>{esc(run_id)}</a>"
+    return esc(run_id)
 
 
 def threads_answered(commit: Commit, threads: list[store.Thread]) -> list[store.Thread]:
@@ -77,10 +90,10 @@ def diff_html(diff: str) -> str:
         css = ("add" if line.startswith("+") and not line.startswith("+++") else
                "del" if line.startswith("-") and not line.startswith("---") else
                "hunk" if line.startswith(("@@", "diff --git", "+++", "---")) else "")
-        shown.append(f"<span class='{css}'>{esc(line) or ' '}</span>")
+        shown.append(f"<span class='{css or 'ctx'}'>{esc(line) or ' '}</span>")
     if len(lines) > DIFF_LINE_LIMIT:
         shown.append(f"<span class='hunk'>… {len(lines) - DIFF_LINE_LIMIT} more lines</span>")
-    return f"<pre class='diff'>{chr(10).join(shown)}</pre>"
+    return f"<pre class='diff'>{''.join(shown)}</pre>"      # every span is display:block (render.py CSS)
 
 
 def file_link(path: str, tree: Tree, code_href, prefix: str) -> str:
@@ -101,8 +114,7 @@ def commit_body(commit: Commit, tree: Tree, threads: list[store.Thread], code_hr
     answered_html = ("".join(f"<li><a href='{prefix}feedback.html#fbs-{esc(thread.thread_id)}'>{esc(thread.thread_id)}</a>"
                              f" on {esc(thread.page_title or thread.page)}: {esc(thread.text[:160])}</li>"
                              for thread in answered))
-    run_html = (f"<div><b>Run:</b> <a href='{prefix}changes/{esc(commit.run)}.html'>{esc(commit.run)}</a></div>"
-                if commit.run else "")
+    run_html = (f"<div><b>Run:</b> {run_link(commit.run, prefix)}</div>" if commit.run else "")
     from kea.config import SETTINGS
     from kea.docsite import mode
     excluded = [":(exclude)uv.lock"]

@@ -265,6 +265,10 @@ def _validate(tree: Tree) -> None:
             tree.notes.append(f"{where}: names pages as {', '.join(repr(item) for item in spelled[:3])}; link them "
                               "instead ([[c-x]] shows the tag, e.g. 'Conclusion C2'), so the kind and number match "
                               "the site")
+        placeholders = [phrase for phrase in TEMPLATE_PLACEHOLDERS if phrase in node.short or phrase in node.body]
+        if placeholders:
+            tree.notes.append(f"{where}: still has the template's placeholder text ({placeholders[0]!r}…): replace it "
+                              "before readers see the site")
         if len(node.short.split()) > 45:
             tree.notes.append(f"{where}: summary line has {len(node.short.split())} words (aim for at most ~40)")
         if node.type == "caveat" and not node.relations.get("limits"):
@@ -307,6 +311,10 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{project}/home: must be a goal")
 
 
+# Sentences of kea init's templates (templates/home.md): a page that still holds one has not been written yet.
+TEMPLATE_PLACEHOLDERS = ("One sentence on what this experiment asks and why",
+                         "Executive summary: what the experiment asks, what it found",
+                         "What is in and out, the data, and whether the experiment is exploratory")
 KIND_WITH_DIGIT = re.compile(r"\b(?:[Pp]remise|[Qq]uestion|[Hh]ypothesis|[Ss]tep|[Rr]esult|[Cc]onclusion|[Dd]ecision|"
                              r"[Cc]aveat)s? \d{1,2}\b(?! ?(?:%|cells|donors|days|genes|times))")
 

@@ -3,3 +3,12 @@ __pycache__/
 .venv/
 dist/
 .pytest_cache/
+report/site/
+report/pdf/
+.env
+data/feedback/server.log
+data/feedback/watch_heartbeat.json
+data/feedback/watch_heartbeat.tmp
+data/feedback/agent_lease.*
+data/feedback/*.before-sync-*
+data/feedback/dev/

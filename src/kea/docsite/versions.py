@@ -1,6 +1,8 @@
 """Release versions (semantic, from annotated git tags) and how settled each page is.
 
-A release is an annotated git tag: ``vX.Y.Z`` for the whole site, ``<experiment>/vX.Y.Z`` for one experiment.
+A release is an annotated git tag: ``vX.Y.Z`` for the whole site, ``<experiment>/vX.Y.Z`` for one experiment,
+each preceded by ``tag_prefix`` from kea.yaml when set (e.g. ``site/v1.0.0`` in a repository whose own ``vX.Y.Z``
+tags are software releases); tags without the prefix are then ignored.
 The tag message carries ``Run:``, ``Cycle:``, ``Kind:`` (major / minor / patch) and ``Reason:`` lines; the tag date
 is the release time. Tags are written by ``kea cycle release --version …`` (or by hand for releases
 made before 2026-11-05). Rules for the bump (doc/site_design.md "Versions"): MAJOR when a conclusion changes
@@ -22,10 +24,20 @@ from pathlib import Path
 
 import yaml
 
+from kea.config import SETTINGS
 from kea.docsite.nodes import PROJECT_ROOT, _quote_plain_values
 
 SEMVER = re.compile(r"^(?:(?P<experiment>[\w.-]+)/)?v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
 SETTLED_AFTER = 3        # releases without change before a page counts as settled
+
+
+def tag_prefix() -> str:
+    return str(SETTINGS.get("tag_prefix") or "")
+
+
+def tag_name(version: str, experiment: str = "") -> str:
+    """The git tag of a release: [prefix][experiment/]vX.Y.Z."""
+    return f"{tag_prefix()}{experiment + '/' if experiment else ''}v{version}"
 
 
 @dataclass
@@ -68,7 +80,10 @@ def releases(experiment: str | None = "") -> list[Release]:
         if len(fields) < 5:
             continue
         tag, objectname, target, date, message = fields
-        match = SEMVER.match(tag)
+        prefix = tag_prefix()
+        if prefix and not tag.startswith(prefix):
+            continue
+        match = SEMVER.match(tag[len(prefix):])
         if not match:
             continue
         release = Release(tag=tag, version=f"{match['major']}.{match['minor']}.{match['patch']}",

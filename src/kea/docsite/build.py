@@ -69,13 +69,16 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
                                                   "previews_marked": True,      # kea publish relies on this
                                                   "built_at": dt.datetime.now().isoformat(timespec="seconds")}))
+    from kea.docsite import linkcheck
+    broken_in_site = linkcheck.broken_links(site)     # links the builder wrote to pages it never wrote
     summary = {"pages": len(renderer.pages), "injected": counts["pages"], "with_history": counts["with_history"],
-               "downloads": len(renderer.downloads), "problems": len(tree.problems) + len(renderer.broken),
+               "downloads": len(renderer.downloads),
+               "problems": len(tree.problems) + len(renderer.broken) + len(broken_in_site),
                "notes": len(tree.notes),
                "pdf": (renderer.pdf or {}).get("file", "none (typst not installed)" if with_pdf else "skipped")
                + ((" (kept from the last build)" if not with_pdf else " (reused)")
                   if (renderer.pdf or {}).get("reused") else "")}
-    return summary, tree.problems + renderer.broken
+    return summary, tree.problems + renderer.broken + broken_in_site
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,16 @@
+title: Kea development
+heading: Kea development
+author: Mark Fiers
+port: 8210
+host: 127.0.0.1
+site_dir: report/site
+feedback_dir: data/feedback
+remote:
+  url: https://kea.fie.rs
+  project: kea
+# Kea's own repository: its vX.Y.Z tags are software releases, so the site's releases are tagged site/vX.Y.Z,
+# and its history before the rewrite (68791ab, 2026-11-05) belongs to the old Kea.
+tag_prefix: site/
+changes_since: 4dcfa84         # parent of 68791ab, the first commit of the current Kea
+code_paths: [src/, tests/, skill/]
+code_files: [README.md, Makefile, pyproject.toml, kea.yaml]
