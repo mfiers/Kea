@@ -16,8 +16,10 @@ are HTTP 423.
 
 API (JSON):
     GET  /api/threads?page=<path>   threads of one page (all pages without ?page=)
-    POST /api/threads               {page, page_title, page_commit, quote, prefix, suffix, start, end, text}
+    POST /api/threads               {page, page_title, page_commit, quote, prefix, suffix, start, end, text, tags}
+                                    (text optional with tags; tags checked against the site's _feedback/tags.json)
     POST /api/threads/<id>/reply    {text}
+    POST /api/threads/<id>/tags     {tags}: replace the thread's tags (marks may change while frozen)
     POST /api/threads/<id>/status   {status, note}   (readers may set resolved or open)
     GET  /api/status                cycle state, site build id, comment counts (polled by every page)
     GET  /api/source?page=<key>     the Markdown source of a documentation page (for the editor)
@@ -66,7 +68,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from kea.config import PROJECT_ROOT, SETTINGS, SITE_DIR
-from kea.feedback import cycle, states, store
+from kea.feedback import cycle, states, store, tags
 
 PROJECT = PROJECT_ROOT
 AUTH_COOKIE = "fb_auth"
@@ -358,7 +360,16 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                 item["state"], item["state_label"] = states.state_of(thread, info)
                 items.append(item)
         items.sort(key=lambda item: states.sort_key(item, info))
-        return JSONResponse({"threads": items, "you": reader_name(request)})
+        return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir)})
+
+    def tag_fields(body: dict) -> dict:
+        """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
+        try:
+            known = tags.site_vocabulary(site_dir)
+            names = tags.check(body.get("tags"), known)
+        except tags.TagError as error:
+            raise store.FeedbackError(str(error)) from error
+        return {"tags": names, "mark": tags.is_mark(names, known)}
 
     async def append(request: Request, event: dict, path: Path) -> dict:
         """store.append_event off the event loop (a slow fsync must not block other readers), with the
@@ -390,11 +401,13 @@ def make_site_app(spec: SiteSpec) -> Starlette:
     async def create_thread(request: Request) -> Response:
         try:
             body = await _body(request)
-            if (blocked := frozen_response(str(body.get("page") or ""))) is not None:
+            fields = tag_fields(body)
+            # marks (manuscript tags) ask for no work, so they are taken also while the cycle is frozen
+            if not fields["mark"] and (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked
             event = await append(request, {**{key: body.get(key) for key in (
                 "page", "page_title", "page_commit", "quote", "prefix", "suffix", "start", "end", "text")},
-                "type": "create", "author": _author(request)}, events_path)
+                **fields, "type": "create", "author": _author(request)}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
         return await thread_json(event["thread_id"])
@@ -407,6 +420,22 @@ def make_site_app(spec: SiteSpec) -> Starlette:
             body = await _body(request)
             await append(request, {"type": "reply", "thread_id": thread_id, "text": body.get("text"),
                                 "author": _author(request)}, events_path)
+        except store.FeedbackError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
+        return await thread_json(thread_id)
+
+    async def set_tags(request: Request) -> Response:
+        thread_id = request.path_params["thread_id"]
+        try:
+            body = await _body(request)
+            fields = tag_fields(body)
+            thread = store.fold(store.load_events(events_path)).get(thread_id)
+            only_marks = fields["mark"] or not fields["tags"]
+            if not (only_marks and thread is not None and thread.status == "marked") and \
+                    (blocked := frozen_response(page_of_thread(thread_id))) is not None:
+                return blocked
+            await append(request, {"type": "tags", "thread_id": thread_id, **fields,
+                                   "author": _author(request)}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
         return await thread_json(thread_id)
@@ -449,6 +478,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         Route("/api/threads", create_thread, methods=["POST"]),
         Route("/api/threads/{thread_id}/reply", reply, methods=["POST"]),
         Route("/api/threads/{thread_id}/status", set_status, methods=["POST"]),
+        Route("/api/threads/{thread_id}/tags", set_tags, methods=["POST"]),
         Mount("/", StaticFiles(directory=site_dir, html=True, check_dir=False)),
     ]
     return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token)])

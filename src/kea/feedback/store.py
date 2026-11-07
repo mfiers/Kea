@@ -8,6 +8,11 @@ Event types:
     create  a new thread: page, optional quote with context and character offsets, text, author
     reply   a reply in an existing thread
     status  a status change: open, answered, page-changed (with the commit), wont-fix, resolved
+    tags    the thread's tags replaced by a new list (tags.py); ``mark`` says whether they are all mark tags
+
+A create event may carry ``tags`` (then the text is optional) and ``mark``. A thread whose tags are all mark tags
+(``mark: true``, decided by the server from the site's tag list) has the status ``marked``: a label for later use
+(the manuscript), not a request; it turns ``open`` when a task tag is added, and back when the task tags go.
 
 Input: nothing (the file is created on the first write).
 Output: the event file; `threads()` returns `Thread` objects for the site, the server and the CLI.
@@ -26,9 +31,10 @@ from pathlib import Path
 from typing import Any
 
 from kea.config import FEEDBACK_DIR
+from kea.feedback.tags import TagError, clean as clean_tags
 
-STATUSES = ("open", "planned", "answered", "page-changed", "wont-fix", "resolved")
-EVENT_TYPES = ("create", "reply", "status")
+STATUSES = ("open", "planned", "answered", "page-changed", "wont-fix", "resolved", "marked")
+EVENT_TYPES = ("create", "reply", "status", "tags")
 MAX_TEXT = 8000
 MAX_QUOTE = 2000
 MAX_CONTEXT = 200
@@ -71,6 +77,7 @@ class Thread:
     status_note: str = ""
     commit: str = ""
     suggestion: dict | None = None    # suggested edit: {path, base_commit, base_text, new_text, diff}
+    tags: list[str] = field(default_factory=list)
     replies: list[Message] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -159,8 +166,11 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, A
                 "suffix": _clean(event.get("suffix"), MAX_CONTEXT, "suffix"),
                 "start": _offset(event.get("start"), "start"),
                 "end": _offset(event.get("end"), "end"),
-                "text": _clean(event.get("text"), MAX_TEXT, "text", required=True),
+                "text": _clean(event.get("text"), MAX_TEXT, "text"),
             })
+            stored.update(_tags_of(event))
+            if not stored["text"] and not stored.get("tags"):
+                raise FeedbackError("text is required (or at least one tag)")
             if stored["page"].startswith("/") or ".." in stored["page"]:
                 raise FeedbackError("page must be a path relative to the site root")
             suggestion = event.get("suggestion")
@@ -180,6 +190,10 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, A
             stored["thread_id"] = thread_id
             if event_type == "reply":
                 stored["text"] = _clean(event.get("text"), MAX_TEXT, "text", required=True)
+            elif event_type == "tags":
+                stored.update(_tags_of(event))
+                stored.setdefault("tags", [])
+                stored.setdefault("mark", False)
             else:
                 status = event.get("status")
                 if status not in STATUSES:
@@ -197,6 +211,22 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, A
     return stored
 
 
+def _tags_of(event: dict[str, Any]) -> dict[str, Any]:
+    try:
+        names = clean_tags(event.get("tags"))
+    except TagError as error:
+        raise FeedbackError(str(error)) from error
+    return {"tags": names, "mark": bool(event.get("mark")) and bool(names)} if names else {}
+
+
+def _retag(thread: Thread, names: list[str], mark: bool) -> None:
+    thread.tags = names
+    if mark and thread.status == "open":
+        thread.status = "marked"
+    elif not mark and thread.status == "marked":
+        thread.status = "open"
+
+
 def fold(events: list[dict[str, Any]]) -> dict[str, Thread]:
     """Replay events into threads (ordered by creation)."""
     result: dict[str, Thread] = {}
@@ -209,12 +239,15 @@ def fold(events: list[dict[str, Any]]) -> dict[str, Thread]:
                 page_commit=event.get("page_commit", ""), page_title=event.get("page_title", ""),
                 quote=event.get("quote", ""), prefix=event.get("prefix", ""), suffix=event.get("suffix", ""),
                 start=event.get("start"), end=event.get("end"), suggestion=event.get("suggestion"))
+            _retag(result[thread_id], event.get("tags") or [], bool(event.get("mark")))
         elif thread_id in result:
             thread = result[thread_id]
             if event.get("type") == "reply":
                 thread.replies.append(Message(author=event.get("author", ""), text=event.get("text", ""),
                                               created_at=event.get("created_at", ""),
                                               event_id=event.get("event_id", "")))
+            elif event.get("type") == "tags":
+                _retag(thread, event.get("tags") or [], bool(event.get("mark")))
             elif event.get("type") == "status":
                 thread.status = event.get("status", thread.status)
                 thread.status_by = event.get("author", "")

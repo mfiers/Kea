@@ -16,6 +16,12 @@ kea.yaml (all keys optional):
     cookie_salt: <text>                     # optional; default "kea-site:<project folder name>"
     code_paths: [src/, tests/]              # optional; folders that get code pages
     typst: /path/to/typst                   # optional; kea pdf uses `typst` on PATH otherwise
+    tag_prefix: site/                       # optional; release tags are <prefix>vX.Y.Z (and <prefix><experiment>/vX.Y.Z),
+                                            #   for a repository whose plain vX.Y.Z tags mean something else
+    changes_since: 68791ab                  # optional; commit pages and the change log start after this commit
+    code_files: [Makefile, pyproject.toml]   # optional; single files (outside code_paths) that get code pages
+    tags: [{name: abstract, group: manuscript, task: false}]   # optional; more tags, or changed ones (feedback/tags.py)
+    free_tags: true                         # optional; readers may add tags outside the list (default true)
 """
 from __future__ import annotations
 
@@ -26,7 +32,7 @@ import yaml
 
 CONFIG_NAME = "kea.yaml"
 DEFAULTS = {"title": "Project", "heading": "", "port": 8210, "host": "127.0.0.1", "site_dir": "report/site",
-            "feedback_dir": "data/feedback"}
+            "feedback_dir": "data/feedback", "tag_prefix": "", "changes_since": ""}
 
 
 def find_root(start: Path | None = None) -> Path:

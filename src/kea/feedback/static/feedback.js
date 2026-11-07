@@ -1,4 +1,7 @@
-/* Reader comments on the site: select text -> "Comment", or comment on the whole page.
+/* Reader comments and tags on the site: select text -> "Comment" or "Tag", or comment on / tag the whole page.
+ * Tags (feedback/tags.py; the list comes with the threads from the server) are stored on a thread: task tags
+ * (challenge, explain, …) ask for work like a comment; mark tags (introduction, methods, …) only label text for the
+ * manuscript and give the thread the state "marked".
  *
  * Uses @recogito/text-annotator (BSD-3, vendored as recogito-text-annotator-4.3.7.umd.js) only to
  * draw highlights and to turn a selection into {quote, start, end}; the comment form, the side
@@ -25,13 +28,14 @@
   const NOT = "not-annotatable";
   const STATUS_TEXT = {
     "open": "open", "answered": "answered", "page-changed": "page changed",
-    "wont-fix": "won't fix", "resolved": "resolved", "planned": "in the plan"
+    "wont-fix": "won't fix", "resolved": "resolved", "planned": "in the plan", "marked": "marked"
   };
+  let vocab = { tags: [], groups: {}, free_tags: false };
 
   let threads = [];
   let annotator = null;
   let container = null;
-  let panel, listEl, orphanEl, toggleBtn, selectBtn, nameBox;
+  let panel, listEl, orphanEl, toggleBtn, selectBtn, nameBox;      // selectBtn: the bar with "Comment" and "Tag"
   let pendingSelection = null;
 
   // ---------- small helpers ----------
@@ -132,6 +136,7 @@
     const thread = threads.find(item => item.thread_id === annotation.id);
     const state = thread ? stateOf(thread) : "open";
     if (state === "open") return { fill: "#ffd54f", fillOpacity: 0.45, underlineColor: "#e0a800", underlineThickness: 2 };
+    if (state === "marked") return { fill: "#90caf9", fillOpacity: 0.25, underlineColor: "#1565c0", underlineThickness: 1 };
     if (state === "planned") return { fill: "#ffb74d", fillOpacity: 0.3, underlineColor: "#c77800", underlineThickness: 1 };
     if (state === "addressed") return { fill: "#bdbdbd", fillOpacity: 0.18 };
     return { fill: "#ffffff", fillOpacity: 0 };
@@ -153,6 +158,63 @@
     annotator.setAnnotations(annotations, true);
   }
 
+
+  // ---------- tags ----------
+  function tagInfo(name) {
+    return vocab.tags.find(tag => tag.name === name) || { name, label: name, group: "own", task: true, help: "" };
+  }
+  function tagPill(name) {
+    const info = tagInfo(name);
+    return el("span", { class: "fb-tag fb-tag-" + info.group, title: info.help || "" }, info.label || name);
+  }
+  /* Chips per group; returns {node, value(), reset()}. Free tags (when the site allows them) via a text box. */
+  function tagPicker(selected) {
+    const chosen = new Set(selected);
+    const node = el("div", { class: "fb-picker" });
+    function draw() {
+      node.replaceChildren();
+      const names = new Set(vocab.tags.map(tag => tag.name));
+      const own = [...chosen].filter(name => !names.has(name));
+      const groups = {};
+      for (const tag of vocab.tags) (groups[tag.group] = groups[tag.group] || []).push(tag);
+      if (own.length) groups.own = (groups.own || []).concat(own.map(tagInfo));
+      for (const [group, members] of Object.entries(groups)) {
+        node.append(el("div", { class: "fb-picker-group" }, (vocab.groups || {})[group] || group));
+        node.append(el("div", { class: "fb-picker-row" }, ...members.map(tag => el("button", {
+          type: "button", class: "fb-chip fb-tag-" + tag.group + (chosen.has(tag.name) ? " fb-on" : ""),
+          title: tag.help || "", "aria-pressed": String(chosen.has(tag.name)),
+          onclick: () => { chosen.has(tag.name) ? chosen.delete(tag.name) : chosen.add(tag.name); draw(); }
+        }, tag.label || tag.name))));
+      }
+      if (vocab.free_tags) {
+        const input = el("input", { class: "fb-free", placeholder: "own tag + Enter", maxlength: "32" });
+        input.addEventListener("keydown", event => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          const name = input.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+          if (/^[a-z][a-z0-9-]{0,31}$/.test(name)) { chosen.add(name); draw(); node.querySelector(".fb-free").focus(); }
+        });
+        node.append(input);
+      }
+    }
+    draw();
+    return { node, value: () => [...chosen], reset: () => { chosen.clear(); draw(); } };
+  }
+  function tagLine(thread) {
+    const line = el("div", { class: "fb-tags" }, ...(thread.tags || []).map(tagPill));
+    const edit = el("button", { class: "fb-secondary fb-tag-edit", type: "button",
+      title: "Add or remove tags" }, (thread.tags || []).length ? "edit tags" : "add tags");
+    edit.addEventListener("click", () => {
+      const picker = tagPicker(thread.tags || []);
+      const box = el("div", { class: "fb-tag-editor" }, picker.node, el("div", { class: "fb-actions" },
+        el("button", { onclick: () => send(() => api("POST", API + "/" + thread.thread_id + "/tags", { tags: picker.value() })) }, "Save tags"),
+        el("button", { class: "fb-secondary", onclick: () => box.remove() }, "Cancel")));
+      line.after(box);
+    });
+    line.append(edit);
+    return line;
+  }
+
   // ---------- panel ----------
   function statusPill(status, thread) {
     if (thread && thread.state_label) return el("span", { class: "fb-pill fb-state-" + stateOf(thread) }, thread.state_label);
@@ -167,7 +229,7 @@
   function diffView(suggestion) {
     const lines = (suggestion.diff || "").split("\n").filter(line => !line.startsWith("---") && !line.startsWith("+++"));
     const pre = el("pre", { class: "fb-diff" }, ...lines.map(line => el("span", {
-      class: line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") ? "hunk" : "" }, line + "\n")));
+      class: line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") ? "hunk" : "ctx" }, line || " ")));  // block spans: no "\n" (it would add a blank line)
     return el("details", { class: "fb-suggestion", open: "open" },
       el("summary", {}, "Suggested edit of ", el("code", {}, suggestion.path), " (version ", suggestion.base_commit || "?", ")"), pre);
   }
@@ -295,10 +357,12 @@
       head.append(el("span", { class: "fb-whole" }, "about the whole page"));
       box.append(head);
     }
-    box.append(messageView(thread.author, thread.text, thread.created_at, true));
+    box.append(tagLine(thread));
+    if (thread.text) box.append(messageView(thread.author, thread.text, thread.created_at, true));
+    else box.append(el("div", { class: "fb-meta" }, "Tagged by ", el("b", {}, thread.author), " · ", when(thread.created_at)));
     if (thread.suggestion) box.append(diffView(thread.suggestion));
     for (const reply of thread.replies) box.append(messageView(reply.author, reply.text, reply.created_at));
-    if (thread.status !== "open" && thread.status_by) {
+    if (!["open", "marked"].includes(thread.status) && thread.status_by) {
       const commitLink = sha => el("a", { href: BASE + "commits/" + sha.split("+")[0] + ".html" }, sha);
       const note = thread.status === "page-changed" && thread.commit
         ? el("span", {}, "Page changed in commit ", commitLink(thread.commit),
@@ -349,8 +413,10 @@
       for (const thread of orphaned) orphanEl.append(threadView(thread));
     }
     const open = threads.filter(thread => ["open", "planned"].includes(stateOf(thread))).length;
-    toggleBtn.textContent = "Comments " + open + "/" + threads.length;
-    toggleBtn.title = open + " open (new or in the plan) of " + threads.length + " comments on this page";
+    const marks = threads.filter(thread => stateOf(thread) === "marked").length;
+    toggleBtn.textContent = "Comments " + open + "/" + (threads.length - marks) + (marks ? " · " + marks + " marked" : "");
+    toggleBtn.title = open + " open (new or in the plan) of " + (threads.length - marks) + " comments on this page" +
+      (marks ? "; " + marks + " fragment(s) marked for the manuscript" : "");
     renderName();
   }
   function renderName() {
@@ -400,20 +466,24 @@
     panel.classList.remove("fb-open");
     document.documentElement.classList.remove("fb-panel-open");
   }
-  function newCommentForm(selection) {
+  function newCommentForm(selection, tagging) {
     const form = el("div", { class: "fb-new" });
-    form.append(el("h3", {}, selection ? "Comment on the selected text" : "Comment on the whole page"));
+    form.append(el("h3", {}, (tagging ? "Tag " : selection ? "Comment on " : "Comment on or tag ") + (selection ? "the selected text" : "the whole page")));
     if (selection) form.append(el("blockquote", { class: "fb-quote" }, selection.quote));
-    const textarea = el("textarea", { rows: "4", placeholder: selection
-      ? "What is unclear, wrong or missing here?" : "A question or remark about this page…" });
-    form.append(textarea, el("div", { class: "fb-actions" },
+    const picker = tagPicker([]);
+    const textarea = el("textarea", { rows: tagging ? "2" : "4", placeholder: tagging ? "A note with the tags (optional)"
+      : selection ? "What is unclear, wrong or missing here?" : "A question or remark about this page…" });
+    const pickerBox = el("details", { class: "fb-tagbox" }, el("summary", {}, "Tags"), picker.node);
+    if (tagging) pickerBox.open = true;
+    form.append(...(tagging ? [pickerBox, textarea] : [textarea, pickerBox]), el("div", { class: "fb-actions" },
       el("button", { onclick: async () => {
-        if (!textarea.value.trim()) return;
+        const chosen = picker.value();
+        if (!textarea.value.trim() && !chosen.length) return;
         const ok = await send(() => api("POST", API, {
-          page: PAGE, page_title: TITLE, page_commit: COMMIT, text: textarea.value, ...(selection || {})
+          page: PAGE, page_title: TITLE, page_commit: COMMIT, text: textarea.value, tags: chosen, ...(selection || {})
         }));
-        if (ok) { textarea.value = ""; if (selection) form.remove(); }
-      } }, "Send"),
+        if (ok) { textarea.value = ""; picker.reset(); if (selection) form.remove(); }
+      } }, tagging ? "Save" : "Send"),
       selection ? el("button", { class: "fb-secondary", onclick: () => form.remove() }, "Cancel") : null));
     return form;
   }
@@ -432,7 +502,7 @@
       pendingSelection = contextOf(range);
       const rect = range.getBoundingClientRect();
       selectBtn.style.top = (window.scrollY + rect.bottom + 6) + "px";
-      selectBtn.style.left = Math.max(8, window.scrollX + rect.left + rect.width / 2 - 45) + "px";
+      selectBtn.style.left = Math.max(8, window.scrollX + rect.left + rect.width / 2 - 70) + "px";
       selectBtn.hidden = false;
     }, 10);
   }
@@ -441,6 +511,7 @@
   async function reload() {
     const data = await api("GET", API + "?page=" + encodeURIComponent(PAGE));
     threads = data.threads;
+    if (data.tags) vocab = data.tags;
     drawHighlights();
     renderPanel();
   }
@@ -461,21 +532,25 @@
           title: "Edit the Markdown of this page; saved as a suggestion" }, "Suggest an edit"),
         el("button", { class: "fb-close", title: "Close", onclick: closePanel }, "×")),
       el("div", { class: "fb-body" }, nameBox,
-        el("p", { class: "fb-help" }, "Select any text on the page and press “Comment” to ask about that sentence. Claude reads the open comments in the next working session and answers here or rewrites the page."),
-        listEl, orphanEl, newCommentForm(null)));
+        el("p", { class: "fb-help" }, "Select any text on the page and press “Comment” to ask about it, or “Tag” to label it: work for the next cycle (challenge, explain, …) or the manuscript section it belongs in. Claude reads the open comments and task tags in the next working session and answers here or rewrites the page."),
+        listEl, orphanEl, newCommentForm(null, false)));
     toggleBtn = el("button", { class: "fb-toggle " + NOT, onclick: () =>
       panel.classList.contains("fb-open") ? closePanel() : openPanel() }, "Comments");
-    selectBtn = el("button", { class: "fb-select " + NOT, onmousedown: event => event.preventDefault(), onclick: () => {
+    const startForm = tagging => {
       selectBtn.hidden = true;
       if (!pendingSelection) return;
       openPanel();
       const existing = panel.querySelector(".fb-new.fb-selection");
       if (existing) existing.remove();
-      const form = newCommentForm(pendingSelection);
+      const form = newCommentForm(pendingSelection, tagging);
       form.classList.add("fb-selection");
       panel.querySelector(".fb-body").insertBefore(form, listEl);
-      form.querySelector("textarea").focus();
-    } }, "Comment");
+      if (!tagging) form.querySelector("textarea").focus();
+    };
+    selectBtn = el("span", { class: "fb-select-bar " + NOT, onmousedown: event => event.preventDefault() },
+      el("button", { class: "fb-select", onclick: () => startForm(false) }, "Comment"),
+      el("button", { class: "fb-select fb-select-tag", onclick: () => startForm(true),
+        title: "Tag the text: work for the next cycle (challenge, explain, …) or a manuscript section" }, "Tag"));
     selectBtn.hidden = true;
     document.body.append(panel, toggleBtn, selectBtn);
 

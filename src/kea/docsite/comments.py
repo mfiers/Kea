@@ -12,6 +12,7 @@ Output: the same pages edited in place (generated files), report/site/_feedback/
 from __future__ import annotations
 
 import html
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,13 +20,13 @@ from pathlib import Path
 from kea.docsite.nodes import PROJECT_ROOT
 from kea.docsite import mode
 from kea.docsite.render import esc, prefix_for
-from kea.feedback import states, store
+from kea.feedback import states, store, tags
 
 STATIC = Path(__file__).resolve().parents[1] / "feedback" / "static"
 RECOGITO = "recogito-text-annotator-4.3.7.umd.js"
 RECOGITO_CSS = "recogito-text-annotator-4.3.7.css"
 STATUS_TEXT = {"open": "open", "answered": "answered", "page-changed": "page changed",
-               "wont-fix": "won't fix", "resolved": "resolved", "planned": "in the plan"}
+               "wont-fix": "won't fix", "resolved": "resolved", "planned": "in the plan", "marked": "marked"}
 HISTORY_LIMIT = 15
 DIFF_LINE_LIMIT = 300
 
@@ -37,8 +38,11 @@ def _git(*args: str) -> str:
 
 def source_version(source: Path | None) -> str:
     """Short commit of the last change to `source` (HEAD for generated pages); '+edited' with uncommitted changes."""
-    if source is None:
-        return _git("rev-parse", "--short", "HEAD")
+    if source is None:              # a generated page: the commit the site is built from, +edited if doc/ differs
+        head = _git("rev-parse", "--short", "HEAD")
+        dirty = (subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "doc"], cwd=PROJECT_ROOT).returncode != 0
+                 or bool(_git("ls-files", "--others", "--exclude-standard", "--", "doc")))
+        return head + ("+edited" if dirty and head else "")
     relative = str(source.relative_to(PROJECT_ROOT))
     commit = _git("log", "-1", "--format=%h", "--", relative)
     if not commit:
@@ -62,7 +66,7 @@ def history_html(source: Path, prefix: str) -> str:
                 continue
             css = "add" if diff_line.startswith("+") else "del" if diff_line.startswith("-") else \
                 "hunk" if diff_line.startswith("@@") else ""
-            shown.append(f"<span class='{css}'>{esc(diff_line)}</span>")
+            shown.append(f"<span class='{css or 'ctx'}'>{esc(diff_line) or ' '}</span>")
         from kea.docsite.versions import commit_labels
         release = commit_labels().get(commit[:7], "")
         badge = f"<span class='pill'>{esc(release)}</span> " if release else ""
@@ -70,7 +74,7 @@ def history_html(source: Path, prefix: str) -> str:
                        if mode.WITH_CHANGELOG else f"<code>{esc(commit)}</code>")
         items.append(f"<li><details><summary>{badge}{commit_link} "
                      f"{esc(date)} · {esc(subject)} <span class='help'>({esc(author)})</span></summary>"
-                     f"<pre class='diff'>{chr(10).join(shown)}</pre></details></li>")
+                     f"<pre class='diff'>{''.join(shown)}</pre></details></li>")   # spans are blocks
     return ("<section class='fb-history not-annotatable' id='history'><h2>Changes to this page</h2>"
             f"<p class='help'>Saved versions of <code>{esc(relative)}</code>, newest first (at most {HISTORY_LIMIT}). "
             f"Open a line for the change: green added, red removed.</p><ul>{''.join(items)}</ul></section>")
@@ -88,10 +92,14 @@ def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None 
         diff_lines = thread.suggestion.get("diff", "").splitlines()[2:]
         body += (f"<details class='fb-suggestion' open><summary>Suggested edit of <code>"
                  f"{esc(thread.suggestion.get('path', ''))}</code></summary><pre class='fb-diff'>" + "".join(
-                     f"<span class='{'add' if line.startswith('+') else 'del' if line.startswith('-') else 'hunk' if line.startswith('@@') else ''}'>"
-                     f"{esc(line)}</span>\n" for line in diff_lines) + "</pre></details>")
+                     f"<span class='{'add' if line.startswith('+') else 'del' if line.startswith('-') else 'hunk' if line.startswith('@@') else 'ctx'}'>"
+                     f"{esc(line) or ' '}</span>" for line in diff_lines) + "</pre></details>")
+    if thread.tags:
+        quote += "<div class='fb-tags'>" + "".join(f"<span class='fb-tag'>{esc(name)}</span>" for name in thread.tags) + "</div>"
+    if not thread.text:
+        body = body.replace("<div class='fb-text'></div>", "", 1)
     status = ""
-    if thread.status != "open":
+    if thread.status not in ("open", "marked"):
         commit = (f" · commit <a href='{prefix}commits/{esc(thread.commit.split('+')[0])}.html'><code>{esc(thread.commit)}</code></a>"
                   if thread.commit else "")
         status = (f"<div class='fb-statusline'>Marked {esc(STATUS_TEXT.get(thread.status, thread.status))} by "
@@ -115,8 +123,13 @@ def version_box(version: str, prefix: str, source: Path | None, has_history: boo
         relative = source.relative_to(PROJECT_ROOT).as_posix()
         source_html = f"<div><b>Source:</b> <code>{esc(relative)}</code></div>"
     history = " · <a href='#history'>changes to this page</a>" if has_history else ""
-    return (f"<details class='fb-made not-annotatable'><summary>Version {commit_html}</summary>{source_html}"
-            f"<div><b>Version:</b> {commit_html}{' (uncommitted changes)' if '+edited' in version else ''}{history}</div>"
+    # a page from a file shows that file's last commit; a generated page the commit the whole site is built from
+    label = "Site version" if source is None else "Page version"
+    meaning = ("the commit the site was built from" if source is None else
+               "not committed yet" if version == "uncommitted" else "the last commit that changed this page")
+    edited = " (with uncommitted changes)" if "+edited" in version else ""
+    return (f"<details class='fb-made not-annotatable'><summary>{label} {commit_html}</summary>{source_html}"
+            f"<div><b>{label}:</b> {commit_html}: {meaning}{edited}{history}</div>"
             f"</details>")
 
 
@@ -128,6 +141,7 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
     assets.mkdir(parents=True, exist_ok=True)
     for name in ("feedback.js", "feedback.css", "cycle.js", RECOGITO, RECOGITO_CSS, "marked-12.0.2.min.js"):
         shutil.copy2(STATIC / name, assets / name)
+    (assets / "tags.json").write_text(json.dumps(tags.vocabulary(), ensure_ascii=False, indent=1))
     by_key: dict[str, list[store.Thread]] = {}
     for thread in store.threads(events_path):
         by_key.setdefault(thread.page, []).append(thread)

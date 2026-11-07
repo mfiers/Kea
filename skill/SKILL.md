@@ -285,6 +285,15 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    Version rules: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages,
    PATCH for wording only. Before 1.0 a major change counts as minor.
 
+**Tags.** Readers can tag text or a page instead of (or with) a comment. A thread with a task tag (challenge,
+source, explain, expand, shorten, remove, or a project's own) is an open item like a comment: `kea show` prints
+each tag's instruction; follow it, plan it and answer it as usual. For `challenge`, start a separate reviewer
+(a subagent that sees the page, its sources and caveats, not your reasoning), answer its points, then strengthen,
+weaken or withdraw the claim, and summarise the exchange in the reply. Manuscript tags (introduction, methods,
+results, discussion, conclusions, supplement, not-in-manuscript) give the thread the status `marked`: no work, not
+in plans, never set a status on them. `kea tags [names…]` lists the marked fragments per section with file and
+lines, the input for a manuscript. Change the vocabulary under `tags:` in kea.yaml.
+
 ## Adapting Kea on request (in flight)
 
 Kea is small (about 4,000 lines of Python, no database, static HTML), and changing it at the reader's request is

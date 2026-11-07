@@ -16,7 +16,7 @@ from pathlib import Path
 
 from kea.config import PROJECT_ROOT
 
-ORDER = {"open": 0, "planned": 1, "addressed": 2, "resolved": 3}
+ORDER = {"open": 0, "planned": 1, "addressed": 2, "marked": 2.5, "resolved": 3}
 ADDRESSED = ("answered", "page-changed", "wont-fix")
 THREAD_ID = re.compile(r"\bt\d{4}_\d{2}_\d{2}_[0-9a-f]{6}\b")
 ITEM_HEADING = re.compile(r"^### (\d+)\.", flags=re.M)
@@ -64,6 +64,8 @@ def state_of(thread, info: dict | None = None) -> tuple[str, str]:
     commit = (thread.get("commit", "") if isinstance(thread, dict) else thread.commit) or ""
     if status == "open":
         return "open", "open"
+    if status == "marked":
+        return "marked", "marked"
     if status == "planned":
         item = info["items"].get(thread_id)
         return "planned", f"in plan {item}" if item else "in the plan"

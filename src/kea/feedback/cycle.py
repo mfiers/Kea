@@ -143,7 +143,9 @@ def append(kind: str, by: str, path: Path | None = None, **fields: str) -> Cycle
 
 
 def needs_attention(thread) -> bool:
-    """Open, or a reader replied after Claude's last word (and not resolved)."""
+    """Open, or a reader replied after Claude's last word (and not resolved). Marks (manuscript tags) never do."""
+    if thread.status == "marked":
+        return False
     if thread.status == "open":
         return True
     last_author = thread.replies[-1].author if thread.replies else thread.author
