@@ -18,11 +18,11 @@ import yaml
 from kea.config import PROJECT_ROOT  # noqa: E402  (re-exported)
 DOC = PROJECT_ROOT / "doc"
 LINK_PATTERN = re.compile(r"\[\[([^\[\]|]+)(?:\|([^\[\]|]*))?(?:\|([^\[\]]*))?\]\]")
-TYPE_LABELS = {"goal": "Goal", "premise": "Premise", "question": "Question", "hypothesis": "Hypothesis",
+TYPE_LABELS = {"experiment": "Experiment", "premise": "Premise", "question": "Question", "hypothesis": "Hypothesis",
                "step": "Step", "result": "Result", "conclusion": "Conclusion", "decision": "Decision",
                "figure": "Figure", "artefact": "Artefact", "caveat": "Caveat", "term": "Term",
                "reference": "Reference", "resource": "Resource", "dataset": "Dataset", "page": "Page"}
-TYPE_PLURALS = {"goal": "Goals", "premise": "Premises", "question": "Questions", "hypothesis": "Hypotheses",
+TYPE_PLURALS = {"experiment": "Experiments", "premise": "Premises", "question": "Questions", "hypothesis": "Hypotheses",
                 "step": "Steps", "result": "Results", "conclusion": "Conclusions", "decision": "Decisions",
                 "figure": "Figures", "artefact": "Artefacts", "caveat": "Caveats", "term": "Terms",
                 "reference": "References", "resource": "Resources", "dataset": "Datasets", "page": "Pages"}
@@ -103,7 +103,7 @@ class Node:
 @dataclass
 class Tree:
     nodes: dict[str, Node]
-    projects: dict[str, Node]          # project -> its home goal
+    projects: dict[str, Node]          # project -> its home page (type experiment)
     schema: dict
     problems: list[str] = field(default_factory=list)   # errors: broken links, schema violations
     notes: list[str] = field(default_factory=list)      # warnings: links to projects without pages yet
@@ -124,6 +124,9 @@ class Tree:
 
 RRID_PATTERN = re.compile(r"RRID:[A-Za-z]+_[A-Za-z0-9_:.-]+")
 RESOURCE_FIELDS = ("kind", "version", "retrieved")     # what makes a resource reproducible (sha256 for files)
+
+
+LEGACY_EXPERIMENT_TYPE = "goal"          # the experiment's home page was type goal before Kea 1.12
 
 
 def with_defaults(schema: dict) -> dict:
@@ -153,7 +156,9 @@ def load_tree(doc: Path = DOC) -> Tree:
     nodes: dict[str, Node] = {}
     problems: list[str] = []
     project_dirs = [path for path in doc.iterdir() if path.is_dir() and not path.name.startswith("_")
-                    and (path / "goal" / "home.md").exists()]   # other folders in doc/ are plain documents
+                    and ((path / "experiment" / "home.md").exists() or (path / "goal" / "home.md").exists())]
+    # other folders in doc/ are plain documents; goal/home.md is the name before Kea 1.12 (type goal = experiment)
+    notes: list[str] = []
     for project_dir in sorted(project_dirs):
         for source in sorted(project_dir.rglob("*.md")):
             if source.name.startswith("_"):
@@ -169,7 +174,12 @@ def load_tree(doc: Path = DOC) -> Tree:
                 continue
             relations = {name: [_as_key(str(item), project_dir.name) for item in (values or [])]
                          for name, values in (header.get("relations") or {}).items()}
-            node = Node(project=project_dir.name, id=str(header["id"]), type=str(header["type"]),
+            node_type = str(header["type"])
+            if node_type == LEGACY_EXPERIMENT_TYPE:
+                node_type = "experiment"
+                notes.append(f"{source.relative_to(doc)}: type goal is called experiment since Kea 1.12; set "
+                             f"type: experiment and move the file to {project_dir.name}/experiment/home.md")
+            node = Node(project=project_dir.name, id=str(header["id"]), type=node_type,
                         title=str(header["title"]), short=str(header["short"]), body=body, source=source,
                         header=header, parent=header.get("parent"), status=header.get("status"),
                         order=float(header.get("order", 100)), relations=relations)
@@ -179,6 +189,7 @@ def load_tree(doc: Path = DOC) -> Tree:
             nodes[node.key] = node
     projects = {node.project: node for node in nodes.values() if node.id == "home"}
     tree = Tree(nodes=nodes, projects=projects, schema=schema, problems=problems)
+    tree.notes.extend(notes)
     _number(tree)
     _validate(tree)
     _reverse_edges(tree)
@@ -307,8 +318,8 @@ def _validate(tree: Tree) -> None:
             if tree.resolve(target, node.project) is None:
                 _missing(tree, where, target if ":" in target else f"{node.project}:{target}")
     for project, home in tree.projects.items():
-        if home.type != "goal":
-            tree.problems.append(f"{project}/home: must be a goal")
+        if home.type != "experiment":
+            tree.problems.append(f"{project}/home: must be of type experiment")
 
 
 # Sentences of kea init's templates (templates/home.md): a page that still holds one has not been written yet.

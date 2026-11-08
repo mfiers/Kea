@@ -12,3 +12,8 @@ data/feedback/watch_heartbeat.tmp
 data/feedback/agent_lease.*
 data/feedback/*.before-sync-*
 data/feedback/dev/
+# logo candidates that were not taken (2026-11-08; prompts and scripts are kept in branding/)
+branding/candidates/kea_glass_*
+branding/candidates/kea_round_*
+branding/icon-glass-512.png
+branding/round-512.png

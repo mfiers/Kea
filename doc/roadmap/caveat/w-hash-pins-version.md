@@ -8,5 +8,4 @@ status: open
 relations:
   limits: [s-stable-ids, s-federated-claims]
 ---
-Raised in the review of the identifier proposal on 7 November 2026 (Claude). The remedy proposed on
-[[s-stable-ids]] is a second, stable concept id per page, as Zenodo keeps a concept DOI next to each version DOI.
+Raised in the review of the identifier proposal on 7 November 2026 (Claude). The remedy proposed on [[s-stable-ids]] is a second, stable concept id per page, as Zenodo keeps a concept DOI next to each version DOI.

@@ -25,4 +25,5 @@
   cause), effect sizes with uncertainty and n of the replicate unit, nulls stated as nulls, post hoc labelled, literature kept
   apart from our data, no hype or empty hedges.
 - Summary lines are written for the reader, without internal labels; dates in the text carry their version.
+- Do not hard-wrap Markdown in `doc/`: one line per paragraph and per list item (readers edit pages in the site's editor, where wrapped lines look broken).
 <!-- kea:end -->

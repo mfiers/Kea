@@ -7,5 +7,4 @@ parent: home
 status: supported
 order: 2
 ---
-`kea check` validates pages against `doc/_schema.yaml` (types, statuses, allowed relations, a few required fields),
-but it does not gate commits or releases, and it does not say what to do next.
+`kea check` validates pages against `doc/_schema.yaml` (types, statuses, allowed relations, a few required fields), but it does not gate commits or releases, and it does not say what to do next.

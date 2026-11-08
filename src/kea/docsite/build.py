@@ -32,6 +32,20 @@ from kea.docsite.pages import ASSETS, SiteRenderer
 SITE = SITE_DIR
 
 
+def content_fingerprint(site: Path) -> str:
+    """Short hash of what readers see: every page, asset and comment script, before the comment layer is added.
+    The comment script compares it with the server's to offer a reload, so it must change only with the content."""
+    import hashlib
+    digest = hashlib.sha256()
+    files = sorted(path for path in site.rglob("*") if path.is_file() and path.suffix in (".html", ".js", ".css", ".png", ".ico", ".json")
+                   and not path.name.startswith("_build"))
+    files += sorted(comments.STATIC.glob("*"))
+    for path in files:
+        digest.update(str(path.name if path.is_relative_to(comments.STATIC) else path.relative_to(site)).encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelog: bool = False,
                with_pdf: bool = True) -> tuple[dict, list[str]]:
     """Render all pages into an empty ``site`` folder and add the comment layer (review mode). Returns
@@ -50,7 +64,7 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     render.PDF = renderer.pdf               # the menu bar links it on every page
     renderer.render_all()
     commit = comments.source_version(None)
-    build_id = f"{dt.datetime.now().strftime('%Y%m%dT%H%M%S')}-{commit}"
+    build_id = f"{commit}-{content_fingerprint(site)}"   # same content, same id: an identical rebuild is not "new"
     counts = comments.inject(site, renderer.pages, build_id=build_id, with_comments=mode.comments_enabled())
     if build_mode == "public":
         report = {"mode": "public", "built_at": dt.datetime.now().isoformat(timespec="seconds"), "commit": commit,
@@ -64,7 +78,7 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     (site / "_files.json").write_text(json.dumps(sorted(renderer.downloads) if build_mode == "review" else [],
                                                  indent=1))
     editable = {key: str(source.relative_to(PROJECT_ROOT)) for key, source in renderer.pages.values()
-                if source is not None and ":" in key and source.is_relative_to(PROJECT_ROOT / "doc")}
+                if source is not None and (":" in key or key == "index.html") and source.is_relative_to(PROJECT_ROOT / "doc")}
     (site / "_sources.json").write_text(json.dumps(editable, indent=1, sort_keys=True))   # pages with an Edit button
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
                                                   "previews_marked": True,      # kea publish relies on this

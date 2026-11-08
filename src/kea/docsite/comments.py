@@ -162,7 +162,10 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
         title = html.unescape(text[title_start + 7:title_end]) if 0 <= title_start < title_end else relative
         history = history_html(source, prefix) if source else ""
         counts["with_history"] += bool(history)
-        extra = history
+        # the page version belongs to its history: right under "Changes to this page" (alone when there is none)
+        versionline = f"<div class='fb-versionline'>{version_box(version, prefix, source, False)}</div>"
+        extra = (history.replace("<h2>Changes to this page</h2>", "<h2>Changes to this page</h2>" + versionline, 1)
+                 if history else versionline)
         page_threads = sorted(by_key.get(key, []), key=states.sort_key) if with_comments else []
         if page_threads:
             active = [thread for thread in page_threads if states.state_of(thread)[0] != "resolved"]
@@ -174,8 +177,7 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
                       + (f"<details class='fb-resolved'><summary>{len(resolved)} resolved comment(s)</summary>"
                          + "".join(thread_static_html(thread, prefix) for thread in resolved) + "</details>"
                          if resolved else "") + "</section>")
-        text = text.replace("</main>", f"<div class='fb-versionline'>{version_box(version, prefix, source, bool(history))}"
-                                       f"</div>{extra}</main>", 1)
+        text = text.replace("</main>", f"{extra}</main>", 1)
         if with_comments:
             text = text.replace("</body>",
                                 f"<link rel='stylesheet' href='{prefix}_feedback/{RECOGITO_CSS}'>"

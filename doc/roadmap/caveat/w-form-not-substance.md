@@ -8,6 +8,4 @@ status: open
 relations:
   limits: [h-schema-gate]
 ---
-Raised in the review of the roadmap on 7 November 2026 (Claude). The adversarial reviewer
-([[s-adversarial-reviewer]]) is the idea on this roadmap that checks substance; without it, gated graphs can be
-well-formed and wrong.
+Raised in the review of the roadmap on 7 November 2026 (Claude). The adversarial reviewer ([[s-adversarial-reviewer]]) is the idea on this roadmap that checks substance; without it, gated graphs can be well-formed and wrong.

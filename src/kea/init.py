@@ -1,6 +1,6 @@
 """kea init: set up a project for a documentation site with review cycles. Never overwrites a file.
 
-Creates (when missing): kea.yaml, doc/_schema.yaml, doc/<experiment>/goal/home.md, doc/_changes/, doc/_cycles/,
+Creates (when missing): kea.yaml, doc/_schema.yaml, doc/<experiment>/experiment/home.md, doc/_changes/, doc/_cycles/,
 data/feedback/ (with .gitkeep), .env with a random SITE_PASSWORD; appends (once, between markers): the kea section
 of CLAUDE.md, the kea targets of the Makefile, and .gitignore lines. Prints what it did.
 """
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         (root / "doc" / folder).mkdir(parents=True, exist_ok=True)
     _write_new(root / "data" / "feedback" / ".gitkeep", "", done)
     if args.experiment:
-        _write_new(root / "doc" / args.experiment / "goal" / "home.md",
+        _write_new(root / "doc" / args.experiment / "experiment" / "home.md",
                    (TEMPLATES / "home.md").read_text().replace("{question}", args.question.replace('"', "'")), done)
     _write_new(root / ".env", f"SITE_PASSWORD={secrets.token_urlsafe(12)}\n", done)
     _append_once(root / "CLAUDE.md", "<!-- kea:start -->", (TEMPLATES / "claude_section.md").read_text(), done)

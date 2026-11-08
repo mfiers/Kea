@@ -17,7 +17,7 @@ def test_init_and_build_example_project(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     result = run(["init", "--title", "Example", "--experiment", "first", "--question", "Does it work?"], project)
     assert result.returncode == 0, result.stderr
-    for created in ("kea.yaml", "doc/_schema.yaml", "doc/first/goal/home.md", ".env", "CLAUDE.md", "Makefile"):
+    for created in ("kea.yaml", "doc/_schema.yaml", "doc/first/experiment/home.md", ".env", "CLAUDE.md", "Makefile"):
         assert (project / created).exists(), created
     assert "SITE_PASSWORD=" in (project / ".env").read_text()
     again = run(["init", "--title", "Example"], project)                   # idempotent, never overwrites

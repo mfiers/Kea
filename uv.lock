@@ -110,7 +110,7 @@ wheels = [
 
 [[package]]
 name = "kea"
-version = "1.11.1"
+version = "1.12.0"
 source = { editable = "." }
 dependencies = [
     { name = "markdown" },

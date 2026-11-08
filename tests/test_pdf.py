@@ -193,7 +193,8 @@ def test_methods_steps_name_their_questions_results_and_conclusions(toy_doc):
     writer = pdf.PdfWriter(nodes.load_tree(toy_doc))
     source = writer.document({"version": "-", "commit": "-", "built": "-"})
     methods = source.split("== Methods")[1]
-    assert "#strong[Used for:]" in methods and "#strong[Results:]" in methods and "#strong[Conclusions:]" in methods
+    assert "#strong[Used for:]" in methods and "#strong[Leads to results:]" in methods \
+        and "#strong[Leads to conclusions:]" in methods
 
 
 def test_no_pdf_build_keeps_the_last_built_pdf(tmp_path, monkeypatch):
@@ -213,3 +214,4 @@ def test_no_pdf_build_keeps_the_last_built_pdf(tmp_path, monkeypatch):
     kept = pdf.last_pdf(site)
     assert kept["file"] == "my-project-v0.2.0.pdf" and kept["reused"]
     assert (site / "my-project-v0.2.0.pdf").read_bytes() == b"%PDF v0.2.0"
+

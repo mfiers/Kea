@@ -1,12 +1,16 @@
 """Tags that readers put on a text fragment or a whole page, next to (or instead of) a comment.
 
 A tag is stored on a comment thread (store.py: ``tags`` on the create event, a ``tags`` event to change them), so it
-uses the comments' anchoring, storage, hub sync and history. There are two kinds:
+uses the comments' anchoring, storage, hub sync and history. Groups: suggestions for the next run (review), the
+reader's verdict on a whole page (verdict: confirm, reject; ``scope: page``, never on selected text; both are definitive requests that go into the
+next plan, and a confirmation ends up as ``confirmed:`` in the page's front matter), and the
+manuscript sections (manuscript). There are two kinds:
 
-    task tags     ask the agent for work in the next review cycle (challenge, source, explain, expand, shorten,
-                  remove); a thread with one is handled like an open comment, and ``kea show`` prints the tag's
-                  instruction for the agent.
-    mark tags     label text for later use and ask for no work (the manuscript sections: introduction, methods, …);
+    task tags     ask the agent for work in the next review cycle (explain, expand, shorten, delete, challenge,
+                  source; and the page verdicts confirm, unconfirm, reject); a thread with one is handled like an open comment, and
+                  ``kea show`` prints the tag's instruction for the agent.
+    mark tags     label text for later use and ask for no work (the manuscript sections:
+                  introduction, methods, …);
                   a thread whose tags are all mark tags gets the status ``marked``: it is not open, not in a plan
                   and not counted as a comment waiting for an answer. ``kea tags`` lists marks for the manuscript.
 
@@ -26,20 +30,10 @@ from pathlib import Path
 NAME = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_TAGS = 12
 
-GROUPS = {"review": "For the next review cycle", "manuscript": "For the manuscript", "own": "Own tags"}
+GROUPS = {"review": "Suggestions for the next run", "verdict": "Your verdict on this page",
+          "manuscript": "For the manuscript", "own": "Own tags"}
 
 DEFAULT_TAGS: list[dict] = [
-    {"name": "challenge", "group": "review", "task": True, "label": "challenge",
-     "help": "Doubt this: have it critically re-assessed",
-     "instruction": "Re-assess this claim adversarially before the next release: start a separate reviewer (a "
-                    "subagent that sees the page, its sources and its caveats, not your reasoning) and ask it "
-                    "whether the claim follows from the evidence, what is missing and what would refute it. Answer "
-                    "the reviewer point by point; then strengthen, weaken or withdraw the claim, add a caveat, or "
-                    "keep it with the reasons. Summarise the exchange in the reply."},
-    {"name": "source", "group": "review", "task": True, "label": "needs source",
-     "help": "Which file, result or reference supports this?",
-     "instruction": "Find the source of this statement: a file in `sources:`, a result page, or a reference. Add "
-                    "it, or weaken or remove the statement when there is none."},
     {"name": "explain", "group": "review", "task": True, "label": "explain",
      "help": "Unclear: explain it",
      "instruction": "Explain this for a reader who knows the field but not this project: define terms, say why "
@@ -51,12 +45,36 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "shorten", "group": "review", "task": True, "label": "shorten",
      "help": "Too long: say it in fewer words",
      "instruction": "Say the same in fewer words; keep every claim, number and caveat."},
-    {"name": "remove", "group": "review", "task": True, "label": "remove",
-     "help": "Remove this",
-     "instruction": "Remove this text. When it carries a claim that other pages rely on, say so in the reply "
-                    "instead of removing it."},
-    {"name": "not-in-manuscript", "group": "manuscript", "task": False, "label": "not in manuscript",
-     "help": "Keep this out of the manuscript"},
+    {"name": "delete", "group": "review", "task": True, "label": "delete",
+     "help": "Delete this text",
+     "instruction": "Delete this text. When it carries a claim that other pages rely on, say so in the reply "
+                    "instead of deleting it."},
+    {"name": "challenge", "group": "review", "task": True, "label": "challenge",
+     "help": "Doubt this: have it critically re-assessed",
+     "instruction": "Re-assess this claim adversarially before the next release: start a separate reviewer (a "
+                    "subagent that sees the page, its sources and its caveats, not your reasoning) and ask it "
+                    "whether the claim follows from the evidence, what is missing and what would refute it. Answer "
+                    "the reviewer point by point; then strengthen, weaken or withdraw the claim, add a caveat, or "
+                    "keep it with the reasons. Summarise the exchange in the reply."},
+    {"name": "source", "group": "review", "task": True, "label": "needs source",
+     "help": "Which file, result or reference supports this?",
+     "instruction": "Find the source of this statement: a file in `sources:`, a result page, or a reference. Add "
+                    "it, or weaken or remove the statement when there is none."},
+    {"name": "confirm", "group": "verdict", "task": True, "scope": "page", "label": "confirm",
+     "help": "Keep this page as it is: it goes into the next plan, and the page records your confirmation",
+     "instruction": "The reader confirms this page. In the next plan, write `confirmed:` into its front matter "
+                    "(`by:` the reader, `date:` the thread's date, `version:` the thread's page commit) and change "
+                    "nothing else. From then on, change the page's claim (title, summary, status, numbers) only "
+                    "through a plan item that names the confirmation."},
+    {"name": "unconfirm", "group": "verdict", "task": True, "scope": "page", "label": "withdraw confirmation",
+     "hidden": True, "help": "Withdraw an earlier confirmation",
+     "instruction": "The reader withdraws the confirmation of this page: remove `confirmed:` from its front matter "
+                    "in the next plan."},
+    {"name": "reject", "group": "verdict", "task": True, "scope": "page", "label": "reject",
+     "help": "This page should go: it is removed in the next plan",
+     "instruction": "The reader rejects this page; it goes in the next plan. Results, conclusions and figures are "
+                    "not deleted: set their status to deprecated with the reason; other pages are deleted. Update "
+                    "or remove the relations that point to it, and say in the reply what depended on it."},
     {"name": "introduction", "group": "manuscript", "task": False, "label": "introduction", "help": ""},
     {"name": "methods", "group": "manuscript", "task": False, "label": "methods", "help": ""},
     {"name": "results", "group": "manuscript", "task": False, "label": "results", "help": ""},
@@ -64,6 +82,8 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "conclusions", "group": "manuscript", "task": False, "label": "conclusions", "help": ""},
     {"name": "supplement", "group": "manuscript", "task": False, "label": "supplement",
      "help": "In the supplementary material"},
+    {"name": "not-in-manuscript", "group": "manuscript", "task": False, "label": "not in manuscript",
+     "help": "Keep this out of the manuscript"},
 ]
 
 
@@ -79,7 +99,7 @@ def vocabulary(settings: dict | None = None) -> dict:
     for extra in settings.get("tags") or []:
         if not isinstance(extra, dict) or not NAME.match(str(extra.get("name", ""))):
             raise TagError(f"kea.yaml tags: each entry needs a name of lower-case letters, digits and '-' ({extra!r})")
-        merged = {"group": "review", "task": True, "label": extra["name"], "help": "", "instruction": "",
+        merged = {"group": "review", "task": True, "scope": "any", "label": extra["name"], "help": "", "instruction": "",
                   **tags.get(extra["name"], {}), **extra}
         merged["task"] = bool(merged["task"])
         tags[extra["name"]] = merged
@@ -115,13 +135,17 @@ def clean(names) -> list[str]:
     return result
 
 
-def check(names, known: dict) -> list[str]:
-    """clean() plus: tags outside the vocabulary only when free tags are on."""
+def check(names, known: dict, on_text: bool = False) -> list[str]:
+    """clean() plus: tags outside the vocabulary only when free tags are on; page tags (scope: page, the verdicts)
+    not on a text fragment."""
     result = clean(names)
-    names_known = {tag["name"] for tag in known["tags"]}
+    names_known = {tag["name"]: tag for tag in known["tags"]}
     unknown = [name for name in result if name not in names_known]
     if unknown and not known.get("free_tags", True):
         raise TagError(f"unknown tag(s): {', '.join(unknown)}")
+    page_only = [name for name in result if names_known.get(name, {}).get("scope") == "page"]
+    if on_text and page_only:
+        raise TagError(f"{', '.join(page_only)}: only for a whole page, not for selected text")
     return result
 
 

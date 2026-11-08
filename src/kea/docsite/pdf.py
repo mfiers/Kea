@@ -43,17 +43,17 @@ from pathlib import Path
 
 from kea.config import SETTINGS
 from kea.docsite import artefacts, icons, questions
-from kea.docsite.nodes import (PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree, natural,  # noqa: F401
+from kea.docsite.nodes import (FORWARD_LABELS, PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree, natural,  # noqa: F401
                                 term_group)
-from kea.docsite.render import LinkContext, render_markdown
+from kea.docsite.render import ABOUT_ORDER, LinkContext, linked_kinds, render_markdown
 
 SENTINEL = "kea-pdf:/"                    # link prefix that marks a link to a page of the tree
-TYPE_COLOURS = {"goal": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#9467bd",
-                "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#7f7f7f",
-                "figure": "#17818a", "artefact": "#b8860b", "caveat": "#d35400", "term": "#555566", "resource": "#5b6b2f",
+TYPE_COLOURS = {"experiment": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#a23c9e",
+                "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#757575",
+                "figure": "#17818a", "artefact": "#966d09", "caveat": "#c64f00", "term": "#555566", "resource": "#5b6b2f",
                 "reference": "#555566", "dataset": "#555566", "page": "#555566"}
 TYPE_MEANINGS = {
-    "goal": "the experiment: what it asks and what it found",
+    "experiment": "the experiment: what it asks and what it found",
     "premise": "what is taken as given, with the reason",
     "question": "what the experiment asks",
     "hypothesis": "an expected answer, with its test and yardstick, ideally written before the test was run",
@@ -72,6 +72,9 @@ STATUS_COLOURS = {**{name: "#1b7f4b" for name in ("supported", "done", "answered
                   **{name: "#aa3333" for name in ("not_supported", "deprecated", "dropped", "superseded")},
                   **{name: "#a86b00" for name in ("exploratory", "in_progress", "planned", "open", "inconclusive",
                                                   "assumed", "questioned")}}
+# the bar at the left of a table row (as on the site): green settled, amber open, dark red rejected
+BAR_COLOURS = {**{name: "#2e9e5b" for name in ("supported", "done", "answered", "current", "active", "addressed")},
+               **{name: "#5f2120" for name in ("not_supported", "deprecated", "dropped", "superseded")}}
 STATUS_MEANINGS = {
     "supported": "the evidence agrees with the claim", "not_supported": "the evidence does not agree with it",
     "inconclusive": "the test could not decide", "exploratory": "the analysis was chosen after earlier results "
@@ -81,7 +84,7 @@ STATUS_MEANINGS = {
     "deprecated": "no longer valid, kept for the record", "current": "the current version of a file", "addressed": "a caveat that a later step dealt with",
     "planned": "not done yet", "in_progress": "under way", "dropped": "abandoned",
 }
-CALLOUT_COLOURS = {"warning": "#d35400", "caution": "#d35400", "caveat": "#d35400", "important": "#aa3333",
+CALLOUT_COLOURS = {"warning": "#c64f00", "caution": "#c64f00", "caveat": "#c64f00", "important": "#aa3333",
                    "danger": "#aa3333", "tip": "#1b7f4b", "success": "#1b7f4b"}
 MAX_FIGURE_HEIGHT_CM = 19.0             # a taller figure is narrowed (it still leaves room for its caption)
 SMALL_FIGURE_SCALE = 0.8                # printed below this share of its own size: noted in the build log
@@ -291,7 +294,7 @@ class Converter:
             return f"#claim[{self.blocks(element.children)}]"
         if tag == "div" and "callout" in css:
             kind = next((name.removeprefix("callout-") for name in css.split() if name.startswith("callout-")), "")
-            colour = CALLOUT_COLOURS.get(kind, "#1f5fa8")
+            colour = CALLOUT_COLOURS.get(kind, "#2d3748")
             return (f"#block(stroke: (left: 3pt + rgb(\"{colour}\")), fill: rgb(\"{colour}\").lighten(92%), "
                     f"inset: 8pt, radius: (right: 3pt), width: 100%)[{self.blocks(element.children)}]")
         if tag == "pre":
@@ -406,7 +409,7 @@ class Converter:
 
 # ---------------------------------------------------------------------------------------------- document
 PREAMBLE = r"""#let ink = rgb("#1d2330")
-#let accent = rgb("#1f5fa8")
+#let accent = rgb("#2d3748")
 #let amber = rgb("#f0b429")
 #let muted = luma(105)
 #let sans = SANS_FONTS
@@ -467,6 +470,8 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
 #let summary(colour, body) = block(fill: rgb(colour).lighten(91%), inset: (x: 10pt, y: 8pt), radius: 3pt, width: 100%, above: 0.6em, below: 0.4em, text(size: 9.8pt, body))
 #let claim(body) = block(fill: rgb("#fff8f0"), stroke: 0.5pt + rgb("#f0d9bf"), inset: 9pt, radius: 4pt, width: 100%, body)
 #let meta(body) = block(above: 1em, below: 1em, text(font: sans, size: 7.8pt, fill: muted, body))
+#let about(colour, body) = block(above: 1.3em, below: 1em, width: 100%, stroke: (top: 1.5pt + rgb(colour)), inset: (top: 4pt),
+  text(font: sans, size: 7.8pt, fill: muted, [#align(right, text(size: 6.5pt, weight: "bold", fill: rgb(colour), tracking: 0.08em)[ABOUT THIS PAGE])#v(-0.4em)#body]))
 #let intro(body) = block(sticky: true, above: 1em, below: 1.2em, text(font: sans, size: 8pt, fill: muted, body))
 #let node(colour, body) = block(breakable: false, sticky: true, stroke: (left: 3pt + rgb(colour)), inset: (left: 10pt, top: 3pt, bottom: 3pt), above: 2.4em, below: 1em, body)
 #let datatable(columns, size, header-rows, ..cells) = block(width: 100%, {
@@ -689,7 +694,11 @@ class PdfWriter:
         """The heading block: stripe in the type's colour, heading with label, badge and pills, summary."""
         colour = TYPE_COLOURS.get(node.type, "#555566")
         heading = f"{fullname_markup(node.type, node.number)} #h(0.3em) {text(node.title)}"
-        pills = " ".join(part for part in (status_pill(node.status), written_pill(node), extra) if part)
+        confirmed = node.header.get("confirmed")
+        by = (confirmed.get("by", "") if isinstance(confirmed, dict) else str(confirmed)) if confirmed else ""
+        confirmed_pill = (f"#box(fill: rgb(\"#dff0e0\"), inset: (x: 5pt, y: 2pt), radius: 3pt)[#text(size: 7.5pt, fill: rgb(\"#1e5e22\"), "
+                          f"weight: \"bold\")[✓ confirmed{text(' by ' + by) if by else ''}]]" if confirmed else "")
+        pills = " ".join(part for part in (status_pill(node.status), written_pill(node), confirmed_pill, extra) if part)
         return ((f"#pagebreak(weak: true)\n" if level <= 2 else "")
                 + f"#node({string(colour)})[\n{'=' * level} {heading} {label(node.key)}\n\n"
                 + (f"#block(above: 0.5em, below: 0.7em)[{pills}]\n\n" if pills else "")
@@ -706,25 +715,25 @@ class PdfWriter:
         data = [self.artefact_by_path[path] for path in self.source_paths(node) if path in self.artefact_by_path]
         if data:
             lines.append(f"#strong[Data:] {', '.join(self.link(item) for item in data)}")
-        if node.type == "hypothesis" and node.incoming.get("Tested by"):
-            lines.append(f"#strong[Tested by:] {self.links(node.incoming['Tested by'])}")
-        if node.incoming.get("Limited by"):
-            lines.append(f"#strong[Limited by:] {self.links(node.incoming['Limited by'])}")
-        if node.type == "caveat" and node.relations.get("limits"):
-            lines.append(f"#strong[Limits:] {self.links(node.relations['limits'])}")
+        # every kind of link, worded as on the site ("Tested by this step"), in the same order
+        links: dict[str, list[str]] = {}
+        for relation, keys in node.relations.items():
+            links.setdefault(FORWARD_LABELS.get(relation, relation), []).extend(keys)
+        for name, keys in node.incoming.items():
+            links.setdefault(name, []).extend(keys)
+        for name in sorted(links, key=lambda item: ABOUT_ORDER.index(item) if item in ABOUT_ORDER else 99):
+            keys = [key for key in dict.fromkeys(links[name]) if key in self.tree.nodes]
+            if keys:
+                lines.append(f"#strong[{text(name + ' ' + linked_kinds([self.tree.nodes[key] for key in keys]))}:] {self.links(keys)}")
         if node.type == "step":                  # methods: what the step served and what follows from it
             used_for, results, conclusions = self.step_outcomes(node)
-            tools = [self.tree.nodes[key] for key in node.relations.get("uses", []) if key in self.tree.nodes]
-            if tools:
-                lines.append("#strong[Uses:] " + ", ".join(
-                    f"{self.link(tool)} {text(tool.title)}" + (f" ({text(str(tool.header['rrid']))})"
-                                                              if str(tool.header.get("rrid") or "none").lower() != "none"
-                                                              else "") for tool in tools))
-            for name, keys in (("Used for", used_for), ("Results", results), ("Conclusions", conclusions)):
+            for name, keys in (("Used for", used_for), ("Leads to results", results), ("Leads to conclusions", conclusions)):
+                keys = [key for key in keys if key in self.tree.nodes
+                        and not any(key in shown for shown in links.values())]   # not already on a line above
                 if keys:
                     lines.append(f"#strong[{name}:] {self.links(keys)}")
         if lines:
-            parts.append(f"#meta[{' #h(0.6em)·#h(0.6em) '.join(lines)}]")
+            parts.append(f"#about({string(TYPE_COLOURS.get(node.type, '#555566'))})[{' #linebreak() '.join(lines)}]")
         return "\n\n".join(part for part in parts if part.strip())
 
     def step_outcomes(self, step: Node) -> tuple[list[str], list[str], list[str]]:
@@ -799,14 +808,17 @@ class PdfWriter:
 
     @staticmethod
     def status_fill(nodes: list[Node]) -> str:
-        """A table fill: the header row tinted, each row tinted by its page's status (green / red / amber)."""
-        tints = ", ".join(string(STATUS_COLOURS.get(str(node.status), "#ffffff")) for node in nodes)
-        return (f"fill: (_, row) => if row == 0 {{ luma(232) }} else {{ rgb(({tints},).at(row - 1)).lighten(90%) }}")
+        """Header row tinted; each row gets a 3 pt bar at its left in its page's status colour (green settled, amber
+        open, dark red rejected; none without a status), as on the site."""
+        bars = ", ".join(string(BAR_COLOURS.get(str(node.status), "#e0a030") if node.status else "#ffffff") for node in nodes)
+        return (f"fill: (_, row) => if row == 0 {{ luma(232) }} else {{ none }}, "
+                f"stroke: (column, row) => if column == 0 and row > 0 {{ (left: 3pt + rgb(({bars},).at(row - 1)), "
+                f"rest: 0.4pt + luma(205)) }} else {{ 0.4pt + luma(205) }}")
 
     def status_table(self, nodes: list[Node], columns: str, header: list[str], rows: list[list[str]],
                      note: str = "") -> str:
         return (f"#block(width: 100%, above: 0.9em, below: 1.1em)[#set text(size: 8.5pt); #set par(justify: false, leading: 0.5em)\n"
-                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), align: left, "
+                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), align: left, "
                 f"{self.status_fill(nodes)}, table.header(..({', '.join(header)},).map(strong)), "
                 + ", ".join(cell for row in rows for cell in row) + ")]"
                 + (f"\n\n#meta[{note}]" if note else ""))
@@ -854,7 +866,7 @@ class PdfWriter:
         when = written(hypotheses[0])
         note = (f" All of them were written {when}." if uniform and when else "")
         return (f"#block(width: 100%, above: 1.2em)[#set text(size: 8.5pt); #set par(justify: false)\n"
-                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), stroke: 0.4pt + luma(205), "
+                f"#table(columns: {columns}, inset: (x: 5pt, y: 5pt), "
                 f"align: left, {self.status_fill(hypotheses)}, "
                 f"table.header(..({', '.join(header)}).map(strong)), {', '.join(cells)})]\n\n"
                 f"#meta[The full text of each hypothesis (its test, its yardstick and what was expected) is in the "
@@ -992,7 +1004,7 @@ class PdfWriter:
                 path = PROJECT_ROOT / str(item.header.get("path", ""))
                 size = artefacts.human_size(path.stat().st_size) if path.is_file() else "missing" if not path.exists() else "folder"
                 made_by = self.tree.nodes.get(f"{project}:{item.parent}") if item.parent else None
-                cells += [f"[#text(fill: rgb(\"#b8860b\"), weight: \"bold\")[{text(item.number)}] {label(item.key)}]",
+                cells += [f"[#text(fill: rgb(\"#966d09\"), weight: \"bold\")[{text(item.number)}] {label(item.key)}]",
                           f"[{text(item.title)}]",
                           f"[#mono[{text(str(item.header.get('path', '')), breakable=True)}]]",
                           f"[{text(str(item.header.get('format', '')))}]", f"[{text(size)}]",
@@ -1281,7 +1293,7 @@ class PdfWriter:
 
     # ------------------------------------------------------------------ whole document
     def about(self, version: str, commit: str, today: str) -> str:
-        used_types = [node_type for node_type in TYPE_MEANINGS if node_type != "goal"
+        used_types = [node_type for node_type in TYPE_MEANINGS if node_type != "experiment"
                       and any(node.type == node_type for node in self.tree.nodes.values())]
         type_rows = ", ".join(f"[{fullname_markup(node_type, REFERENCE_PREFIX + '1' if node_type == 'reference' else self.example_number(node_type))}], "
                               f"[{text(TYPE_MEANINGS[node_type])}]" for node_type in used_types)

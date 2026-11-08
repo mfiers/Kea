@@ -19,9 +19,7 @@ That covers more than it seems: a new kind of page with its own relations needs 
 
 ## What a plugin would need to do
 
-The candidates so far are the Lean checker ([[s-lean-checker]]), an Anthive or other catalogue resource (fetch
-version and checksum of a dataset), a manuscript builder ([[s-paper-compiler]]) and lab-specific checks (for
-example "every figure of a mouse experiment names the strain"). From those, four hook points:
+The candidates so far are the Lean checker ([[s-lean-checker]]), an Anthive or other catalogue resource (fetch version and checksum of a dataset), a manuscript builder ([[s-paper-compiler]]) and lab-specific checks (for example "every figure of a mouse experiment names the strain"). From those, four hook points:
 
 | Hook | Called with | Returns | Needed by |
 | --- | --- | --- | --- |
@@ -32,19 +30,13 @@ example "every figure of a mouse experiment names the strain"). From those, four
 
 ## How
 
-Python entry points (`[project.entry-points."kea.plugins"]` in the plugin's pyproject.toml), found with
-`importlib.metadata`, enabled per project in kea.yaml (`plugins: [kea-lean]`). Plugins run only where the site is
-built, on the author's machine; the hub receives a built site and runs no plugin code. That keeps the hub safe.
+Python entry points (`[project.entry-points."kea.plugins"]` in the plugin's pyproject.toml), found with `importlib.metadata`, enabled per project in kea.yaml (`plugins: [kea-lean]`). Plugins run only where the site is built, on the author's machine; the hub receives a built site and runs no plugin code. That keeps the hub safe.
 
 ## Cost
 
 - The loader and the four hooks: my estimate is about 150 lines, not measured.
-- The real cost is the contract. Once a plugin reads the page object, its fields can no longer change freely, and
-  that works against [[p-small-kernel]]. Every hook needs a version number and a test that a plugin built against
-  it still loads.
+- The real cost is the contract. Once a plugin reads the page object, its fields can no longer change freely, and that works against [[p-small-kernel]]. Every hook needs a version number and a test that a plugin built against it still loads.
 
 ## Proposal (Claude, 7 November 2026)
 
-Do not build a plugin interface before two plugins exist. Write the Lean checker and the manuscript builder inside
-Kea first, behind kea.yaml switches. When both work, move them out, keeping only the hooks they used. A general
-interface designed before its first user tends to be wrong in the ways that matter.
+Do not build a plugin interface before two plugins exist. Write the Lean checker and the manuscript builder inside Kea first, behind kea.yaml switches. When both work, move them out, keeping only the hooks they used. A general interface designed before its first user tends to be wrong in the ways that matter.

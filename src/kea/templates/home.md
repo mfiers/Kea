@@ -1,6 +1,6 @@
 ---
 id: home
-type: goal
+type: experiment
 title: "{question}"
 short: One sentence on what this experiment asks and why.
 status: open

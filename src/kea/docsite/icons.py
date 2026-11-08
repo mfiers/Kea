@@ -7,7 +7,7 @@ the plain page icon.
 from __future__ import annotations
 
 PATHS = {
-    "goal": "<circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='12' r='5.5'/><circle cx='12' cy='12' r='1.6'/>",
+    "experiment": "<circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='12' r='5.5'/><circle cx='12' cy='12' r='1.6'/>",
     "premise": "<path d='M12 2 2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/>",
     "question": "<circle cx='12' cy='12' r='10'/><path d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/>"
                 "<path d='M12 17h.01'/>",

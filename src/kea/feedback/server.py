@@ -362,11 +362,11 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         items.sort(key=lambda item: states.sort_key(item, info))
         return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir)})
 
-    def tag_fields(body: dict) -> dict:
+    def tag_fields(body: dict, on_text: bool = False) -> dict:
         """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
         try:
             known = tags.site_vocabulary(site_dir)
-            names = tags.check(body.get("tags"), known)
+            names = tags.check(body.get("tags"), known, on_text)
         except tags.TagError as error:
             raise store.FeedbackError(str(error)) from error
         return {"tags": names, "mark": tags.is_mark(names, known)}
@@ -401,7 +401,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
     async def create_thread(request: Request) -> Response:
         try:
             body = await _body(request)
-            fields = tag_fields(body)
+            fields = tag_fields(body, on_text=bool(str(body.get("quote") or "").strip()))
             # marks (manuscript tags) ask for no work, so they are taken also while the cycle is frozen
             if not fields["mark"] and (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked
@@ -428,14 +428,21 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         thread_id = request.path_params["thread_id"]
         try:
             body = await _body(request)
-            fields = tag_fields(body)
             thread = store.fold(store.load_events(events_path)).get(thread_id)
+            fields = tag_fields(body, on_text=bool(thread and thread.quote))
             only_marks = fields["mark"] or not fields["tags"]
             if not (only_marks and thread is not None and thread.status == "marked") and \
                     (blocked := frozen_response(page_of_thread(thread_id))) is not None:
                 return blocked
             await append(request, {"type": "tags", "thread_id": thread_id, **fields,
                                    "author": _author(request)}, events_path)
+            if not fields["tags"] and thread is not None and not thread.text and not thread.replies \
+                    and thread.status != "resolved":
+                # the last tag of a tag-only thread taken off: nothing is left to answer
+                key = request.headers.get("x-kea-request", "").strip()[:70]
+                await run_in_threadpool(store.append_event, {
+                    "type": "status", "thread_id": thread_id, "status": "resolved", "note": "tags removed",
+                    "author": _author(request), **({"request_id": key + "-resolve"} if key else {})}, events_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
         return await thread_json(thread_id)

@@ -8,5 +8,4 @@ status: open
 relations:
   limits: [h-schema-gate]
 ---
-Raised in the review of the roadmap on 7 November 2026 (Claude). A possible answer: changes to the rules go through
-the review cycle as plan items, and the agent cannot release while a rule change is unapproved.
+Raised in the review of the roadmap on 7 November 2026 (Claude). A possible answer: changes to the rules go through the review cycle as plan items, and the agent cannot release while a rule change is unapproved.

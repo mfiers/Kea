@@ -8,5 +8,4 @@ status: open
 relations:
   limits: [s-stable-ids]
 ---
-Raised in the review of the identifier proposal on 7 November 2026 (Claude). DOIs of withdrawn papers resolve to a
-retraction notice; a purged Kea id should resolve to a tombstone in the same way.
+Raised in the review of the identifier proposal on 7 November 2026 (Claude). DOIs of withdrawn papers resolve to a retraction notice; a purged Kea id should resolve to a tombstone in the same way.

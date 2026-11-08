@@ -9,3 +9,9 @@
 - `kea-icon-512.png`: the same icon at 512 px (from `branding/icon-512.png`), for the PDF's title page.
 - Page-type icons (`src/kea/docsite/icons.py`): inline SVG line drawings in the style of Feather Icons (MIT
   licence, https://feathericons.com); several shapes follow Feather's.
+- `kea-badge-512.png`, `kea-badge-96.png` (page-button dock), `kea-badge-64.png` (menu bar), `kea-badge.ico`
+  (favicon, 16/32/48): the round badge, the head of the kea icon on a light disc with an olive rim, made from
+  `branding/icon-512.png` by `branding/make_badge.py` (2026-11-08). A stained-glass version generated the same day
+  (`branding/make_logo2.py`, `branding/make_assets2.py`, candidates in `branding/candidates/`) was not taken.
+  `favicon.ico` and `kea-icon-64.png` are kept for older sites but no longer used.
+

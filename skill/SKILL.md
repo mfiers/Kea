@@ -108,6 +108,8 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 
 ## Writing pages
 
+- **No hard line wraps in `doc/`:** one line per paragraph and per list item. Readers edit pages in the site's
+  editor, where wrapped lines look broken; the renderer joins them anyway.
 - One idea per page: `doc/<experiment>/<type>/<id>.md`, front matter `id, type, title, short, parent, status,
   relations, sources`; ids unique on the site. Types and allowed relations: `doc/_schema.yaml`.
 - `result` = what a file shows (every number from a file named in `sources:` or an artefact page);
@@ -285,14 +287,7 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    Version rules: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages,
    PATCH for wording only. Before 1.0 a major change counts as minor.
 
-**Tags.** Readers can tag text or a page instead of (or with) a comment. A thread with a task tag (challenge,
-source, explain, expand, shorten, remove, or a project's own) is an open item like a comment: `kea show` prints
-each tag's instruction; follow it, plan it and answer it as usual. For `challenge`, start a separate reviewer
-(a subagent that sees the page, its sources and caveats, not your reasoning), answer its points, then strengthen,
-weaken or withdraw the claim, and summarise the exchange in the reply. Manuscript tags (introduction, methods,
-results, discussion, conclusions, supplement, not-in-manuscript) give the thread the status `marked`: no work, not
-in plans, never set a status on them. `kea tags [names…]` lists the marked fragments per section with file and
-lines, the input for a manuscript. Change the vocabulary under `tags:` in kea.yaml.
+**Tags.** Readers tag selected text or a whole page with one click, next to commenting. Suggestions for the next run (explain, expand, shorten, delete, challenge, source, or a project's own) are open items like comments: `kea show` prints each tag's instruction; follow it, plan it and answer it as usual. For `challenge`, start a separate reviewer (a subagent that sees the page, its sources and caveats, not your reasoning), answer its points, then strengthen, weaken or withdraw the claim, and summarise the exchange in the reply. The page verdicts are definitive: `confirm` means write `confirmed: {by, date, version}` into the page's front matter in the next plan and change nothing else (from then on, change a confirmed page's claim only through a plan item that names the confirmation); `unconfirm` means remove that field; `reject` means the page goes in the next plan (deprecate results, conclusions and figures with the reason instead of deleting them; delete other pages; fix the relations that point to it). Manuscript tags (introduction, methods, results, discussion, conclusions, supplement, not-in-manuscript) give the thread the status `marked`: no work, not in plans, never set a status on them. `kea tags [names…]` lists marked fragments per section with file and lines, the input for a manuscript. Change the vocabulary under `tags:` in kea.yaml.
 
 ## Adapting Kea on request (in flight)
 

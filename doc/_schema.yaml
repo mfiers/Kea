@@ -1,7 +1,7 @@
 # Node types and typed relations of the documentation tree (doc/<project>/<type>/<id>.md).
 # The (future) site builder validates every page against this file. Decided 2026-11-04 (see doc/site_design.md).
 #
-# Every page: YAML front matter with id, type, title, short, parent (except a project's home goal), status
+# Every page: YAML front matter with id, type, title, short, parent (except an experiment's home page, type experiment), status
 # (where listed), relations (below), sources (code / data paths, optional). Links in text: [[id]],
 # [[id|text]], [[project:id]] across projects, [[code:path#symbol]], [[data:path]].
 
@@ -20,7 +20,7 @@ number_prefix:          # numbering per project, in order of `order:` then file 
   resource: O        # O for origin: a data source, database, MCP server or uploaded file the analysis uses
 
 status_values:
-  goal: [open, in_progress, done]
+  experiment: [open, in_progress, done]
   premise: [assumed, supported, questioned]
   question: [open, answered, dropped]
   hypothesis: [planned, supported, not_supported, inconclusive]

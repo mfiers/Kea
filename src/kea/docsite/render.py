@@ -13,7 +13,7 @@ import markdown
 
 from kea.config import SETTINGS
 from kea.docsite import icons
-from kea.docsite.nodes import DOC, LINK_PATTERN, TYPE_LABELS, Node, Tree
+from kea.docsite.nodes import DOC, LINK_PATTERN, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 
 RUN_ID = re.compile(r"\d{4}-\d{2}-\d{2}-[\w-]+")
 
@@ -35,12 +35,12 @@ align-items:center;position:relative}
 .topbar .seg.here{flex:1 1 auto}
 .topbar .sep{color:#6f7a8e}.topbar .home{font-weight:800;color:#fff;letter-spacing:.02em;flex:0 0 auto}
 .topbar .project{color:#fff;font-weight:600}
-.topbar .experiment{background:#f0b429;color:#1d2330;font-weight:700;border-radius:4px;padding:1px 10px;
+.topbar .experiment{background:#333;color:#fff;box-shadow:inset 0 0 0 1px #8a93a3;font-weight:700;border-radius:4px;padding:1px 10px;
 overflow:hidden;text-overflow:ellipsis}
 .topbar .experiment:hover{text-decoration:none;background:#f7c948}
 .topbar .here .tag{margin:0;flex:0 0 auto}
 .topbar .here-title{display:block;color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}
+.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}.topbar .grp{display:inline-flex;align-items:center;gap:12px}.topbar .grp .sub{display:none;align-items:center;gap:12px}.topbar .grp.open>.sub{display:inline-flex}.topbar .grp.open{background:#2c3446;border-radius:7px;padding:0 9px;box-shadow:inset 0 0 0 1px #3d475c}.topbar .grp.open .grp.open{background:#3a4459;box-shadow:inset 0 0 0 1px #4f5b73;padding:0 7px}.topbar .grp.open>.sub::before{content:'›';color:#8a93a3}.topbar .grp .sub a,.topbar .grp .sub .off{font-size:13px;color:#c9d1e0}.topbar .links a.cur{color:#fff;font-weight:700;border-bottom:2px solid #fff}.topbar.folded.open .grp,.topbar.folded.open .grp .sub{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.topbar.folded.open .grp .sub{padding-left:14px}.topbar.folded.open .grp .sub::before{content:none}
 .topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
 cursor:pointer;flex:0 0 auto}
 .topbar.folded .links{display:none}
@@ -49,16 +49,16 @@ background:#1d2330;padding:10px 16px;border-radius:0 0 8px 8px;z-index:2000;box-
 .topbar .page-tools{display:flex;gap:8px;flex:0 0 auto}.topbar .page-tools:empty{display:none}
 .topbar .page-tools button{background:#2c3446;border:1px solid #4a5468;color:#fff;border-radius:5px;cursor:pointer;
 display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-serif;padding:2px 9px}
-.topbar .page-tools button:hover{background:#1f5fa8}.topbar .page-tools .ico{width:15px;height:15px}
+.topbar .page-tools button:hover{background:#2d3748}.topbar .page-tools .ico{width:15px;height:15px}
 .topbar .kea-mark{flex:0 0 auto;display:flex}.topbar .kea-mark img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
 .topbar.no-mark .kea-mark,.topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
 h1{font-size:25px;line-height:1.25;margin:6px 0 8px}h2{font-size:19px;margin:28px 0 8px;border-bottom:1px solid var(--line);padding-bottom:3px}
 h3{font-size:16px;margin:20px 0 6px}
 .badge{display:inline-block;font-size:12px;font-weight:600;color:#fff;background:#556;border-radius:4px;padding:1px 7px;margin-right:6px;vertical-align:middle}
-.t-goal{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#9467bd}
-.t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#7f7f7f}
-.t-figure{background:#17818a}.t-artefact{background:#b8860b}.t-caveat{background:#d35400}
+.kindbar{position:fixed;left:0;top:0;bottom:0;width:30px;z-index:5;display:flex;justify-content:center;align-items:flex-start;padding-top:58px;box-sizing:border-box;color:#fff}.kindbar{flex-direction:column;align-items:center!important;justify-content:flex-start!important;gap:9px}.kindbar .ico{width:18px;height:18px;flex:0 0 auto;stroke:#fff;color:#fff}.kindbar span{writing-mode:vertical-rl;transform:rotate(180deg);font:700 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:.95}body.has-kindbar{padding-left:30px}body.has-kindbar .topbar{margin-left:-30px;z-index:6}@media (max-width:760px){.kindbar{width:7px}.kindbar span,.kindbar .ico{display:none}body.has-kindbar{padding-left:7px}body.has-kindbar .topbar{margin-left:-7px}}@media print{.kindbar{display:none}body.has-kindbar{padding-left:0}body.has-kindbar .topbar{margin-left:0}}.node-content{margin:4px 0 0}.obj-search{width:100%;box-sizing:border-box;font:15px system-ui,sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:7px;margin:6px 0 10px}.obj-search:focus{outline:2px solid var(--accent);outline-offset:0}.obj-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0}.obj-label{font:600 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);width:56px}.obj-chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:2px 10px;font:600 12.5px system-ui,sans-serif;cursor:pointer;color:var(--fg)}.obj-chip .obj-count{font-weight:400;color:var(--muted)}.obj-chip.on{box-shadow:inset 0 0 0 2px #5b6475;background:#f5f7fa}.obj-chip.s-chip.on{background:#eef1f5}.obj-clear{border:0;background:none;color:var(--accent);cursor:pointer;font:13px system-ui,sans-serif;text-decoration:underline;margin-left:6px}.obj-info{font-size:13px;color:var(--muted);margin:10px 0 0}.obj-table th button{border:0;background:none;font:inherit;font-weight:700;cursor:pointer;padding:0;color:inherit}.obj-pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0;font-size:13px}.obj-pager button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}.obj-pager button:disabled{opacity:.4;cursor:default}table.nodes{display:table;width:100%;table-layout:fixed;margin:8px 0 4px}table.nodes col.c-page{width:36%}table.nodes col.c-status{width:132px}table.nodes td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}table.nodes td:last-child,table.nodes th:last-child{text-align:right}table.nodes .cell-note{font-size:12px;color:var(--muted);margin-top:3px}@media (max-width:640px){table.nodes col.c-page{width:42%}table.nodes col.c-status{width:96px}}.kindrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 2px}.kindrow .kind{font-size:15px;font-weight:700;letter-spacing:.02em}.kindrow .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}.kindrow .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}.kindrow .pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}.kindrow .pills .pill{font-size:11px;font-weight:400;margin:0}.node-content h1{margin-top:0}.pill.fb-pp-ok{background:#dff0e0;color:#1e5e22;border-color:#9fd3b5;font-weight:600}.node-content h1 .node-title,.node-content .short,.node-content article{font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif}.node-content .short{font-size:16.5px;border-left-color:var(--kc)}.node-content article{font-size:16.5px;line-height:1.65}.node-content article h2,.node-content article h3{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.node-data-sep{margin:64px 0 6px;border-top:6px solid var(--kc,#556);text-align:right;line-height:0}.node-data-sep span{display:inline-block;background:var(--kc,#556);color:#fff;padding:3px 12px 4px;border-radius:0 0 6px 6px;line-height:1.3;font:700 11.5px system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}section.about h2,section.questions h2{font-size:17px}.answer-label{display:block;font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-bottom:2px}ul.sources{margin:4px 0}.t-experiment{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#a23c9e}
+.t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#757575}
+.t-figure{background:#17818a}.t-artefact{background:#966d09}.t-caveat{background:#c64f00}
 .t-term,.t-reference,.t-dataset,.t-page{background:#556}.t-resource{background:#5b6b2f}
 .badge .ico,.tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 a.tag,span.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:11px;
@@ -74,16 +74,16 @@ h1 .kind{display:block;font-size:15px;font-weight:700;letter-spacing:.02em;margi
 h1 .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}
 h1 .pills,.qhead .pills{font-size:0;margin-left:8px;vertical-align:middle;white-space:normal}
 h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:4px}
-.k-goal{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#9467bd}.k-step{color:#2a7f62}
+.k-experiment{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#a23c9e}.k-step{color:#2a7f62}
 .k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
-.k-artefact{color:#9a7000}.k-caveat{color:#d35400}.k-term,.k-reference,.k-dataset,.k-page{color:#556}.k-resource{color:#5b6b2f}
+.k-artefact{color:#966d09}.k-caveat{color:#c64f00}.k-term,.k-reference,.k-dataset,.k-page{color:#556}.k-resource{color:#5b6b2f}
 a.fullname,span.fullname{font-weight:700;margin-right:6px;white-space:nowrap}.fullname>.ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}
 .fullname .tag{margin-left:2px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
 h1 .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 .qblock h3{font-size:14px;margin:14px 0 4px;color:var(--fg)}
 table.resource-facts th{text-align:left;padding-right:14px;color:var(--muted);font-weight:600}table.resource-facts td.missing{color:#aa3333}table.resource-facts code{word-break:break-all}
 table.status-table{display:table;width:100%}table.status-table td{white-space:normal}
-tr.st-good td{background:#eaf6ef}tr.st-bad td{background:#fbeceb}tr.st-mid td{background:#fdf5e6}
+tr.st-good td:first-child{background:linear-gradient(#2e9e5b,#2e9e5b) left/4px 100% no-repeat}tr.st-bad td:first-child{background:linear-gradient(#5f2120,#5f2120) left/4px 100% no-repeat}tr.st-mid td:first-child{background:linear-gradient(#e0a030,#e0a030) left/4px 100% no-repeat}tr[class^=st-] td:first-child{padding-left:14px}
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
 .pill{display:inline-block;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:10px;padding:0 8px;color:var(--muted);vertical-align:middle}
 .s-supported,.s-done,.s-answered,.s-current,.s-active{border-color:var(--ok);color:var(--ok)}
@@ -96,7 +96,7 @@ a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decorati
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px;vertical-align:middle;background:#c5cad3}
 .dot.stab-flux{background:#f0a020}.dot.stab-settled{background:#2e9e5b}
 .callout{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:6px;padding:4px 12px;margin:12px 0;background:var(--soft)}
-.callout-warning,.callout-caution,.callout-caveat{border-left-color:#d35400;background:#fff6ef}
+.callout-warning,.callout-caution,.callout-caveat{border-left-color:#c64f00;background:#fff6ef}
 .callout-important,.callout-danger{border-left-color:var(--warn)}.callout-tip,.callout-success{border-left-color:var(--ok)}
 .short{background:var(--soft);border-left:4px solid var(--accent);padding:8px 12px;margin:8px 0 16px;font-size:15px}
 blockquote{margin:12px 0;padding:10px 14px;background:#fff8f0;border:1px solid #f0d9bf;border-radius:6px}
@@ -191,6 +191,29 @@ def node_link(node: Node, prefix: str, text: str | None = None, note: str | None
     return f"<a class='ref' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node, note))}'>{esc(label)}</a>"
 
 
+TYPE_COLOURS = {"experiment": "#333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#a23c9e", "step": "#2a7f62",
+                "result": "#8c564b", "conclusion": "#c0392b", "decision": "#757575", "figure": "#17818a",
+                "artefact": "#966d09", "caveat": "#c64f00", "page": "#556", "resource": "#5b6b2f"}   # as .t-<type> in CSS
+
+
+# The kinds of link shown about a page (site: "About this page"; PDF: the lines under a section), in the order a
+# reader checks a claim: evidence for and against, what limits it, how it was made, what it builds on and uses it.
+ABOUT_ORDER = ["Answered by", "Answers", "Tested by", "Tests", "Supported by", "Opposed by", "Supports", "Opposes",
+               "Limited by", "Limits", "Addressed by", "Addresses",
+               "Made by", "Makes", "Shown in", "Shows", "From", "Used in", "Made from", "Used to make", "Uses",
+               "Decided in", "Applies to",
+               "Builds on", "Used by", "Supersedes", "Superseded by", "Cites", "Cited by", "Part of", "Contains"]
+
+
+def linked_kinds(members: list) -> str:
+    """'this step', 'these steps', 'these steps and results': what a link heading points to."""
+    types = list(dict.fromkeys(member.type for member in members))
+    if len(members) == 1:
+        return "this " + TYPE_LABELS.get(types[0], types[0]).lower()
+    words = [TYPE_PLURALS.get(kind, kind).lower() for kind in types]
+    return "these " + (words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1])
+
+
 def full_kind(node: Node) -> str:
     """'Question Q1': the page's kind and number in full."""
     return f"{TYPE_LABELS.get(node.type, node.type)}{' ' + node.number if node.number else ''}"
@@ -207,7 +230,8 @@ BAD_STATUSES = {"not_supported", "deprecated", "dropped", "superseded"}
 
 
 def status_row_class(node: Node) -> str:
-    """Row tint for tables of pages: green supported/settled, red rejected, amber open or exploratory."""
+    """Status bar on the left of a table row: green supported/settled, amber open or exploratory, dark red rejected
+    or deprecated (darker than the conclusion red, so a conclusion is not read as rejected)."""
     status = str(node.status or "")
     return "st-good" if status in GOOD_STATUSES else "st-bad" if status in BAD_STATUSES else "st-mid" if status else ""
 
@@ -256,31 +280,43 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                             f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
     if here:
         segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
-    # Map and Relations always hold their place, so the menu does not shift between pages: they open the current
-    # experiment's, the only experiment's on a site with one, and are greyed out otherwise.
+    # Three entries: Map, History, PDF (Help is the kea logo). Each of the first two is a group whose own pages
+    # unfold next to it in the bar while the reader is on one of them (TOPBAR_JS marks the current link):
+    #   Map: Relations, Objects (lists of all pages by type; under it Data and Code)
+    #   History: what changed per session (the group's own page), Review cycles, Plan, Comments
+    # Map, Relations and Objects open the current experiment's pages, the only experiment's on a site with one.
     experiments = list(tree.projects) if tree else []
     target = project if project and tree and project in tree.projects else (experiments[0] if len(experiments) == 1
                                                                             else None)
-    for label, file in (("Map", "map.html"), ("Relations", "relations.html")):
-        right.append(f"<a href='{prefix}{target}/{file}'>{label}</a>" if target else
-                     f"<span class='off' title='Open an experiment first: each has its own {label.lower()}'>{label}</span>")
     from kea.docsite import mode
-    if mode.MODE == "public":
-        right += ([f"<a href='{prefix}changes/index.html'>What changed</a>"] if mode.WITH_CHANGELOG else []) + [
-            f"<a href='{prefix}data.html'>Data</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
-    else:
-        right += [f"<a href='{prefix}plan.html'>Plan</a>", f"<a href='{prefix}history.html'>History</a>",
-                  f"<a href='{prefix}changes/index.html'>What changed</a>", f"<a href='{prefix}data.html'>Data</a>",
-                  f"<a href='{prefix}feedback.html'>Comments</a>", f"<a href='{prefix}code/index.html'>Code</a>"]
+
+    def link(label: str, href: str | None, title: str = "") -> str:
+        return (f"<a href='{prefix}{href}'{f' title={chr(39)}{esc(title)}{chr(39)}' if title else ''}>{label}</a>" if href else
+                f"<span class='off' title='Open an experiment first: each has its own {label.lower()}'>{label}</span>")
+
+    def group(head: str, members: list[str]) -> str:
+        return f"<span class='grp'>{head}<span class='sub'>{''.join(members)}</span></span>"
+
+    objects = group(link("Objects", f"{target}/objects.html" if target else None, "Every page of the experiment, by type"),
+                    [link("Data", "data.html"), link("Code", "code/index.html")])
+    right.append(group(link("Map", f"{target}/map.html" if target else None, "The experiment as a tree"),
+                       [link("Relations", f"{target}/relations.html" if target else None, "The graph of relations"), objects]))
+    history_members = [] if mode.MODE == "public" else [
+        link("Review cycles", "history.html", "Each release with its comments, plan items and commits"),
+        link("Plan", "plan.html", "The plan of the current review cycle"),
+        link("Comments", "feedback.html", "All comments on the site")]
+    if mode.WITH_CHANGELOG or history_members:
+        head = (link("History", "changes/index.html", "What changed, per working session") if mode.WITH_CHANGELOG
+                else link("History", "history.html"))
+        right.append(group(head, history_members if mode.WITH_CHANGELOG else history_members[1:]))
     if PDF:
         right.append(f"<a href='{prefix}{esc(PDF['file'])}' title='All pages as one PDF: version "
                      f"{esc(PDF['version'])}, commit {esc(PDF['commit'])}, made {esc(PDF['built'])}'>PDF</a>")
-    right.append(f"<a href='{prefix}help.html'>Help</a>")
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
             f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>"
             f"<a class='kea-mark' href='{prefix}help.html' title='Help: how to read this site, and about Kea'>"
-            f"<img src='{prefix}_assets/kea-icon-64.png' alt='Kea' width='22' height='22'></a>"
+            f"<img src='{prefix}_assets/kea-badge-64.png' alt='Kea' width='24' height='24'></a>"
             f"</nav><script>{TOPBAR_JS}</script>")
 
 
@@ -297,6 +333,9 @@ var links=nav.querySelector('.links');var step=0;
 while(step<STEPS.length&&(cramped(step)||(step===0&&links.scrollWidth>links.clientWidth+1))){
 nav.classList.add(STEPS[step]);if(step===0){button.hidden=false;}step++;}}
 button.addEventListener('click',function(){nav.classList.toggle('open');});
+var here=location.href.split('#')[0].split('?')[0];
+nav.querySelectorAll('.links a').forEach(function(a){if(a.href.split('#')[0]===here){a.classList.add('cur');
+for(var g=a.parentElement;g&&g!==nav;g=g.parentElement){if(g.classList.contains('grp'))g.classList.add('open');}}});
 window.addEventListener('resize',fit);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();}
 window.keaFitTopbar=fit;})();"""
 
@@ -313,10 +352,15 @@ def page(title: str, body: str, prefix: str, project: str | None = None, tree: T
          node: Node | None = None, here: str | None = None, wide: bool = False) -> str:
     """A whole HTML page. ``wide``: a wider column for tables and grids (history, commit diffs)."""
     main = "<main class='wide'>" if wide else "<main>"
+    # a page of the graph gets a fat bar in its type's colour along the left edge, with the kind written in it
+    kind_label = full_kind(node) if node is not None else ""
+    kindbar = (f"<div class='kindbar t-{esc(node.type)}' aria-hidden='true'>{icons.svg(node.type)}<span>{esc(kind_label)}</span></div>"
+               if node is not None else "")
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{esc(title)}</title>"
-            f"<link rel='icon' href='{prefix}_assets/favicon.ico'>"
-            f"<style>{CSS}</style></head><body>{topbar(prefix, project, tree, node, here)}{main}{body}</main></body></html>")
+            f"<link rel='icon' href='{prefix}_assets/kea-badge.ico'>"
+            f"<style>{CSS}</style></head><body{' class=has-kindbar' if kindbar else ''}>{kindbar}"
+            f"{topbar(prefix, project, tree, node, here)}{main}{body}</main></body></html>")
 
 
 class LinkContext:

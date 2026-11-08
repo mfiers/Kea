@@ -77,3 +77,23 @@ def test_kea_tags_lists_manuscript_marks(tmp_path, capsys):
     assert "explain" not in output
     assert feedback_cli.main(["--events", str(events), "show", store.threads(events)[1].thread_id]) == 0
     assert "TAG explain [task]" in capsys.readouterr().out
+
+
+def test_verdicts_only_on_whole_pages_and_untagging_withdraws(tmp_path):
+    site = tmp_path / "site"
+    (site / "_feedback").mkdir(parents=True)
+    (site / "index.html").write_text("<main>hi</main>")
+    (site / "_feedback" / "tags.json").write_text(json.dumps(tags.vocabulary({})))
+    events = tmp_path / "events.jsonl"
+    client = TestClient(server.make_app(site, events, "pw-for-tests", tmp_path / "cycle.jsonl"))
+    client.post("/login", data={"password": "pw-for-tests", "name": "ann", "next": "/"}, follow_redirects=False)
+    refused = client.post("/api/threads", json={"page": "p:a", "quote": "x", "tags": ["confirm"]})
+    assert refused.status_code == 400 and "whole page" in refused.json()["error"]
+    confirmed = client.post("/api/threads", json={"page": "p:a", "tags": ["confirm"]}).json()["thread"]
+    assert confirmed["status"] == "open"               # a definitive request for the next plan, not a mark
+    rejection = client.post("/api/threads", json={"page": "p:b", "tags": ["reject"], "text": "duplicate"}).json()["thread"]
+    assert rejection["status"] == "open"
+    withdrawn = client.post(f"/api/threads/{confirmed['thread_id']}/tags", json={"tags": []}).json()["thread"]
+    assert withdrawn["status"] == "resolved" and withdrawn["tags"] == []
+    kept = client.post(f"/api/threads/{rejection['thread_id']}/tags", json={"tags": []}).json()["thread"]
+    assert kept["status"] == "open"                    # it has text: still a comment to answer

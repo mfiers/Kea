@@ -2,54 +2,44 @@
 id: s-tags
 type: step
 title: "Tags on text fragments and whole pages"
-short: "Readers can tag selected text or a whole page: task tags (challenge, needs source, explain, expand, shorten, remove) ask for work in the next cycle; manuscript tags (introduction, methods, results …) mark what goes where in a paper."
+short: "One-click tags on selected text or a whole page: suggestions for the next run (explain, expand, delete …), the reader's verdict on a page (confirm, reject) and the manuscript section a passage belongs in."
 parent: q-order
 status: in_progress
 order: 14
 ---
 ## Proposal (Mark Fiers, 7 November 2026)
 
-Before Kea writes papers ([[s-paper-compiler]]), readers need to tag text as well as comment on it: select text,
-press a button, choose tags. The same must work for whole pages. A few tags are predefined; free tags are worth
-considering. The set must be easy to extend, each tag with its own assignment for the agent.
+Before Kea writes papers ([[s-paper-compiler]]), readers need to tag text as well as comment on it: select text, press a button, choose tags. The same must work for whole pages. A few tags are predefined; free tags are worth considering. The set must be easy to extend, each tag with its own assignment for the agent.
 
-- doubt: picked up in the next iteration and re-assessed critically by a second, adversarial agent that discusses
-  with the main line whether the text is correct and what support it needs ([[s-adversarial-reviewer]]);
+- doubt: picked up in the next iteration and re-assessed critically by a second, adversarial agent that discusses with the main line whether the text is correct and what support it needs ([[s-adversarial-reviewer]]);
 - remove, explain, expand;
 - for the manuscript: not in manuscript, introduction, methods, results, discussion, conclusions.
 
-## As built (7 November 2026, not released yet)
+## Second round (Mark Fiers, 8 November 2026)
 
-- Selecting text shows **Comment** and **Tag**. The comment form also has the tag chips, so one note can carry
-  both, and the whole-page form at the bottom of the panel can tag the page.
-- A tag is stored on a comment thread, so it uses the same anchoring, history, hub sync and cycle as a comment.
-  Tags of a thread can be edited later.
-- **Task tags** make the thread an open item for the next cycle; `kea show` prints the tag's instruction for the
-  agent.
-- **Manuscript tags** ask for no work: the thread gets the state *marked*, is not counted as open, never enters a
-  plan, and can be set even while the site is frozen for review. `kea tags` lists the marked fragments per section
-  with their source file and line numbers; that list is the input of the manuscript.
-- The vocabulary is in `src/kea/feedback/tags.py`; a project adds or changes tags under `tags:` in kea.yaml (name,
-  group, task, label, help, instruction). Free tags are on by default (`free_tags: false` turns them off); a free
-  tag counts as a task without an instruction.
-- **Hub:** a hub only accepts tags once it runs this version of Kea.
+Tagging took too many clicks. The tags should be there at once when text is selected, next to Comment and Edit. Editing should work on a selected passage, not only on whole pages and sections, and on the front page too. Three groups: suggestions for the next run (expand, delete, explain …); the reader's confirmation of the object itself (confirmed, remove), probably for whole pages only; and a separate choice of manuscript section.
 
-## Choices made (Claude, 7 November 2026)
+## As built (8 November 2026, not released yet)
 
-- **"challenge" instead of "doubt".** The tag names what the agent does with the text, as the others do (explain,
-  expand, remove). "Doubt" describes the reader; "deep research" describes a search, not a test.
-- **Two tags added: "needs source" and "shorten".** "Needs source" differs from "challenge": the claim may be
-  right, but the page does not show where it comes from (CLAUDE.md requires a source for every number).
-  "Shorten" is the counterpart of "expand".
-- **"supplement" added to the manuscript tags,** since much of a Kea project ends up in supplementary material.
-- **Not added:** "figure" (figures already are typed pages) and "abstract" (written from the conclusions, not from
-  fragments). Either can be added in kea.yaml.
+- **Selected text** opens a light popup next to the selection, never over it (below, or above when there is no room): *Comment* and *Edit* (suggest an edit of just the paragraphs that hold the selection) on top, then two labelled groups of one-click tags, *Next run* (explain, expand, shorten, delete, challenge, needs source) and *Manuscript* (introduction … not in manuscript). One click saves the tag; a note at the bottom says so and offers *Undo*. Esc closes the popup.
+- **Page buttons** (8 November, third round): a column of pill buttons at the bottom right, folded open and shut by a small kea head (remembered across the site): *Comment* (with the count of open comments), *Edit*, then *Confirm* and *Reject*, then *Next run ▸* and *Manuscript ▸*, each opening a small popup of chips. What was chosen also shows as pills next to the title.
+- **Confirm and Reject are definitive page verdicts** that go into the next plan; the server refuses them on selected text. A pending verdict stays highlighted until the plan is implemented; clicking it again takes it back. After Confirm, the agent writes `confirmed: {by, date, version}` into the page's front matter, and the button stays on (green) for as long as that field is there; clicking it then asks to withdraw the confirmation, again through the next plan. After Reject, the page is gone: results, conclusions and figures are deprecated with the reason, other pages deleted, relations fixed.
+- **Taking tags off:** click an active chip again, or × on a tag in the comment panel; a thread of tags only is withdrawn when its last tag goes.
+- **The comment panel is simpler:** no Suggest-an-edit button, no link to all comments, no help text, no tag picker in the comment form (tags are set with the buttons).
+- **The front page** can be edited: its summary comes from `doc/_summary.md`, or from the only experiment's home page.
+- Task tags make an open item for the next cycle, and `kea show` prints the tag's instruction for the agent. Manuscript marks are never counted as open, never enter a plan, and can be set while the site is frozen. `kea tags` lists the marked fragments per section with source file and line numbers.
+- The vocabulary is in `src/kea/feedback/tags.py` (each tag: group, task, scope, label, help, instruction); a project adds or changes tags under `tags:` in kea.yaml, and `free_tags: false` turns off readers' own tags.
+- **Hub:** a hub accepts tags only when it runs this version of Kea.
+
+## Choices made (Claude)
+
+- **"challenge" instead of "doubt"** (7 November): the tag names what the agent does with the text, like explain or expand.
+- **"needs source", "shorten" and "supplement" added** (7 November); "remove" for text is now **"delete"**, so that it is not confused with the page verdict *remove* (8 November).
+- **Passage edits take whole paragraphs.** The page shows rendered text and the source is Markdown, so a selection cannot be mapped to exact characters; the editor opens the blank-line paragraphs (or front-matter lines, for the summary) whose words match the start and end of the selection. When nothing matches, the whole page opens.
+- **Verdicts and page tags are not offered on generated pages** (front page, map, history), which are not objects of the graph; there the page popup has only Comment and Edit.
 
 ## Open
 
-- The challenge assignment asks the agent to run a separate reviewer and summarise the exchange in its reply. The
-  summary would be better kept as a node of its own (a *discussion* or *footnote* type, linked with `limits` or
-  `supports` to the text it challenged), so that the reasoning survives after the thread is resolved. That belongs
-  to [[s-adversarial-reviewer]].
-- Tags on a fragment that is later rewritten end up under "comments on earlier wording", like comments. For
-  manuscript marks the agent should move them to the new wording; this is not automatic.
+- The challenge assignment asks the agent to run a separate reviewer and summarise the exchange in its reply. The summary would be better kept as a node of its own (a *discussion* or *footnote* type, linked with `limits` or `supports` to the text it challenged), so that the reasoning survives after the thread is resolved. That belongs to [[s-adversarial-reviewer]].
+- A confirmation is tied to the page's version but not shown on the relations map; a map layer "confirmed / not confirmed" would show what the owner has checked.
+- Tags on a fragment that is later rewritten end up under "comments on earlier wording", like comments. For manuscript marks the agent should move them to the new wording; this is not automatic.

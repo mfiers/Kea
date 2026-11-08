@@ -7,7 +7,4 @@ parent: q-order
 status: planned
 order: 10
 ---
-Lean cannot prove a result is true; that is empirical. It could prove that a conclusion follows from its
-premises, results and stated assumptions. A lighter first step: formalise only the statistical layer, for example
-"this test assumes independence and a later step breaks it". To keep Kea small, this would be an optional plugin, not part
-of the core.
+Lean cannot prove a result is true; that is empirical. It could prove that a conclusion follows from its premises, results and stated assumptions. A lighter first step: formalise only the statistical layer, for example "this test assumes independence and a later step breaks it". To keep Kea small, this would be an optional plugin, not part of the core.

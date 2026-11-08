@@ -9,9 +9,6 @@ order: 1
 relations:
   tests: [h-schema-gate]
 ---
-**Transition rules in `_schema.yaml`.** For example: a result must link to a step that tests a hypothesis; a
-conclusion needs at least one supporting result and must address every open caveat. `kea check` becomes a gate, so
-the agent cannot commit or release while the graph breaks a rule. Projects can loosen or tighten the rules.
+**Transition rules in `_schema.yaml`.** For example: a result must link to a step that tests a hypothesis; a conclusion needs at least one supporting result and must address every open caveat. `kea check` becomes a gate, so the agent cannot commit or release while the graph breaks a rule. Projects can loosen or tighten the rules.
 
-**`kea next`.** Ranks open work, such as the untested hypothesis whose resolution would change the most
-conclusions.
+**`kea next`.** Ranks open work, such as the untested hypothesis whose resolution would change the most conclusions.

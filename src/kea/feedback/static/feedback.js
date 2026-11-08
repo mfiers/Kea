@@ -35,7 +35,7 @@
   let threads = [];
   let annotator = null;
   let container = null;
-  let panel, listEl, orphanEl, toggleBtn, selectBtn, nameBox;      // selectBtn: the bar with "Comment" and "Tag"
+  let panel, listEl, orphanEl, toggleBtn, selectBtn, nameBox, dockEl;      // selectBtn: the bar with "Comment" and "Tag"
   let pendingSelection = null;
 
   // ---------- small helpers ----------
@@ -167,52 +167,340 @@
     const info = tagInfo(name);
     return el("span", { class: "fb-tag fb-tag-" + info.group, title: info.help || "" }, info.label || name);
   }
-  /* Chips per group; returns {node, value(), reset()}. Free tags (when the site allows them) via a text box. */
-  function tagPicker(selected) {
-    const chosen = new Set(selected);
-    const node = el("div", { class: "fb-picker" });
-    function draw() {
-      node.replaceChildren();
-      const names = new Set(vocab.tags.map(tag => tag.name));
-      const own = [...chosen].filter(name => !names.has(name));
-      const groups = {};
-      for (const tag of vocab.tags) (groups[tag.group] = groups[tag.group] || []).push(tag);
-      if (own.length) groups.own = (groups.own || []).concat(own.map(tagInfo));
-      for (const [group, members] of Object.entries(groups)) {
-        node.append(el("div", { class: "fb-picker-group" }, (vocab.groups || {})[group] || group));
-        node.append(el("div", { class: "fb-picker-row" }, ...members.map(tag => el("button", {
-          type: "button", class: "fb-chip fb-tag-" + tag.group + (chosen.has(tag.name) ? " fb-on" : ""),
-          title: tag.help || "", "aria-pressed": String(chosen.has(tag.name)),
-          onclick: () => { chosen.has(tag.name) ? chosen.delete(tag.name) : chosen.add(tag.name); draw(); }
-        }, tag.label || tag.name))));
-      }
-      if (vocab.free_tags) {
-        const input = el("input", { class: "fb-free", placeholder: "own tag + Enter", maxlength: "32" });
-        input.addEventListener("keydown", event => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          const name = input.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-          if (/^[a-z][a-z0-9-]{0,31}$/.test(name)) { chosen.add(name); draw(); node.querySelector(".fb-free").focus(); }
-        });
-        node.append(input);
-      }
-    }
-    draw();
-    return { node, value: () => [...chosen], reset: () => { chosen.clear(); draw(); } };
-  }
   function tagLine(thread) {
-    const line = el("div", { class: "fb-tags" }, ...(thread.tags || []).map(tagPill));
-    const edit = el("button", { class: "fb-secondary fb-tag-edit", type: "button",
-      title: "Add or remove tags" }, (thread.tags || []).length ? "edit tags" : "add tags");
-    edit.addEventListener("click", () => {
-      const picker = tagPicker(thread.tags || []);
-      const box = el("div", { class: "fb-tag-editor" }, picker.node, el("div", { class: "fb-actions" },
-        el("button", { onclick: () => send(() => api("POST", API + "/" + thread.thread_id + "/tags", { tags: picker.value() })) }, "Save tags"),
-        el("button", { class: "fb-secondary", onclick: () => box.remove() }, "Cancel")));
-      line.after(box);
-    });
-    line.append(edit);
+    const line = el("div", { class: "fb-tags" }, ...(thread.tags || []).map(name => {
+      const pill = tagPill(name);
+      pill.append(el("button", { class: "fb-x", type: "button", title: "Remove this tag", onclick: () =>
+        send(() => api("POST", API + "/" + thread.thread_id + "/tags", { tags: thread.tags.filter(other => other !== name) })) }, "×"));
+      return pill;
+    }));
+
     return line;
+  }
+
+
+  // ---------- one-click tags: the selection bar, the page strip, a toast with Undo ----------
+  function tagsOf(group, scope) {
+    return vocab.tags.filter(tag => tag.group === group && (scope === "page" || (tag.scope || "any") !== "page"));
+  }
+  function toast(message, undo) {
+    document.querySelectorAll(".fb-toast").forEach(node => node.remove());
+    const box = el("div", { class: "fb-toast " + NOT }, message);
+    if (undo) box.append(" ", el("button", { onclick: async () => { box.remove(); await undo(); } }, "Undo"));
+    document.body.append(box);
+    setTimeout(() => box.remove(), 7000);
+  }
+  async function tagThread(selection, names, text) {
+    const created = await sendQuiet(() => api("POST", API, { page: PAGE, page_title: TITLE, page_commit: COMMIT,
+      text: text || "", tags: names, ...(selection || {}) }));
+    return created && created.thread;
+  }
+  async function retag(threadId, names) {
+    return sendQuiet(() => api("POST", API + "/" + threadId + "/tags", { tags: names }));
+  }
+  /* like send(), without opening the panel: for one-click tags */
+  async function sendQuiet(action) {
+    if (!getName()) {
+      const name = (prompt("Your name (shown with your comments and tags):") || "").trim();
+      if (!name) return null;
+      setName(name);
+    }
+    try { const result = await action(); await reload(); return result; }
+    catch (error) { toast("Could not save: " + error.message); return null; }
+  }
+  function selectionBar(startForm) {
+    // a light popup next to the selection: Comment and Edit on top, then one-click tags in two labelled groups
+    const bar = el("div", { class: "fb-select-bar " + NOT, role: "dialog", "aria-label": "Comment on, edit or tag the selected text",
+      onmousedown: event => { if (event.target.tagName !== "BUTTON") event.preventDefault(); } });
+    bar.append(el("span", { class: "fb-pop-arrow" }),
+      el("div", { class: "fb-sel-actions" },
+        el("button", { class: "fb-sel-btn", title: "Ask about this text or say what is wrong (opens the comment panel)",
+          onmousedown: event => event.preventDefault(), onclick: () => startForm(false) }, "💬 Comment"),
+        el("button", { class: "fb-sel-btn fb-sel-edit", title: "Suggest new wording for the paragraph(s) with this text",
+          onmousedown: event => event.preventDefault(), onclick: () => {
+            bar.hidden = true;
+            if (pendingSelection) openEditor({ selection: pendingSelection.quote });
+          } }, "✎ Edit")),
+      el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Next run"),
+        el("div", { class: "fb-sel-row fb-sel-next" })),
+      el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Manuscript"),
+        el("div", { class: "fb-sel-row fb-ms-row" })),
+      el("div", { class: "fb-sel-hint" }, "One click saves a tag · Esc closes"));
+    bar.hidden = true;
+    document.addEventListener("keydown", event => { if (event.key === "Escape") bar.hidden = true; });
+    return bar;
+  }
+  /* Below the selection, or above it when there is no room below; never over the selected lines. The arrow points
+     at the end of the selection (below) or its start (above). */
+  function placePopup(range) {
+    const rects = [...range.getClientRects()].filter(rect => rect.width > 0);
+    const box = range.getBoundingClientRect();
+    const anchorBelow = rects.length ? rects[rects.length - 1] : box;
+    const anchorAbove = rects.length ? rects[0] : box;
+    selectBtn.hidden = false;
+    const width = selectBtn.offsetWidth, height = selectBtn.offsetHeight, gap = 10;
+    const viewport = document.documentElement.clientWidth, viewHeight = window.innerHeight;
+    const below = box.bottom + gap + height <= viewHeight || box.top - gap - height < 0;
+    const anchor = below ? anchorBelow : anchorAbove;
+    const center = anchor.left + anchor.width / 2;
+    const left = Math.max(8, Math.min(viewport - width - 8, center - width / 2));
+    selectBtn.style.left = (window.scrollX + left) + "px";
+    selectBtn.style.top = (window.scrollY + (below ? box.bottom + gap : box.top - gap - height)) + "px";
+    selectBtn.classList.toggle("fb-pop-above", !below);
+    selectBtn.querySelector(".fb-pop-arrow").style.left = Math.max(14, Math.min(width - 14, center - left)) + "px";
+  }
+  function fillSelectionBar() {
+    const quick = async name => {
+      selectBtn.hidden = true;
+      const selection = pendingSelection;
+      window.getSelection().removeAllRanges();
+      const thread = await tagThread(selection, [name]);
+      if (thread) toast("Tagged “" + tagInfo(name).label + "”.", () => retag(thread.thread_id, []));
+    };
+    const chip = tag => el("button", { class: "fb-qchip fb-tag-" + tag.group, title: tag.help || "",
+      onmousedown: event => event.preventDefault(), onclick: () => quick(tag.name) }, tag.label || tag.name);
+    selectBtn.querySelector(".fb-sel-next").replaceChildren(...tagsOf("review").map(chip));
+    selectBtn.querySelector(".fb-ms-row").replaceChildren(...tagsOf("manuscript").map(chip));
+    selectBtn.dataset.filled = "1";
+  }
+  /* What readers said about the page as a whole, as read-only pills next to the title: confirmed (yellow when the page
+     changed since), removal asked, the manuscript section, open next-run tags. The controls are in the page popup. */
+  function pageLevel() {
+    return threads.filter(thread => !thread.quote && (thread.tags || []).length && thread.status !== "resolved");
+  }
+  function latestWith(name) { return pageLevel().filter(thread => thread.tags.includes(name)).slice(-1)[0]; }
+  function pageSection() {
+    const names = new Set(tagsOf("manuscript", "page").map(tag => tag.name));
+    return pageLevel().filter(thread => thread.status === "marked" && thread.tags.every(name => names.has(name))).slice(-1)[0];
+  }
+  const shortDate = iso => iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "";
+  function renderPageStrip() {
+    document.querySelectorAll(".fb-page-pill").forEach(node => node.remove());
+    const pills = container && container.querySelector(".kindrow .pills");
+    if (!pills || !PAGE.includes(":")) return;
+    const add = (cls, text, title) => pills.append(el("span", { class: "pill fb-page-pill " + cls, title: title || "" }, text));
+    if (openThread("confirm")) add("fb-pp-ok", "✓ confirm · next plan", "A reader confirmed this page; it is recorded in the next plan");
+    if (openThread("unconfirm")) add("fb-pp-stale", "confirmation withdrawn · next plan");
+    const rejected = openThread("reject");
+    if (rejected) add("fb-pp-remove", "✕ rejected · next plan", "Rejected by " + rejected.author + (rejected.text ? ": " + rejected.text : ""));
+    const section = pageSection();
+    if (section) add("fb-pp-ms", "manuscript: " + tagInfo(section.tags[0]).label, "The whole page goes in this part of the manuscript");
+    const open = [...new Set(pageLevel().filter(thread => thread.status !== "marked")
+      .flatMap(thread => thread.tags).filter(name => tagInfo(name).group === "review"))];
+    for (const name of open) add("fb-pp-next", tagInfo(name).label, "Asked for the next run");
+  }
+
+  /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
+     across the site). Comment · Edit | Confirm · Reject | Next run ▸ · Manuscript ▸. Confirm and Reject are definitive
+     requests for the next plan; they stay highlighted while pending, and Confirm stays on once the page records it. */
+  const DOCK_KEY = "kea-dock-open";
+  function dockOpen() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch (error) { return true; } }
+  function setDockOpen(open) { try { localStorage.setItem(DOCK_KEY, open ? "1" : "0"); } catch (error) { /* private window */ } }
+  function openThread(name) {
+    return pageLevel().filter(thread => thread.tags.includes(name) && ["open", "planned"].includes(thread.status)).slice(-1)[0];
+  }
+  function withdraw(thread, note) {
+    return sendQuiet(() => api("POST", API + "/" + thread.thread_id + "/status", { status: "resolved", note }));
+  }
+  const pageConfirmed = () => !!(container && container.querySelector(".node-content[data-confirmed]"));
+  function buildDock() {
+    const dock = el("div", { class: "fb-dock " + NOT });
+    const items = el("div", { class: "fb-dock-items" });
+    const pill = (cls, label, title, onclick) => el("button", { class: "fb-dpill " + cls, title, onclick }, label);
+    toggleBtn = pill("fb-d-comment", "💬 Comment", "Comments on this page", () =>
+      panel.classList.contains("fb-open") ? closePanel() : openPanel());
+    const edit = pill("fb-d-edit", "✎ Edit", "Edit the page: title, summary and text (saved as a suggestion)", () => openEditor(null));
+    edit.hidden = true;
+    items.append(toggleBtn, edit);
+    if (PAGE.includes(":")) {
+      const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
+      const reject = pill("fb-d-reject", "✕ Reject", "", () => {});
+      const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
+      const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
+      items.append(el("span", { class: "fb-dock-gap" }), confirm, reject, el("span", { class: "fb-dock-gap" }), next, manuscript);
+    }
+    const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
+      onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open)); setDockOpen(open); dockPop.hidden = true; } },
+      el("img", { src: BASE + "_assets/kea-badge-96.png", alt: "Kea", width: "46", height: "46" }));
+    items.hidden = !dockOpen();
+    head.setAttribute("aria-expanded", String(!items.hidden));
+    dock.append(head, items);                  // the head on top of the column; folded, it drops to the corner
+    return dock;
+  }
+  /* Refresh the dock's states from the threads (after every reload). */
+  function renderDock() {
+    if (!dockEl) return;
+    const edit = dockEl.querySelector(".fb-d-edit");
+    if (edit) edit.hidden = !editable;
+    const confirm = dockEl.querySelector(".fb-d-confirm"), reject = dockEl.querySelector(".fb-d-reject");
+    if (!confirm) return;
+    const asked = openThread("confirm"), unasked = openThread("unconfirm"), rejected = openThread("reject");
+    const done = pageConfirmed();
+    confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked ? " fb-pending" : unasked ? " fb-pending-off" : "");
+    confirm.textContent = asked ? "✓ Confirm · next plan" : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ Confirm";
+    confirm.title = asked ? "Confirmation goes into the next plan; click to take it back"
+      : unasked ? "The confirmation is withdrawn in the next plan; click to keep it"
+      : done ? "This page is confirmed; click to withdraw the confirmation (in the next plan)"
+      : "Keep this page as it is; the confirmation goes into the next plan and is recorded on the page";
+    confirm.onclick = async () => {
+      if (asked) return withdraw(asked, "confirmation taken back");
+      if (unasked) return withdraw(unasked, "withdrawal taken back");
+      if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
+      if (rejected) await withdraw(rejected, "rejection replaced by a confirmation");
+      await tagThread(null, ["confirm"]);
+    };
+    reject.className = "fb-dpill fb-d-reject" + (rejected ? " fb-pending" : "");
+    reject.textContent = rejected ? "✕ Reject · next plan" : "✕ Reject";
+    reject.title = rejected ? "This page is removed in the next plan; click to take the rejection back"
+      : "Remove this page: it goes into the next plan and the page is removed there";
+    reject.onclick = async () => {
+      if (rejected) return withdraw(rejected, "rejection taken back");
+      const why = prompt("Reject this page? It is removed in the next plan. Why (optional):");
+      if (why === null) return;
+      if (asked) await withdraw(asked, "confirmation replaced by a rejection");
+      await tagThread(null, ["reject"], why.trim());
+    };
+    const nextCount = new Set(pageLevel().filter(thread => thread.status !== "marked").flatMap(thread => thread.tags)
+      .filter(name => tagInfo(name).group === "review")).size;
+    dockEl.querySelector(".fb-d-next").textContent = "Next run" + (nextCount ? " · " + nextCount : "") + " ▸";
+    const section = pageSection();
+    dockEl.querySelector(".fb-d-ms").textContent = "Manuscript" + (section ? ": " + tagInfo(section.tags[0]).label : "") + " ▸";
+    if (!dockPop.hidden) fillDockPop();
+  }
+  const confirm_ = text => window.confirm(text);
+  /* The popup of Next run / Manuscript chips, to the left of its pill. */
+  let dockPop = null, dockPopGroup = "", dockPopAnchor = null;
+  function toggleDockPop(anchor, group) {
+    if (!dockPop.hidden && dockPopGroup === group) { dockPop.hidden = true; return; }
+    dockPopGroup = group; dockPopAnchor = anchor;
+    fillDockPop();
+  }
+  function fillDockPop() {
+    const chip = (tag, active, onclick) => el("button", { class: "fb-qchip fb-tag-" + tag.group + (active ? " fb-on" : ""),
+      title: tag.help || "", "aria-pressed": String(!!active), onclick }, (active ? "✓ " : "") + (tag.label || tag.name));
+    let chips;
+    if (dockPopGroup === "review") {
+      const asked = new Map();
+      for (const thread of pageLevel()) if (thread.status !== "marked") for (const name of thread.tags) asked.set(name, thread);
+      chips = tagsOf("review", "page").map(tag => {
+        const thread = asked.get(tag.name);
+        return chip(tag, !!thread, () => thread ? retag(thread.thread_id, thread.tags.filter(name => name !== tag.name))
+          : tagThread(null, [tag.name]));
+      });
+    } else {
+      const section = pageSection();
+      chips = tagsOf("manuscript", "page").map(tag => {
+        const active = section && section.tags[0] === tag.name;
+        return chip(tag, active, () => section ? retag(section.thread_id, active ? [] : [tag.name]) : tagThread(null, [tag.name]));
+      });
+    }
+    dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, dockPopGroup === "review" ? "Next run · whole page" : "Manuscript · whole page"),
+      el("div", { class: "fb-sel-row" }, ...chips));
+    dockPop.hidden = false;
+    const rect = dockPopAnchor.getBoundingClientRect();
+    const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
+    dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
+    dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+  }
+
+  /* In-place edits of the title and the summary: a pencil on hover; the new text is saved as a suggested edit. */
+  function inlineEditors() {
+    const targets = [[container.querySelector(".node-content h1 .node-title"), "title"],
+                     [container.querySelector(".node-content .short"), "short"]];
+    for (const [node, key] of targets) {
+      if (!node || node.dataset.inline) continue;
+      node.dataset.inline = "1";
+      const holder = key === "title" ? node.parentElement : node;
+      holder.classList.add("fb-inline-host");
+      const button = el("button", { class: "fb-inline-pencil " + NOT, title: "Edit the " + (key === "title" ? "title" : "summary") + " here",
+        onclick: event => { event.preventDefault(); editInPlace(node, key); } });
+      button.innerHTML = PENCIL;
+      if (key === "title") node.after(button);
+      else node.append(button);
+    }
+  }
+  function editInPlace(node, key) {
+    if (node.parentElement.querySelector(".fb-inline-form")) return;
+    const field = key === "title" ? el("input", { class: "fb-inline-input fb-ed-title" })
+      : el("textarea", { class: "fb-inline-input fb-ed-short", rows: "3" });
+    field.value = node.textContent.trim();
+    const status = el("span", { class: "fb-help" });
+    const form = el("div", { class: "fb-inline-form " + NOT }, field, el("div", { class: "fb-actions" },
+      el("button", { onclick: async () => {
+        const value = field.value.replace(/\s+/g, " ").trim();
+        if (!value || value === node.textContent.trim()) { form.remove(); node.hidden = false; return; }
+        try {
+          const source = await api("GET", BASE + "api/source?page=" + encodeURIComponent(PAGE));
+          const [front, body] = splitFrontMatter(source.text);
+          const newText = "---\n" + withField(front, key, value) + "\n---\n" + body;
+          if (!getName()) { const name = (prompt("Your name (shown with your suggestion):") || "").trim(); if (!name) return; setName(name); }
+          await api("POST", BASE + "api/suggest", { page: PAGE, page_title: TITLE, new_text: newText,
+            text: "New " + (key === "title" ? "title" : "summary") + " (edited in place)." });
+          form.remove(); node.hidden = false;
+          await reload();
+          toast("Saved as a suggested edit; Claude takes it into the next plan.");
+        } catch (error) { status.textContent = error.message; }
+      } }, "Save as suggestion"),
+      el("button", { class: "fb-secondary", onclick: () => { form.remove(); node.hidden = false; } }, "Cancel"), status));
+    field.addEventListener("keydown", event => {
+      if (event.key === "Escape") { form.remove(); node.hidden = false; }
+      if (event.key === "Enter" && key === "title") { event.preventDefault(); form.querySelector("button").click(); }
+    });
+    node.hidden = true;
+    node.after(form);
+    if (key === "title") node.parentElement.after(form);
+    field.focus(); field.select();
+  }
+
+  /* The lines of the page's Markdown that hold a selected passage: whole paragraphs (blank-line blocks, code fences
+     kept whole, each front-matter line on its own), found by the first and last words of the selection. */
+  function plainOf(text) {
+    return text.replace(/\[\[([^\]|]+)(?:\|([^\]|]*))?(?:\|[^\]]*)?\]\]/g, (all, target, label) => label || target)
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/^\s*([-*+]|\d+\.)\s+/gm, "").replace(/[*_`#>|]/g, " ")
+      .replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  function selectionRange(text, quote) {
+    const lines = text.split("\n");
+    const blocks = [];
+    let i = 0;
+    if (lines[0] === "---") {
+      const close = lines.indexOf("---", 1);
+      if (close > 0) { for (let k = 1; k < close; k++) blocks.push([k, k + 1]); i = close + 1; }
+    }
+    while (i < lines.length) {
+      if (!lines[i].trim()) { i++; continue; }
+      let j = i;
+      if (/^(```|~~~)/.test(lines[i])) { j = i + 1; while (j < lines.length && !/^(```|~~~)/.test(lines[j])) j++; j++; }
+      else { while (j < lines.length && lines[j].trim() && !(j > i && /^(```|~~~)/.test(lines[j]))) j++; }
+      blocks.push([i, Math.min(j, lines.length)]);
+      i = j;
+    }
+    const plain = blocks.map(([from, to]) => plainOf(lines.slice(from, to).join("\n")));
+    const words = plainOf(quote).split(" ").filter(Boolean);
+    if (!words.length) return null;
+    const find = (probe, from) => {
+      for (let n = Math.min(6, probe.length); n >= 2; n--) {
+        const part = probe.slice(0, n).join(" ");
+        const index = plain.findIndex((block, k) => k >= from && block.includes(part));
+        if (index >= 0) return index;
+      }
+      return -1;
+    };
+    let first = find(words, 0);
+    const frontBlocks = lines[0] === "---" ? Math.max(0, lines.indexOf("---", 1) - 1) : 0;
+    if (first >= 0 && first < frontBlocks) return "front";     // title or summary: edited in their own fields
+    if (first < 0) {                             // starts in generated text (a link label): most shared words
+      let best = -1, score = 0;
+      plain.forEach((block, k) => { const hits = words.filter(word => block.includes(word)).length; if (hits > score) { score = hits; best = k; } });
+      if (best < 0 || score < Math.min(3, words.length)) return null;
+      first = best;
+    }
+    let last = first;                           // the block with the last words (else the first block only)
+    const tail = words.slice(-Math.min(6, words.length)).join(" ");
+    const tailIndex = plain.findIndex((block, k) => k >= first && block.includes(tail));
+    if (tailIndex >= 0) last = tailIndex;
+    const from = blocks[first][0], to = blocks[last][1];
+    return [lines.slice(0, from).join("\n"), lines.slice(from, to).join("\n"), lines.slice(to).join("\n")];
   }
 
   // ---------- panel ----------
@@ -272,14 +560,8 @@
     + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/>'
     + '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
   function addEditButtons() {
-    const tools = document.querySelector(".topbar .page-tools");
-    if (tools && !tools.querySelector(".fb-top-edit")) {
-      const button = el("button", { class: "fb-top-edit " + NOT, title: "Edit this page (saved as a suggestion)",
-        onclick: () => openEditor(null) });
-      button.innerHTML = PENCIL + "<span>Edit</span>";
-      tools.append(button);
-      if (window.keaFitTopbar) window.keaFitTopbar();
-    }
+    // the whole-page Edit is in the page popup ("This page"); title and summary are edited in place
+    inlineEditors();
     document.querySelectorAll("main article h2").forEach((heading, index) => {
       if (heading.querySelector(".fb-sec-edit")) return;
       const button = el("button", { class: "fb-sec-edit " + NOT, title: "Edit just this section (saved as a suggestion)",
@@ -290,57 +572,187 @@
       heading.append(holder);
     });
   }
+  // ---------- front matter: read and replace single fields (title, short) without touching the rest ----------
+  function fieldRange(front, key) {
+    // [first line, end line) of `key:` and its indented continuation lines in the front matter's lines
+    const lines = front.split("\n");
+    const start = lines.findIndex(line => line.startsWith(key + ":"));
+    if (start < 0) return null;
+    let end = start + 1;
+    while (end < lines.length && /^\s+\S/.test(lines[end])) end++;
+    return [start, end, lines];
+  }
+  function fieldValue(front, key) {
+    const found = fieldRange(front, key);
+    if (!found) return "";
+    const [start, end, lines] = found;
+    let first = lines[start].slice(key.length + 1).trim();
+    const rest = lines.slice(start + 1, end).map(line => line.trim());
+    if (/^[>|][+-]?$/.test(first)) return rest.join(first[0] === ">" ? " " : "\n");
+    const text = [first, ...rest].join(" ");
+    if (text.startsWith('"')) { try { return JSON.parse(text); } catch (error) { return text.slice(1, -1); } }
+    if (text.startsWith("'")) return text.slice(1, -1).replace(/''/g, "'");
+    return text;
+  }
+  function yamlValue(value) {
+    const plain = value && !/^[\s'"{}\[\]>|*&!%@`#?,:-]/.test(value) && !/(: | #|\s$)/.test(value) && !value.includes("\n");
+    return plain ? value : JSON.stringify(value);      // JSON strings are valid YAML double-quoted scalars
+  }
+  function withField(front, key, value) {
+    if (fieldValue(front, key) === value) return front;   // unchanged: keep the original lines (no diff noise)
+    const found = fieldRange(front, key);
+    const line = key + ": " + yamlValue(value);
+    if (!found) return front + "\n" + line;
+    const [start, end, lines] = found;
+    return [...lines.slice(0, start), line, ...lines.slice(end)].join("\n");
+  }
+
+  // ---------- minimal Markdown highlighting: a coloured copy behind a transparent textarea ----------
+  function escapeHtml(text) { return text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]); }
+  function highlightInline(line) {
+    return escapeHtml(line)
+      .replace(/(`[^`]+`)/g, "<span class='hl-code'>$1</span>")
+      .replace(/(\[\[[^\]]+\]\])/g, "<span class='hl-link'>$1</span>")
+      .replace(/(\[[^\]]+\]\([^)]+\))/g, "<span class='hl-link'>$1</span>")
+      .replace(/(\*\*[^*]+\*\*|__[^_]+__)/g, "<b>$1</b>")
+      .replace(/(^|[^*\w])(\*[^*\s][^*]*\*|_[^_\s][^_]*_)(?=[^*\w]|$)/g, "$1<i>$2</i>");
+  }
+  function highlightMarkdown(text) {
+    const lines = text.split("\n");
+    let inFront = lines[0] === "---", fence = false;
+    return lines.map((line, index) => {
+      if (inFront) {
+        if (index > 0 && line === "---") { inFront = false; return "<span class='hl-meta'>---</span>"; }
+        if (index === 0) return "<span class='hl-meta'>---</span>";
+        const match = line.match(/^(\s*[\w-]+:)(.*)$/);
+        return match ? "<span class='hl-key'>" + escapeHtml(match[1]) + "</span>" + escapeHtml(match[2]) : escapeHtml(line);
+      }
+      if (/^(```|~~~)/.test(line)) { fence = !fence; return "<span class='hl-code'>" + escapeHtml(line) + "</span>"; }
+      if (fence) return "<span class='hl-code'>" + escapeHtml(line) + "</span>";
+      if (/^#{1,6}\s/.test(line)) return "<span class='hl-head'>" + escapeHtml(line) + "</span>";
+      const list = line.match(/^(\s*(?:[-*+]|\d+\.)\s)(.*)$/);
+      if (list) return "<span class='hl-mark'>" + escapeHtml(list[1]) + "</span>" + highlightInline(list[2]);
+      if (/^\s*>/.test(line)) return "<span class='hl-quote'>" + highlightInline(line) + "</span>";
+      return highlightInline(line);
+    }).join("\n") + "\n";
+  }
+  function markdownArea(value, rows) {
+    const back = el("pre", { class: "fb-hl-back", "aria-hidden": "true" });
+    const area = el("textarea", { class: "fb-hl-text", spellcheck: "true" });
+    if (rows) area.rows = rows;
+    const box = el("div", { class: "fb-hl" + (rows ? " fb-hl-small" : "") }, back, area);
+    const paint = () => { back.innerHTML = highlightMarkdown(area.value); back.scrollTop = area.scrollTop; back.scrollLeft = area.scrollLeft; };
+    area.addEventListener("input", paint);
+    area.addEventListener("scroll", () => { back.scrollTop = area.scrollTop; back.scrollLeft = area.scrollLeft; });
+    area.value = value;
+    paint();
+    return { box, area, paint, get value() { return area.value; }, set value(text) { area.value = text; paint(); } };
+  }
+
+  /* The editor. Whole page: "Text" mode (title, summary and the body; the type, id, parent, status and relations stay
+     as they are) or "Raw Markdown" (the whole file with its front matter). A section or passage: its Markdown only. */
   async function openEditor(section) {
     let source;
     try { source = await api("GET", BASE + "api/source?page=" + encodeURIComponent(PAGE)); }
     catch (error) { alert(error.message); return; }
     await loadMarked().catch(() => null);
-    let before = "", after = "", original = source.text;
+    let before = "", after = "", original = source.text, focusField = null;
     if (section) {
-      const parts = sectionRange(source.text, section.index);
-      if (!parts) { alert("This section could not be found in the page's Markdown; the whole page opens instead."); section = null; }
+      const parts = section.selection !== undefined ? selectionRange(source.text, section.selection)
+        : sectionRange(source.text, section.index);
+      if (parts === "front") { section = null; focusField = "short"; }    // the selection is the title or summary
+      else if (!parts) { alert("This " + (section.selection !== undefined ? "passage" : "section") + " could not be found in the page's Markdown; the whole page opens instead."); section = null; }
       else { [before, original, after] = parts; }
     }
-    const whole = value => section ? [before, value, after].filter((part, i) => i === 1 || part !== "").join("\n") : value;
-    const area = el("textarea", { class: "fb-editor-text", spellcheck: "true" });
-    area.value = original;
+    const wholePage = !section;
+    const [frontStart, bodyStart] = splitFrontMatter(source.text);
+    let front = frontStart;
+    let mode = "text";
+    const titleBox = el("input", { class: "fb-ed-title", placeholder: "Title" });
+    const shortBox = el("textarea", { class: "fb-ed-short", rows: "3", placeholder: "Summary: one or two sentences for the reader" });
+    titleBox.value = fieldValue(front, "title");
+    shortBox.value = fieldValue(front, "short");
+    const body = markdownArea(wholePage ? bodyStart.replace(/^\n/, "") : original);
+    const raw = markdownArea(source.text);
+    const bodyLead = wholePage && /^\n/.test(bodyStart) ? "\n" : "";
+    function current() {
+      if (!wholePage) return [before, body.value, after].filter((part, i) => i === 1 || part !== "").join("\n");
+      if (mode === "raw") return raw.value;
+      const head = withField(withField(front, "title", titleBox.value.trim()), "short", shortBox.value.replace(/\s+/g, " ").trim());
+      return front || frontStart ? "---\n" + head + "\n---\n" + bodyLead + body.value : body.value;
+    }
     const preview = el("div", { class: "fb-editor-preview" });
     const why = el("textarea", { rows: "2", placeholder: "Why this change? (optional)" });
     const status = el("span", { class: "fb-help" });
     function refresh() {
-      const [front, body] = splitFrontMatter(area.value);
-      const linked = body.replace(/\[\[([^\]|]+)(?:\|([^\]|]*))?(?:\|[^\]]*)?\]\]/g, (all, target, text) => `[${text || target}](#)`);
-      preview.innerHTML = (front ? "<pre class='fb-front'>" + front.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]) + "</pre>" : "")
-        + (window.marked ? window.marked.parse(linked) : "<pre>" + linked.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]) + "</pre>");
-      status.textContent = area.value === original ? "No changes yet." : "Changed (not saved).";
+      const text = current();
+      const [frontNow, bodyNow] = wholePage ? splitFrontMatter(text) : ["", body.value];
+      const linked = bodyNow.replace(/\[\[([^\]|]+)(?:\|([^\]|]*))?(?:\|[^\]]*)?\]\]/g, (all, target, label) => `[${label || target}](#)`);
+      const head = wholePage ? "<h1>" + escapeHtml(fieldValue(frontNow, "title")) + "</h1>"
+        + "<blockquote class='fb-ed-sum'>" + escapeHtml(fieldValue(frontNow, "short")) + "</blockquote>" : "";
+      preview.innerHTML = head + (window.marked ? window.marked.parse(linked) : "<pre>" + escapeHtml(linked) + "</pre>");
+      status.textContent = text === source.text || (!wholePage && body.value === original) ? "No changes yet." : "Changed (not saved).";
     }
     let timer = null;
-    area.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(refresh, 250); });
+    const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
+    for (const field of [titleBox, shortBox, body.area, raw.area]) field.addEventListener("input", later);
+    const textPane = el("div", { class: "fb-ed-fields" },
+      wholePage ? el("label", { class: "fb-ed-label" }, "Title") : null, wholePage ? titleBox : null,
+      wholePage ? el("label", { class: "fb-ed-label" }, "Summary") : null, wholePage ? shortBox : null,
+      wholePage ? el("label", { class: "fb-ed-label" }, "Text") : null, body.box);
+    const rawPane = el("div", { class: "fb-ed-fields", hidden: "hidden" },
+      el("p", { class: "fb-help" }, "The whole file. Change the fields between the --- lines only when you know what they do: the type, id and relations hold the page in the graph."),
+      raw.box);
+    function setMode(next) {
+      if (next === mode) return;
+      if (next === "raw") raw.value = current();
+      else {                                                 // back to text: take title, summary and body from the raw file
+        const [frontRaw, bodyRaw] = splitFrontMatter(raw.value);
+        front = frontRaw;
+        titleBox.value = fieldValue(front, "title"); shortBox.value = fieldValue(front, "short");
+        body.value = bodyRaw.replace(/^\n/, "");
+      }
+      mode = next;
+      textPane.hidden = mode !== "text"; rawPane.hidden = mode !== "raw";
+      modeButtons.forEach(button => button.classList.toggle("fb-on", button.dataset.mode === mode));
+      refresh();
+    }
+    const modeButtons = wholePage ? [["text", "Text"], ["raw", "Raw Markdown"]].map(([value, label]) =>
+      el("button", { class: "fb-ed-mode" + (value === mode ? " fb-on" : ""), "data-mode": value, type: "button",
+        onclick: () => setMode(value) }, label)) : [];
     const overlay = el("div", { class: "fb-editor " + NOT },
       el("div", { class: "fb-editor-box" },
-        el("div", { class: "fb-editor-head" }, el("b", {}, section ? "Suggest an edit of one section" : "Suggest an edit"), " ",
-          el("code", {}, source.path), section ? el("span", {}, " · section “" + section.title.replace(/edit section$/, "").trim() + "”") : null,
-          el("span", { class: "fb-help" }, " · version " + source.commit)),
+        el("div", { class: "fb-editor-head" }, el("b", {}, !section ? "Suggest an edit" : section.selection !== undefined ? "Suggest an edit of the selected passage"
+          : "Suggest an edit of one section"), " ",
+          el("code", {}, source.path), section && section.selection === undefined
+            ? el("span", {}, " · section “" + section.title.replace(/edit section$/, "").trim() + "”") : null,
+          el("span", { class: "fb-help" }, " · version " + source.commit),
+          modeButtons.length ? el("span", { class: "fb-ed-modes" }, ...modeButtons) : null),
         el("p", { class: "fb-help" }, "Your edit is saved as a comment with the changes shown as a diff; the page itself is "
           + "not changed. Claude takes it into the plan of the review cycle, merges it, checks every number against its "
           + "source file and commits it with you as co-author."),
-        el("div", { class: "fb-editor-panes" }, area, preview),
+        el("div", { class: "fb-editor-panes" }, el("div", { class: "fb-ed-left" }, textPane, rawPane), preview),
         why,
         el("div", { class: "fb-actions" },
           el("button", { onclick: async () => {
-            if (area.value === original) { status.textContent = "Nothing changed."; return; }
+            const text = current();
+            if (text === source.text) { status.textContent = "Nothing changed."; return; }
+            if (wholePage && mode === "text" && !titleBox.value.trim()) { status.textContent = "The title cannot be empty."; return; }
             try {
-              await api("POST", BASE + "api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: whole(area.value) });
+              await api("POST", BASE + "api/suggest", { page: PAGE, page_title: TITLE, text: why.value, new_text: text });
               overlay.remove(); await reload(); openPanel();
             } catch (error) { status.textContent = error.message; }
           } }, "Save as suggestion"),
           el("button", { class: "fb-secondary", onclick: () => {
-            if (area.value !== original && !confirm("Discard your changes?")) return;
+            if (current() !== source.text && !confirm("Discard your changes?")) return;
             overlay.remove();
           } }, "Cancel"), status)));
+    if (section && section.selection !== undefined) overlay.classList.add("fb-editor-passage");
     document.body.append(overlay);
     refresh();
-    area.focus();
+    const target = focusField === "short" ? shortBox : body.area;
+    target.focus();
+    if (target === body.area) { body.area.setSelectionRange(0, 0); body.area.scrollTop = 0; body.paint(); }
   }
 
   function threadView(thread) {
@@ -390,7 +802,11 @@
             api("POST", API + "/" + thread.thread_id + "/status", { status: "open" })) }, "Reopen")
         : el("button", { class: "fb-secondary", title: "You are satisfied with the answer", onclick: () => send(() =>
             api("POST", API + "/" + thread.thread_id + "/status", { status: "resolved" })) }, "Mark resolved"));
-    box.append(textarea, actions);
+    if (thread.status === "marked" && !thread.text && !thread.replies.length) {
+      // a bare mark (manuscript section, confirmation): remove it with × on its tag; a note can still be added
+      const more = el("details", { class: "fb-more" }, el("summary", {}, "add a note"), textarea, actions);
+      box.append(more);
+    } else box.append(textarea, actions);
     return box;
   }
   function renderPanel() {
@@ -414,9 +830,9 @@
     }
     const open = threads.filter(thread => ["open", "planned"].includes(stateOf(thread))).length;
     const marks = threads.filter(thread => stateOf(thread) === "marked").length;
-    toggleBtn.textContent = "Comments " + open + "/" + (threads.length - marks) + (marks ? " · " + marks + " marked" : "");
-    toggleBtn.title = open + " open (new or in the plan) of " + (threads.length - marks) + " comments on this page" +
-      (marks ? "; " + marks + " fragment(s) marked for the manuscript" : "");
+    const total = threads.length - marks;
+    toggleBtn.textContent = "💬 Comment" + (total ? " · " + open + "/" + total : "");
+    toggleBtn.title = open + " open of " + total + " comments on this page" + (marks ? "; " + marks + " fragment(s) marked for the manuscript" : "");
     renderName();
   }
   function renderName() {
@@ -468,22 +884,18 @@
   }
   function newCommentForm(selection, tagging) {
     const form = el("div", { class: "fb-new" });
-    form.append(el("h3", {}, (tagging ? "Tag " : selection ? "Comment on " : "Comment on or tag ") + (selection ? "the selected text" : "the whole page")));
+    form.append(el("h3", {}, selection ? "Comment on the selected text" : "Comment on the whole page"));
     if (selection) form.append(el("blockquote", { class: "fb-quote" }, selection.quote));
-    const picker = tagPicker([]);
-    const textarea = el("textarea", { rows: tagging ? "2" : "4", placeholder: tagging ? "A note with the tags (optional)"
-      : selection ? "What is unclear, wrong or missing here?" : "A question or remark about this page…" });
-    const pickerBox = el("details", { class: "fb-tagbox" }, el("summary", {}, "Tags"), picker.node);
-    if (tagging) pickerBox.open = true;
-    form.append(...(tagging ? [pickerBox, textarea] : [textarea, pickerBox]), el("div", { class: "fb-actions" },
+    const textarea = el("textarea", { rows: "4", placeholder: selection
+      ? "What is unclear, wrong or missing here?" : "A question or remark about this page…" });
+    form.append(textarea, el("div", { class: "fb-actions" },
       el("button", { onclick: async () => {
-        const chosen = picker.value();
-        if (!textarea.value.trim() && !chosen.length) return;
+        if (!textarea.value.trim()) return;
         const ok = await send(() => api("POST", API, {
-          page: PAGE, page_title: TITLE, page_commit: COMMIT, text: textarea.value, tags: chosen, ...(selection || {})
+          page: PAGE, page_title: TITLE, page_commit: COMMIT, text: textarea.value, ...(selection || {})
         }));
-        if (ok) { textarea.value = ""; picker.reset(); if (selection) form.remove(); }
-      } }, tagging ? "Save" : "Send"),
+        if (ok) { textarea.value = ""; if (selection) form.remove(); }
+      } }, "Send"),
       selection ? el("button", { class: "fb-secondary", onclick: () => form.remove() }, "Cancel") : null));
     return form;
   }
@@ -500,10 +912,7 @@
       const quote = range.toString();
       if (!quote.trim() || quote.length > 2000) { selectBtn.hidden = true; return; }
       pendingSelection = contextOf(range);
-      const rect = range.getBoundingClientRect();
-      selectBtn.style.top = (window.scrollY + rect.bottom + 6) + "px";
-      selectBtn.style.left = Math.max(8, window.scrollX + rect.left + rect.width / 2 - 70) + "px";
-      selectBtn.hidden = false;
+      placePopup(range);
     }, 10);
   }
 
@@ -512,6 +921,9 @@
     const data = await api("GET", API + "?page=" + encodeURIComponent(PAGE));
     threads = data.threads;
     if (data.tags) vocab = data.tags;
+    if (selectBtn && !selectBtn.dataset.filled) fillSelectionBar();
+    renderPageStrip();
+    renderDock();
     drawHighlights();
     renderPanel();
   }
@@ -526,16 +938,9 @@
     listEl = el("div", { class: "fb-list" });
     orphanEl = el("div", { class: "fb-orphans" });
     panel.append(
-      el("div", { class: "fb-head" }, el("b", {}, "Comments on this page"),
-        el("a", { href: "/feedback.html", class: "fb-all" }, "all comments"),
-        el("button", { class: "fb-edit-btn fb-secondary", hidden: "hidden", onclick: () => openEditor(null),
-          title: "Edit the Markdown of this page; saved as a suggestion" }, "Suggest an edit"),
+      el("div", { class: "fb-head" }, el("b", {}, "Comments"),
         el("button", { class: "fb-close", title: "Close", onclick: closePanel }, "×")),
-      el("div", { class: "fb-body" }, nameBox,
-        el("p", { class: "fb-help" }, "Select any text on the page and press “Comment” to ask about it, or “Tag” to label it: work for the next cycle (challenge, explain, …) or the manuscript section it belongs in. Claude reads the open comments and task tags in the next working session and answers here or rewrites the page."),
-        listEl, orphanEl, newCommentForm(null, false)));
-    toggleBtn = el("button", { class: "fb-toggle " + NOT, onclick: () =>
-      panel.classList.contains("fb-open") ? closePanel() : openPanel() }, "Comments");
+      el("div", { class: "fb-body" }, nameBox, listEl, orphanEl, newCommentForm(null, false)));
     const startForm = tagging => {
       selectBtn.hidden = true;
       if (!pendingSelection) return;
@@ -547,12 +952,16 @@
       panel.querySelector(".fb-body").insertBefore(form, listEl);
       if (!tagging) form.querySelector("textarea").focus();
     };
-    selectBtn = el("span", { class: "fb-select-bar " + NOT, onmousedown: event => event.preventDefault() },
-      el("button", { class: "fb-select", onclick: () => startForm(false) }, "Comment"),
-      el("button", { class: "fb-select fb-select-tag", onclick: () => startForm(true),
-        title: "Tag the text: work for the next cycle (challenge, explain, …) or a manuscript section" }, "Tag"));
+    selectBtn = selectionBar(startForm);
     selectBtn.hidden = true;
-    document.body.append(panel, toggleBtn, selectBtn);
+    dockPop = el("div", { class: "fb-select-bar fb-dock-pop " + NOT, role: "dialog" });
+    dockPop.hidden = true;
+    dockEl = buildDock();
+    document.addEventListener("keydown", event => { if (event.key === "Escape") dockPop.hidden = true; });
+    document.addEventListener("mousedown", event => {
+      if (!dockPop.hidden && !dockPop.contains(event.target) && !event.target.closest(".fb-d-next, .fb-d-ms")) dockPop.hidden = true;
+    });
+    document.body.append(panel, dockEl, dockPop, selectBtn);
 
     annotator = RecogitoJS.createTextAnnotator(container, { annotatingEnabled: false, style: highlightStyle });
     annotator.on("clickAnnotation", annotation => openPanel(annotation.id));
@@ -579,9 +988,9 @@
       const probeSource = await fetch(BASE + "api/source?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
       editable = probeSource.ok;
     } catch (error) { editable = false; }
-    const editButton = panel.querySelector(".fb-edit-btn");
-    if (editable && editButton) editButton.hidden = false;
+    renderDock();
     if (editable) addEditButtons();
+    document.body.classList.toggle("fb-can-edit", editable);
     const match = location.hash.match(/^#fb-(.+)$/);
     if (match) openPanel(match[1]);
   }
