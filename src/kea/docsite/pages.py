@@ -17,11 +17,11 @@ from kea.docsite import artefacts, changes, codepages, comments, history, mode, 
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
-                            prefix_for, render_markdown, status_pill, status_row_class, tagline, type_badge)
+                            prefix_for, render_markdown, detail_pills, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons
 
 CHILD_ORDER = ["experiment", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
-               "artefact", "resource", "caveat", "term", "reference", "dataset", "page"]
+               "artefact", "resource", "caveat", "term", "reference", "page"]
 RESOURCE_LABELS = (("kind", "Kind"), ("rrid", "RRID"), ("url", "Where"), ("dataset_id", "Dataset id"), ("accession", "Accession"),
                    ("version", "Version"),
                    ("deposit", "Deposit"), ("retrieved", "Retrieved"), ("sha256", "SHA-256"), ("size", "Size"),
@@ -274,7 +274,7 @@ class SiteRenderer:
             named = [target for target in targets if target is not None]
             section(f"{label} {kinds(named)}" if named else label,
                     "".join(self.figure_html(figure, prefix, context, False) for figure in figures)
-                    + self.node_table(rest, prefix, missing))
+                    + self.node_table(rest, prefix, missing, note=lambda member: self.tree.reason(node.key, member.key)))
             shown.update(members)
         groups: dict[str, list[Node]] = {}
         for child in self.tree.children(node):
@@ -299,12 +299,17 @@ class SiteRenderer:
                 + "".join(f"<li>{tagline(member, prefix, member.short if member.type == 'conclusion' else member.title, project, full=True)} "
                           f"{status_pill(member)}</li>" for member in members) + "</ul>")
 
-    def node_table(self, members: list[Node], prefix: str, missing: list[str] | None = None, extra=None) -> str:
+    def node_table(self, members: list[Node], prefix: str, missing: list[str] | None = None, extra=None,
+                   note=None) -> str:
         """The standard table of pages under "About this page" and in the index: page, its summary, its status.
-        Full text width with fixed column widths, so the status pills of every table line up."""
+        Full text width with fixed column widths, so the status pills of every table line up. `note(member)`: a
+        line under the summary (why a link holds: because: on either page)."""
         if not members and not missing:
             return ""
-        rows = [f"<tr class='{status_row_class(member)}'><td>{tagline(member, prefix)}</td><td>{esc(member.short)}</td>"
+        def because(member: Node) -> str:
+            text = note(member) if note else ""
+            return f"<div class='cell-note'>because {esc(text)}</div>" if text else ""
+        rows = [f"<tr class='{status_row_class(member)}'><td>{tagline(member, prefix)}</td><td>{esc(member.short)}{because(member)}</td>"
                 f"<td>{status_pill(member)}{extra(member) if extra else ''}</td></tr>" for member in members]
         rows += [f"<tr><td><span class='ref-missing' title='project has no pages yet'>{esc(key)}</span></td><td></td>"
                  f"<td></td></tr>" for key in missing or []]
@@ -370,7 +375,7 @@ class SiteRenderer:
     def node_page(self, node: Node) -> None:
         prefix = prefix_for(node.url)
         context = self.context(node.project, prefix, node.key)
-        pills = (status_pill(node)
+        pills = (status_pill(node) + detail_pills(node)
                  + (self.review_pill(node.project, prefix) if node.id == "home" else "")
                  + self.stability_pill(node)
                  + (f" <span class='pill'>experiment {esc(self.experiment_version(node.project))}</span>"
@@ -415,6 +420,12 @@ class SiteRenderer:
             body_text = "\n".join(line for line in body_text.split("\n")
                                    if not (line.strip().startswith("![") and Path(str(node.header.get("image", ""))).name
                                            in line))
+        if node.type == "hypothesis" and (node.header.get("prediction") or node.header.get("criterion")):
+            # what was expected and what counts as support: part of the claim, fixed with it before the test
+            parts.append("<dl class='prediction'>" + "".join(
+                f"<dt class='not-annotatable'>{label}</dt><dd>{render_markdown(str(node.header[name]), context)}</dd>"
+                for name, label in (("prediction", "Prediction"), ("criterion", "Counts as support if"))
+                if node.header.get(name)) + "</dl>")
         if node.type == "question" and questions.answer(node):
             # the question's own answer: field is its text, so it stays with the content; the evidence moves below
             parts.append(f"<div class='answer'><b class='answer-label not-annotatable'>Answer so far</b>"
@@ -687,38 +698,81 @@ class SiteRenderer:
             number = f"{prefixes[kind]}1" if kind in prefixes else ""
             tag = (f" <span class='tag t-{kind}'>{icons.svg(kind)}{number}</span>" if number else "")
             return f"<span class='fullname k-{kind}'>{esc(TYPE_LABELS.get(kind, kind))}{tag}</span>"
-        rows = "".join(f"<tr><td>{legend(kind)}</td><td>{esc(meaning)}</td></tr>" for kind, meaning in meanings.items())
+        rows = "".join(f"<tr><td>{legend(kind)}</td><td style='white-space:normal'>{esc(meaning)}</td></tr>"
+                       for kind, meaning in meanings.items())
+        review = mode.MODE == "review"        # comments, editor, plans and history need the comment server
+        menu = ("<li><b>Map</b>: the experiment as a tree; under it <b>Relations</b> (the graph of links) and "
+                "<b>Objects</b> (every page in one table you can search, filter by type and status, and sort; under "
+                "it <b>Data</b> and <b>Code</b>).</li>"
+                + ("<li><b>Plan</b>: the plan of the current review cycle (below).</li>" if review else "")
+                + "<li><b>History</b>: what changed in each working session"
+                + ("; under it <b>Review cycles</b> (each release with its comments, plan items and commits) and "
+                   "<b>Comments</b> (all comments on the site)" if review else "") + ".</li>"
+                "<li><b>PDF</b>: all pages as one document.</li>"
+                "<li>After the bar at the right: <b>Help</b> (this page), or, when you are signed in, your name: "
+                "it opens <b>My comments</b>, Help and <b>Sign out</b>.</li>")
         body = (crumbs([("Help", None)], "") + "<h1>How to read this site</h1>"
                 "<div class='short'>The documentation of a data analysis as a tree of small pages, one idea per page, "
                 "linked by typed relations (supports, opposes, answers, tests, limits).</div>"
                 "<h2>Where to start</h2><ul>"
                 "<li>The home page has the project's summary; each experiment's page has its summary and every "
-                "question with its answer in short. A question page leads with its conclusions and results.</li>"
-                "<li>The menu bar shows where you are: <b>Kea</b> (home) / project / experiment / page. The kea logo "
-                "at the right opens this page.</li>"
-                "<li>Every page ends with its connections and with its version and history; "
-                "<a href='changes/index.html'>History</a> lists each working session.</li></ul>"
-                "<h2>Tags and colours</h2><p>Each page has a type, shown as a coloured tag with an icon and a number "
-                "(Q1, R2, C3). The tag is always the link to that page; hover it for the page's one-line summary. "
-                "In lists of pages the whole line is the link.</p>"
+                "question with its answer in short. A question page leads with its answer, then its conclusions, "
+                "results and hypotheses.</li>"
+                "<li>The menu bar shows where you are (the kea head, which leads home / project / experiment / page) and has the "
+                f"menu:<ul>{menu}</ul></li></ul>"
+                "<h2>Reading a page</h2><ul>"
+                "<li>The coloured bar on the left and the kind above the title say what sort of page it is "
+                "(table below). The page's own content (title, summary in the framed line, and text) is set in a "
+                "book face.</li>"
+                "<li>Under the line <b>About this page</b> is what Kea knows about it: its permanent identifier "
+                "(<code>kea:…</code>, which stays when the page is edited or moved, and <code>@…</code>, exactly "
+                "this version, for citing), its sources, and its links to other pages as tables "
+                "(\"Tested by this step\", \"Supported by these results\"). A line starting with <i>because</i> "
+                "under a linked page says why the link holds.</li>"
+                "<li>A hypothesis shows its <b>prediction</b> and what <b>counts as support</b>, fixed together "
+                "with the hypothesis before its test.</li></ul>"
+                "<h2>Types and colours</h2><p>Each page has a type, shown as a coloured tag with an icon and a "
+                "number (Q1, R2, C3). The tag is always the link to that page; hover it for the page's one-line "
+                "summary. In lists of pages the whole line is the link.</p>"
                 f"<table class='not-annotatable'>{rows}</table>"
-                "<p>The pill next to a tag is the page's status (green: settled or supported; amber: exploratory, "
-                "open or inconclusive; red: rejected). Hypotheses say whether they were <i>written before their "
-                "test</i> or <i>written after results</i>. Words with a dotted underline link to the glossary.</p>"
-                "<h2>Comments and edits</h2><ul>"
-                "<li>Select any text and press <b>Comment</b>; the panel at the bottom right lists the comments on "
-                "the page.</li>"
-                "<li>The <b>Edit</b> button in the menu bar opens the page's Markdown; the pencil next to a section "
-                "heading edits just that section. An edit is saved as a suggestion, shown as a diff; the agent "
-                "folds it into the plan of the review cycle.</li>"
-                "<li>Review cycles: comments are collected into a <a href='plan.html'>plan</a>; a reader freezes "
-                "it and presses Implement; the agent implements, answers every comment and releases a new version "
-                "(<a href='history.html'>History</a>).</li></ul>"
-                "<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
-                "commentable pages. More help, the page types in full and how to install it: "
-                "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
-        if mode.MODE != "review":       # no comments, editor, plans or history without the comment server
-            body = re.sub(r"<h2>Comments and edits</h2>.*?</ul>", "", body, flags=re.S)
+                "<p>The pills next to the title:</p><ul>"
+                "<li>the <b>status</b>, also the coloured bar at the left of each table row (green: settled or "
+                "supported; amber: open, planned or inconclusive; dark red: rejected or withdrawn);</li>"
+                "<li><b>exploratory</b>: the analysis was chosen after earlier results were seen; it suggests, and "
+                "needs new data to confirm;</li>"
+                "<li>on a hypothesis, <b>written before its test</b> or <b>written after results</b>;</li>"
+                "<li>on a conclusion, its <b>certainty</b> (high, moderate, low, very low; hover for why); on a "
+                "caveat, the kind of limit it names;</li>"
+                "<li><b>✓ confirmed</b>: a reader confirmed the page as it is.</li></ul>"
+                "<p>Words with a dotted underline link to the glossary.</p>")
+        if review:
+            body += ("<h2>Comments, tags and edits</h2><ul>"
+                     "<li><b>Select any text</b>: a small bar offers <b>Comment</b>, <b>Edit</b> (just that passage) "
+                     "and one-click tags: requests for the next run (explain, expand, shorten, delete, challenge, "
+                     "source) and the manuscript section the passage belongs in.</li>"
+                     "<li><b>The buttons at the bottom right</b> act on the whole page: Comment (opens the comment "
+                     "panel, whole-page comment on top), Edit (title, summary and text; or the raw Markdown), "
+                     "<b>Confirm</b> (keep the page as it is) and <b>Reject</b> (remove it), <b>Next run ▸</b> and "
+                     "<b>Manuscript ▸</b>. Confirm and Reject are definitive requests: they go into the next plan. "
+                     "The kea head above the buttons folds them away.</li>"
+                     "<li>The pencils in the left margin edit the title or summary in place; the pencil after a "
+                     "section heading edits that section. Every edit is saved as a suggestion, shown as a diff, and "
+                     "the agent folds it into the plan.</li>"
+                     "<li>Sign in with the site password and your name, or with ORCID where the site offers it (your "
+                     "comments then carry your ORCID iD). On a public site anyone can read the pages; "
+                     "<b>Sign in to comment</b> shows the comments and lets you add yours.</li></ul>"
+                     "<h2>Review cycles and the plan</h2><ul>"
+                     "<li>Comments, edits and tags are collected into the <a href='plan.html'>plan</a>. A reader who may "
+                     "steer presses <b>Freeze for review</b> (comments then only on the plan) and, when every comment "
+                     "is in it, <b>Implement</b>; the agent implements the plan, answers every comment and releases "
+                     "a new version (<a href='history.html'>Review cycles</a>).</li>"
+                     "<li>The plan page shows the agent's session: <i>watching</i> (with the time since its last "
+                     "heartbeat), <i>working</i> on the plan, <i>ended</i>, or <i>stopped unexpectedly</i>; readers who "
+                     "may steer then also see a red banner on every page. A blue banner offers a new version of the "
+                     "site; an amber one says the site is frozen or being implemented.</li></ul>")
+        body += ("<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
+                 "commentable pages. More help, the page types in full and how to install it: "
+                 "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
         self.write("help.html", page("Help", body, "", None, self.tree))
 
     def site_pages(self) -> list[tuple[str, str, str]]:

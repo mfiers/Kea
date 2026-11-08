@@ -337,7 +337,10 @@ def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
     entered = site.get(path_and_query, follow_redirects=False)
     assert entered.status_code == 303 and entered.headers["location"] == "/x/r-a.html"
     assert site.get(path_and_query, follow_redirects=False).status_code == 400            # a code works once
-    assert site.get("/api/threads").status_code == 200                                     # signed in, no password
+    signed_in = site.get("/api/threads").json()                                             # signed in, no password
+    assert signed_in["account"] is True and signed_in["you"] == "Josiah Carberry"           # the panel asks no name
+    menu = site.get("/api/status").json()                                                  # the menu bar's reader
+    assert menu["signed_in"] and menu["account"] and menu["orcid"] == orcid and menu["sign_out"] == "/auth/logout"
     created = site.post("/api/threads", json={"page": "x:r-a", "text": "A question"}).json()["thread"]
     assert created["author"] == "Josiah Carberry" and created["author_id"] == orcid
     assert site.post("/api/cycle/freeze", json={}).status_code == 403                        # commenter may not steer
@@ -462,3 +465,53 @@ def test_hub_notices_a_session_that_stopped(demo, monkeypatch):
     client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"})
     watcher = client.get("/p/demo/api/status").json()["watcher"]
     assert watcher["state"] == "working" and watcher["exit"] == "implementing" and watcher["seconds"] < 60
+
+
+def test_one_orcid_sign_in_for_every_project_and_one_sign_out(demo, monkeypatch):
+    """Signed in on one project's site, the reader opens another project's site without a click (the site asks the
+    hub, /auth/check); a reader without a hub session gets the login page once, not a loop. Sign out on any site
+    ends every session, on the hub and on all sites."""
+    import yaml
+    from kea.feedback import accounts
+    the_hub, secrets = demo
+    settings = the_hub.settings()
+    settings.update({"url": "https://keahub.example", "project_domain": "keahub.example"})
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    other = the_hub.add("other")
+    monkeypatch.setenv("KEA_ORCID_CLIENT_ID", "APP-TEST")
+    monkeypatch.setenv("KEA_ORCID_CLIENT_SECRET", "s3cret")
+    orcid = "0000-0002-1825-0097"
+    monkeypatch.setattr(accounts, "exchange_code", lambda code, redirect, conf: {"orcid": orcid, "name": "Josiah Carberry"})
+    accounts.Accounts(the_hub.folder).approve(orcid)                    # commenter on every project
+    app = hub.HubApp(the_hub)
+    browser = TestClient(app, base_url="https://keahub.example")      # one cookie jar, every host
+    for name, key in (("demo", secrets["key"]), ("other", other["key"])):
+        archive = make_bundle(SITE)
+        browser.post(f"/p/{name}/hub/publish", content=archive,
+                     headers={**agent_headers(key), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+
+    def visit(url: str, hops: int = 8):
+        """Follow redirects across hosts like a browser; returns the last response and the hosts passed."""
+        path = []
+        for _ in range(hops):
+            response = browser.get(url, follow_redirects=False)
+            path.append(url.split("/")[2])
+            if response.status_code not in (302, 303, 307, 308):
+                return response, path
+            location = response.headers["location"]
+            url = location if location.startswith("https://") else f"https://{url.split('/')[2]}{location}"
+        raise AssertionError(f"redirect loop: {path}")
+
+    first, path = visit("https://demo.keahub.example/")                # no hub session: asked once, then login
+    assert "keahub.example" in path and first.status_code == 200 and "Sign in with ORCID" in first.text
+    start = browser.get("https://keahub.example/auth/login",
+                        params={"return": "https://demo.keahub.example/"}, follow_redirects=False)
+    state = start.headers["location"].split("state=")[1].split("&")[0]
+    signed, _ = visit(f"https://keahub.example/auth/orcid/callback?code=c1&state={state}")
+    assert signed.status_code == 200 and "home" in signed.text           # signed in on demo
+    page, path = visit("https://other.keahub.example/")                # the other project: no click, no login page
+    assert page.status_code == 200 and "home" in page.text and path.count("keahub.example") == 1
+    assert browser.get("https://other.keahub.example/api/status").json()["you"] == "Josiah Carberry"
+    out, _ = visit("https://other.keahub.example/auth/logout")         # sign out on one site ...
+    assert browser.get("https://demo.keahub.example/api/status").status_code == 401   # ... ends them all
+    assert browser.get("https://other.keahub.example/api/status").status_code == 401

@@ -50,8 +50,17 @@ background:#1d2330;padding:10px 16px;border-radius:0 0 8px 8px;z-index:2000;box-
 .topbar .page-tools button{background:#2c3446;border:1px solid #4a5468;color:#fff;border-radius:5px;cursor:pointer;
 display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-serif;padding:2px 9px}
 .topbar .page-tools button:hover{background:#2d3748}.topbar .page-tools .ico{width:15px;height:15px}
-.topbar .kea-mark{flex:0 0 auto;display:flex}.topbar .kea-mark img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
-.topbar.no-mark .kea-mark,.topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
+.topbar .home img{display:block;background:#f4f1e8;border-radius:5px;padding:1px}
+.topbar .user{display:flex;align-items:center;gap:10px;flex:0 0 auto;position:relative;padding-left:14px;border-left:1px solid #4a5468;white-space:nowrap}
+.topbar .user-name{background:none;border:0;color:#fff;font:inherit;font-weight:600;cursor:pointer;padding:0;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.topbar .user-name::after{content:' ▾';color:#8a93a3;font-weight:400}
+.topbar .user-menu{position:absolute;right:0;top:calc(100% + 9px);background:#1d2330;border:1px solid #4a5468;border-radius:0 0 7px 7px;padding:6px 0;min-width:190px;z-index:60;box-shadow:0 6px 16px #0005}
+.topbar .user-menu a,.topbar .user-menu .who{display:block;padding:6px 14px;color:#dfe6f2}
+.topbar .user-menu a:hover{background:#2d3748;text-decoration:none}
+.topbar .user-menu .who{font-size:12.5px;color:#8a93a3;border-bottom:1px solid #2d3748;margin-bottom:4px;white-space:normal}
+.topbar .user-menu .sep-line{border-top:1px solid #2d3748;margin:4px 0}
+.topbar.user-open,body.has-kindbar .topbar.user-open{z-index:80}
+.topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
 h1{font-size:25px;line-height:1.25;margin:6px 0 8px}h2{font-size:19px;margin:28px 0 8px;border-bottom:1px solid var(--line);padding-bottom:3px}
 h3{font-size:16px;margin:20px 0 6px}
@@ -59,7 +68,7 @@ h3{font-size:16px;margin:20px 0 6px}
 .kindbar{position:fixed;left:0;top:0;bottom:0;width:30px;z-index:5;display:flex;justify-content:center;align-items:flex-start;padding-top:58px;box-sizing:border-box;color:#fff}.kindbar{flex-direction:column;align-items:center!important;justify-content:flex-start!important;gap:9px}.kindbar .ico{width:18px;height:18px;flex:0 0 auto;stroke:#fff;color:#fff}.kindbar span{writing-mode:vertical-rl;transform:rotate(180deg);font:700 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:.95}body.has-kindbar{padding-left:30px}body.has-kindbar .topbar{margin-left:-30px;z-index:6}@media (max-width:760px){.kindbar{width:7px}.kindbar span,.kindbar .ico{display:none}body.has-kindbar{padding-left:7px}body.has-kindbar .topbar{margin-left:-7px}}@media print{.kindbar{display:none}body.has-kindbar{padding-left:0}body.has-kindbar .topbar{margin-left:0}}.node-content{margin:4px 0 0}.pid{font-size:12.5px;color:var(--muted);margin:2px 0 0;text-align:right}.obj-search{width:100%;box-sizing:border-box;font:15px system-ui,sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:7px;margin:6px 0 10px}.obj-search:focus{outline:2px solid var(--accent);outline-offset:0}.obj-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0}.obj-label{font:600 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);width:56px}.obj-chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:2px 10px;font:600 12.5px system-ui,sans-serif;cursor:pointer;color:var(--fg)}.obj-chip .obj-count{font-weight:400;color:var(--muted)}.obj-chip.on{box-shadow:inset 0 0 0 2px #5b6475;background:#f5f7fa}.obj-chip.s-chip.on{background:#eef1f5}.obj-clear{border:0;background:none;color:var(--accent);cursor:pointer;font:13px system-ui,sans-serif;text-decoration:underline;margin-left:6px}.obj-info{font-size:13px;color:var(--muted);margin:10px 0 0}.obj-table th button{border:0;background:none;font:inherit;font-weight:700;cursor:pointer;padding:0;color:inherit}.obj-pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0;font-size:13px}.obj-pager button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}.obj-pager button:disabled{opacity:.4;cursor:default}table.nodes{display:table;width:100%;table-layout:fixed;margin:8px 0 4px}table.nodes col.c-page{width:36%}table.nodes col.c-status{width:132px}table.nodes td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}table.nodes td:last-child,table.nodes th:last-child{text-align:right}table.nodes .cell-note{font-size:12px;color:var(--muted);margin-top:3px}@media (max-width:640px){table.nodes col.c-page{width:42%}table.nodes col.c-status{width:96px}}.kindrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 2px}.kindrow .kind{font-size:15px;font-weight:700;letter-spacing:.02em}.kindrow .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}.kindrow .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}.kindrow .pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}.kindrow .pills .pill{font-size:11px;font-weight:400;margin:0}.node-content h1{margin-top:0}.pill.fb-pp-ok{background:#dff0e0;color:#1e5e22;border-color:#9fd3b5;font-weight:600}.node-content h1 .node-title,.node-content .short,.node-content article{font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif}.node-content .short{font-size:16.5px;border-left-color:var(--kc)}.node-content article{font-size:16.5px;line-height:1.65}.node-content article h2,.node-content article h3{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.node-data-sep{margin:64px 0 6px;border-top:6px solid var(--kc,#556);text-align:right;line-height:0}.node-data-sep span{display:inline-block;background:var(--kc,#556);color:#fff;padding:3px 12px 4px;border-radius:0 0 6px 6px;line-height:1.3;font:700 11.5px system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}section.about h2,section.questions h2{font-size:17px}.answer-label{display:block;font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-bottom:2px}ul.sources{margin:4px 0}.t-experiment{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#a23c9e}
 .t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#757575}
 .t-figure{background:#17818a}.t-artefact{background:#966d09}.t-caveat{background:#c64f00}
-.t-term,.t-reference,.t-dataset,.t-page{background:#556}.t-resource{background:#5b6b2f}
+.t-term,.t-reference,.t-page{background:#556}.t-resource{background:#5b6b2f}
 .badge .ico,.tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 a.tag,span.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:11px;
 padding:1px 8px 1px 6px;line-height:1.45;vertical-align:baseline;white-space:nowrap;box-shadow:0 1px 0 rgba(0,0,0,.18);
@@ -76,7 +85,7 @@ h1 .pills,.qhead .pills{font-size:0;margin-left:8px;vertical-align:middle;white-
 h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:4px}
 .k-experiment{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#a23c9e}.k-step{color:#2a7f62}
 .k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
-.k-artefact{color:#966d09}.k-caveat{color:#c64f00}.k-term,.k-reference,.k-dataset,.k-page{color:#556}.k-resource{color:#5b6b2f}
+.k-artefact{color:#966d09}.k-caveat{color:#c64f00}.k-term,.k-reference,.k-page{color:#556}.k-resource{color:#5b6b2f}
 a.fullname,span.fullname{font-weight:700;margin-right:6px;white-space:nowrap}.fullname>.ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}
 .fullname .tag{margin-left:2px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
 h1 .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
@@ -87,7 +96,7 @@ tr.st-good td:first-child{background:linear-gradient(#2e9e5b,#2e9e5b) left/4px 1
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
 .pill{display:inline-block;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:10px;padding:0 8px;color:var(--muted);vertical-align:middle}
 .s-supported,.s-done,.s-answered,.s-current,.s-active{border-color:var(--ok);color:var(--ok)}
-.s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
+.cert-high{border-color:var(--ok);color:var(--ok)}.cert-moderate{border-color:#5b6475;color:#3b4252}.cert-low,.cert-very_low{border-color:var(--amber);color:var(--amber)}.prediction{margin:10px 0 4px;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--kc);border-radius:4px;background:#fbfbfd}.prediction dt{font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-top:4px}.prediction dd{margin:0 0 4px 0;font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif;font-size:16px}.s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
 .s-exploratory,.s-in_progress,.s-planned,.s-open,.s-inconclusive,.s-assumed,.s-questioned,.s-under_review{border-color:var(--amber);color:var(--amber)}
 .s-addressed{border-color:var(--ok);color:var(--ok)}
 .s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting{border-color:var(--accent);color:var(--accent)}
@@ -159,9 +168,36 @@ def fullname_inner(node: Node) -> str:
 
 
 def status_pill(node: Node) -> str:
-    if not node.status:
-        return ""
-    return f"<span class='pill s-{esc(node.status)}'>{esc(str(node.status).replace('_', ' '))}</span>"
+    """The status, and "exploratory" when the analysis was chosen after seeing earlier results (analysis:)."""
+    from kea.docsite.nodes import analysis_of
+    html = (f"<span class='pill s-{esc(node.status)}'>{esc(str(node.status).replace('_', ' '))}</span>"
+            if node.status and node.status != "exploratory" else "")
+    if analysis_of(node) == "exploratory":
+        html += (" " if html else "") + ("<span class='pill s-exploratory' title='Exploratory: the analysis was chosen "
+                                         "after earlier results were seen; it suggests, and needs new data to confirm'>"
+                                         "exploratory</span>")
+    return html
+
+
+CERTAINTY_TEXT = {"high": "high certainty", "moderate": "moderate certainty", "low": "low certainty",
+                  "very_low": "very low certainty"}
+CAVEAT_KIND_TEXT = {"internal": "internal validity", "external": "external validity (generalisation)",
+                    "construct": "construct validity (what is measured)", "statistical": "statistical conclusion validity",
+                    "other": "other limit"}
+
+
+def detail_pills(node: Node) -> str:
+    """Pills on a page's own kind row: the certainty of a conclusion, the kind of a caveat."""
+    certainty = str(node.header.get("certainty") or "")
+    html = ""
+    if node.type == "conclusion" and certainty in CERTAINTY_TEXT:
+        reason = str(node.header.get("certainty_because") or "")
+        html += (f" <span class='pill cert-{esc(certainty)}' title='How sure we are of this conclusion"
+                 f"{(': ' + esc(reason)) if reason else ''}'>{CERTAINTY_TEXT[certainty]}</span>")
+    kind = str(node.header.get("kind") or "")
+    if node.type == "caveat" and kind in CAVEAT_KIND_TEXT:
+        html += f" <span class='pill' title='The kind of limit (threat to validity)'>{CAVEAT_KIND_TEXT[kind]}</span>"
+    return html
 
 
 def hover_text(node: Node, note: str | None = None) -> str:
@@ -232,8 +268,13 @@ BAD_STATUSES = {"not_supported", "deprecated", "dropped", "superseded"}
 def status_row_class(node: Node) -> str:
     """Status bar on the left of a table row: green supported/settled, amber open or exploratory, dark red rejected
     or deprecated (darker than the conclusion red, so a conclusion is not read as rejected)."""
+    from kea.docsite.nodes import analysis_of
     status = str(node.status or "")
-    return "st-good" if status in GOOD_STATUSES else "st-bad" if status in BAD_STATUSES else "st-mid" if status else ""
+    if status in BAD_STATUSES:
+        return "st-bad"
+    if analysis_of(node) == "exploratory":          # supported, but only by an analysis chosen after the fact
+        return "st-mid"
+    return "st-good" if status in GOOD_STATUSES else "st-mid" if status else ""
 
 
 def tagline(node: Node, prefix: str, text: str | None = None, from_project: str | None = None,
@@ -260,11 +301,13 @@ PDF: dict | None = None          # the PDF of all pages ({"file", "version", "co
 
 def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, node: Node | None = None,
            here: str | None = None) -> str:
-    """Menu bar. Left: "Kea" (home) / project / experiment / [tag] page title. Right: the menu, the page tools
-    (filled in by the comment script: edit) and the kea logo (help). When space runs out (TOPBAR_JS), in this
-    order: the menu folds into a menu button, the logo goes, the project name goes, the experiment goes, and
+    """Menu bar. Left: the kea head (home) / project / experiment / [tag] page title. Right: the menu, the page
+    tools, then after a bar the reader: "Help" on a static site; the signed-in name with a small menu (my comments,
+    help, sign out) when the comment server knows the reader (filled in by cycle.js). When space runs out
+    (TOPBAR_JS), in this order: the menu folds into a menu button, the project name goes, the experiment goes, and
     finally the page title is cut from the right; the page title is what stays longest."""
-    segments = [f"<a class='home' href='{prefix}index.html' title='Home of this site'>Kea</a>",
+    segments = [f"<a class='home' href='{prefix}index.html' title='Home of this site'><img src='{prefix}_assets/kea-head-64.png' "
+                f"srcset='{prefix}_assets/kea-head-128.png 2x' alt='Home' width='24' height='24'></a>",
                 f"<span class='seg project'><span class='sep'>/</span><a class='project' href='{prefix}index.html'>"
                 f"{esc(SITE_TITLE)}</a></span>"]
     right = []
@@ -317,18 +360,18 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
             f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>"
-            f"<a class='kea-mark' href='{prefix}help.html' title='Help: how to read this site, and about Kea'>"
-            f"<img src='{prefix}_assets/kea-badge-64.png' alt='Kea' width='24' height='24'></a>"
+            f"<span class='user' data-help='{prefix}help.html' data-comments='{prefix}feedback.html'>"
+            f"<a href='{prefix}help.html' title='How to read this site, and about Kea'>Help</a></span>"
             f"</nav><script>{TOPBAR_JS}</script>")
 
 
-# Fold in steps until the page title has room: 1 menu into the button, 2 logo, 3 project, 4 experiment; the title
+# Fold in steps until the page title has room: 1 menu into the button, 2 project, 3 experiment; the title
 # is then cut with an ellipsis. A title counts as cramped when it is cut and narrower than ROOM pixels (so a very
 # long title on a wide screen does not fold everything); pages without a title fold when the trail overflows.
 TOPBAR_JS = """(function(){var nav=document.currentScript.previousElementSibling;var button=nav.querySelector('.menu-button');
-var STEPS=['folded','no-mark','no-project','no-experiment'];var ROOM=[520,380,380,380];
+var STEPS=['folded','no-project','no-experiment'];var ROOM=[520,380,380];
 function cramped(step){var trail=nav.querySelector('.trail');var title=nav.querySelector('.here-title');
-if(title){return title.scrollWidth>title.clientWidth+1&&title.clientWidth<ROOM[Math.min(step,3)];}
+if(title){return title.scrollWidth>title.clientWidth+1&&title.clientWidth<ROOM[Math.min(step,2)];}
 return trail.scrollWidth>trail.clientWidth+1;}
 function fit(){nav.classList.remove('open');STEPS.forEach(function(name){nav.classList.remove(name);});button.hidden=true;
 var links=nav.querySelector('.links');var step=0;

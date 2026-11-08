@@ -15,6 +15,11 @@ Flow (hub.yaml ``project_domain`` set, each project on its own subdomain; all co
                                          project's own session cookie (kea_account)
 Without project_domain the same works under /p/<project>/ (cookie path /p/<project>/).
 
+Sign in once: a project site without a session sends a first visit to <domain>/auth/check, which hands an existing hub
+session straight back (a one-time code, as above) or returns without one (the site then shows its login page;
+kea_sso_tried keeps it from asking again for an hour). Sign out on any site signs out of the hub and of every site:
+sessions issued before users.json signed_out_at stop working.
+
 Roles: reader < commenter < steerer (freeze, implement) < owner. A user's role in a project is roles[<project>],
 else roles["*"]; approving gives roles["*"] = commenter unless told otherwise. The project passwords keep working
 next to accounts.
@@ -116,7 +121,25 @@ class Accounts:
         return payload
 
     def token(self, kind: str, seconds: float, **fields) -> str:
-        return self.sign({"kind": kind, "exp": time.time() + seconds, **fields})
+        return self.sign({"kind": kind, "exp": time.time() + seconds, "iat": time.time(), **fields})
+
+    def sign_out(self, orcid: str) -> None:
+        """Sign out everywhere: every session of this reader issued before now stops working, on the hub and on
+        every project site (their cookies are host-only, so the hub cannot delete them; it stops honouring them)."""
+        with _lock:
+            users = self.users()
+            if orcid in users:
+                users[orcid]["signed_out_at"] = time.time()
+                self.save(users)
+
+    def current(self, payload: dict | None) -> dict | None:
+        """The payload of a session token, unless its reader signed out after it was issued."""
+        if not payload:
+            return None
+        user = self.users().get(str(payload.get("orcid"))) or {}
+        if float(payload.get("iat", 0)) < float(user.get("signed_out_at", 0)):
+            return None
+        return payload
 
     def use_code(self, nonce: str) -> bool:
         """A one-time code is accepted once (remembered in memory for its lifetime)."""
@@ -183,7 +206,7 @@ class Accounts:
 
     def account(self, cookie: str, project: str) -> dict | None:
         """The signed-in reader of a project site from its session cookie: {orcid, name, role} or None."""
-        payload = self.verify(cookie, "site")
+        payload = self.current(self.verify(cookie, "site"))
         if not payload or payload.get("project") != project:
             return None
         role = self.role(str(payload.get("orcid")), project)

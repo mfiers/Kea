@@ -25,8 +25,8 @@ status_values:
   question: [open, answered, dropped]
   hypothesis: [planned, supported, not_supported, inconclusive]
   step: [planned, in_progress, done, dropped]
-  result: [done, exploratory, deprecated]       # exploratory: test designed after seeing earlier results
-  conclusion: [exploratory, supported, not_supported, deprecated]
+  result: [done, deprecated, exploratory]       # exploratory: the spelling before Kea 1.17 (now analysis:)
+  conclusion: [supported, not_supported, deprecated, exploratory]   # exploratory: before Kea 1.17
   decision: [active, superseded]
   figure: [done, deprecated]
   artefact: [current, deprecated]
@@ -68,6 +68,22 @@ relations:
 # API, MCP server) is one resource; each record taken from it (a dataset, a GWAS study, an accession, a release
 # file) is a resource of its own, `part_of:` the source, citing (`cites:`) the paper behind it. Steps, results
 # and figures point to them with `uses:`.
+
+# Fields on pages (Kea 1.17; from the literature on argument and evidence, see the roadmap question q-vocabulary):
+#   hypothesis  prediction: what you expect to observe; criterion: what result counts as support, what counts
+#               against (and what is inconclusive). Both required when fixed_before_results: true: fixing the
+#               wording of a hypothesis is not enough, what counts as support must be fixed too.
+#   result, conclusion, step, figure
+#               analysis: confirmatory | exploratory. Exploratory = chosen after earlier results were seen; it
+#               suggests and needs new data to confirm. A property of the analysis, separate from its status.
+#   conclusion  certainty: high | moderate | low | very_low (how sure; Toulmin's qualifier, as in GRADE), with
+#               certainty_because: one line on why.
+#   caveat      kind: internal | external | construct | statistical | other (the threat to validity it names;
+#               Shadish, Cook & Campbell 2002).
+# Links can say why they hold (Toulmin's warrant), on either page:
+#   supported_by: [{id: r-gate, because: "the effect holds in both cohorts, with the same sign"}]
+# kea check notes links into conclusions without a reason, relies_on where a typed relation fits, and a project
+# with results but no premises.
 
 required:
   conclusion: [relations.supports_or_opposes_from_results]   # a conclusion needs at least one result behind it

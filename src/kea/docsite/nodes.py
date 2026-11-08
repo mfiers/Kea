@@ -21,11 +21,11 @@ LINK_PATTERN = re.compile(r"\[\[([^\[\]|]+)(?:\|([^\[\]|]*))?(?:\|([^\[\]]*))?\]
 TYPE_LABELS = {"experiment": "Experiment", "premise": "Premise", "question": "Question", "hypothesis": "Hypothesis",
                "step": "Step", "result": "Result", "conclusion": "Conclusion", "decision": "Decision",
                "figure": "Figure", "artefact": "Artefact", "caveat": "Caveat", "term": "Term",
-               "reference": "Reference", "resource": "Resource", "dataset": "Dataset", "page": "Page"}
+               "reference": "Reference", "resource": "Resource", "page": "Page"}
 TYPE_PLURALS = {"experiment": "Experiments", "premise": "Premises", "question": "Questions", "hypothesis": "Hypotheses",
                 "step": "Steps", "result": "Results", "conclusion": "Conclusions", "decision": "Decisions",
                 "figure": "Figures", "artefact": "Artefacts", "caveat": "Caveats", "term": "Terms",
-                "reference": "References", "resource": "Resources", "dataset": "Datasets", "page": "Pages"}
+                "reference": "References", "resource": "Resources", "page": "Pages"}
 # reverse names of relations, shown on the target page
 REVERSE_LABELS = {"answers": "Answered by", "tests": "Tested by", "supports": "Supported by",
                   "opposes": "Opposed by", "supported_by": "Supports", "opposed_by": "Opposes",
@@ -83,6 +83,7 @@ class Node:
     order: float = 100.0
     number: str = ""
     relations: dict[str, list[str]] = field(default_factory=dict)   # relation -> keys (project:id)
+    reasons: dict[str, str] = field(default_factory=dict)           # target key -> why the link holds (because:)
     incoming: dict[str, list[str]] = field(default_factory=dict)    # relation -> keys of nodes pointing here
 
     @property
@@ -115,6 +116,11 @@ class Tree:
             return self.nodes.get(key)
         matches = [node for node in self.nodes.values() if node.id == target]   # Obsidian style: a bare id
         return matches[0] if len(matches) == 1 else None                        # elsewhere, if unique on the site
+
+    def reason(self, first: str, second: str) -> str:
+        """Why the link between two pages holds (because: on either page), '' when not stated."""
+        one, other = self.nodes.get(first), self.nodes.get(second)
+        return (one.reasons.get(second, "") if one else "") or (other.reasons.get(first, "") if other else "")
 
     def children(self, node: Node) -> list[Node]:
         return sorted((child for child in self.nodes.values()
@@ -150,6 +156,32 @@ def _as_key(value: str, project: str) -> str:
     return value if ":" in value else f"{project}:{value}"
 
 
+def _relations(raw: dict, project: str) -> tuple[dict[str, list[str]], dict[str, str], list[str]]:
+    """Links in front matter: each target an id, or {id: …, because: …} with the reason the link holds (Toulmin's
+    warrant: why this result supports that conclusion). Returns relation -> keys, key -> reason, problems."""
+    relations: dict[str, list[str]] = {}
+    reasons: dict[str, str] = {}
+    problems: list[str] = []
+    if not isinstance(raw, dict):
+        return relations, reasons, ["relations must be a mapping (relation: [ids])"]
+    for name, values in raw.items():
+        keys = relations.setdefault(str(name), [])
+        for item in values if isinstance(values, list) else [values] if values else []:
+            if isinstance(item, dict):
+                target = str(item.get("id") or "").strip()
+                if not target:
+                    problems.append(f"{name}: a link written as a mapping needs id: (and because:)")
+                    continue
+                key = _as_key(target, project)
+                because = str(item.get("because") or "").strip()
+                if because:
+                    reasons[key] = because
+            else:
+                key = _as_key(str(item), project)
+            keys.append(key)
+    return relations, reasons, problems
+
+
 def load_tree(doc: Path = DOC) -> Tree:
     """Read every node of every project, number them, add reverse edges, and validate."""
     schema = with_defaults(yaml.safe_load((doc / "_schema.yaml").read_text()) or {})
@@ -172,8 +204,8 @@ def load_tree(doc: Path = DOC) -> Tree:
             if missing:
                 problems.append(f"{source.relative_to(doc)}: missing {', '.join(missing)}")
                 continue
-            relations = {name: [_as_key(str(item), project_dir.name) for item in (values or [])]
-                         for name, values in (header.get("relations") or {}).items()}
+            relations, reasons, link_problems = _relations(header.get("relations") or {}, project_dir.name)
+            problems.extend(f"{source.relative_to(doc)}: {problem}" for problem in link_problems)
             node_type = str(header["type"])
             if node_type == LEGACY_EXPERIMENT_TYPE:
                 node_type = "experiment"
@@ -182,7 +214,7 @@ def load_tree(doc: Path = DOC) -> Tree:
             node = Node(project=project_dir.name, id=str(header["id"]), type=node_type,
                         title=str(header["title"]), short=str(header["short"]), body=body, source=source,
                         header=header, parent=header.get("parent"), status=header.get("status"),
-                        order=float(header.get("order", 100)), relations=relations)
+                        order=float(header.get("order", 100)), relations=relations, reasons=reasons)
             if node.key in nodes:
                 problems.append(f"{source.relative_to(doc)}: duplicate id {node.key}")
                 continue
@@ -260,7 +292,8 @@ def _validate(tree: Tree) -> None:
     for node in tree.nodes.values():
         where = node.source.relative_to(DOC) if node.source.is_relative_to(DOC) else node.source
         if node.type not in TYPE_LABELS:
-            tree.problems.append(f"{where}: unknown type {node.type!r}")
+            tree.problems.append(f"{where}: unknown type {node.type!r}" + (
+                " (a dataset is a resource with kind: dataset)" if node.type == "dataset" else ""))
         if node.type == "term" and str(node.header.get("link") or "first").strip().lower() not in ("first", "every"):
             tree.problems.append(f"{where}: link: {node.header.get('link')!r} (use first or every)")
         if node.id != "home" and node.parent and f"{node.project}:{node.parent}" not in tree.nodes:
@@ -271,6 +304,18 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{where}: status {node.status!r} not in {statuses[node.type]}")
         if node.type == "hypothesis" and "fixed_before_results" not in node.header:
             tree.problems.append(f"{where}: hypothesis without fixed_before_results")
+        if node.type == "hypothesis" and node.header.get("fixed_before_results") is True:
+            unstated = [name for name in ("prediction", "criterion") if not str(node.header.get(name) or "").strip()]
+            if unstated:       # fixing the wording is not enough: what counts as support must be fixed too
+                tree.problems.append(f"{where}: hypothesis fixed before results without {' and '.join(unstated)} "
+                                     "(prediction: what you expect to observe; criterion: what result counts as "
+                                     "support and what counts against)")
+        _check_choice(tree, where, node, "analysis", ANALYSIS_VALUES, ("result", "conclusion", "step", "figure"))
+        _check_choice(tree, where, node, "certainty", CERTAINTY_VALUES, ("conclusion",))
+        _check_choice(tree, where, node, "kind", CAVEAT_KINDS, ("caveat",))
+        if node.type in ("result", "conclusion") and node.status == "exploratory":
+            tree.notes.append(f"{where}: status exploratory: since Kea 1.17 write analysis: exploratory and a status "
+                              f"({'done' if node.type == 'result' else 'supported or not_supported'})")
         internal = re.findall(r"\b[PQHSRCDFAWTO]\d{1,2}\b", node.short)
         if internal:
             tree.notes.append(f"{where}: summary line uses internal labels {', '.join(sorted(set(internal)))} "
@@ -315,6 +360,13 @@ def _validate(tree: Tree) -> None:
                     _missing(tree, where, target)
                 elif not _allowed(rule, node.type, target_node.type):
                     tree.problems.append(f"{where}: {relation} from {node.type} to {target_node.type} not allowed")
+                elif relation == "relies_on":
+                    typed = [name for name, other in schema_relations.items()
+                             if name not in UNTYPED_RELATIONS and "any" not in other["from"] + other["to"]
+                             and _allowed(other, node.type, target_node.type)]
+                    if typed:
+                        tree.notes.append(f"{where}: relies_on {target_node.label}: a typed relation fits "
+                                          f"({', '.join(typed)}); say how it relies on it")
         for match in LINK_PATTERN.finditer(node.body):
             target = match.group(1).strip()
             if target.startswith(("code:", "data:")):
@@ -324,6 +376,53 @@ def _validate(tree: Tree) -> None:
     for project, home in tree.projects.items():
         if home.type != "experiment":
             tree.problems.append(f"{project}/home: must be of type experiment")
+        members = [node for node in tree.nodes.values() if node.project == project]
+        kinds = {node.type for node in members}
+        if "result" in kinds and "premise" not in kinds:
+            tree.notes.append(f"{project}: results but no premises: what does the analysis take as given (data, "
+                              "methods, earlier findings)? Write premise pages, so a reader can question them")
+        unreasoned = sum(1 for node in members for relation, targets in node.relations.items() for target in targets
+                         if target in tree.nodes and _into_conclusion(node, relation, tree.nodes[target])
+                         and not tree.reason(node.key, target))
+        if unreasoned:
+            tree.notes.append(f"{project}: {unreasoned} support link(s) of conclusions without a reason; write "
+                              "{id: …, because: …} (why this result supports or opposes that conclusion)")
+        uncertain = [node.label for node in members if node.type == "conclusion" and node.status != "deprecated"
+                     and not node.header.get("certainty")]
+        if uncertain:
+            tree.notes.append(f"{project}: conclusion(s) {', '.join(uncertain[:6])} without certainty: (high, "
+                              "moderate, low, very_low)")
+
+
+# Fields on pages (Kea 1.17), from the literature on argument and evidence: confirmatory vs exploratory is a
+# property of the analysis, not a stage of its life (status); certainty is Toulmin's qualifier (as in GRADE); the
+# kind of a caveat is the threat to validity it names (Shadish, Cook & Campbell 2002).
+ANALYSIS_VALUES = ("confirmatory", "exploratory")
+CERTAINTY_VALUES = ("high", "moderate", "low", "very_low")
+CAVEAT_KINDS = ("internal", "external", "construct", "statistical", "other")
+UNTYPED_RELATIONS = ("relies_on", "supersedes", "cites")
+SUPPORT_RELATIONS = ("supports", "opposes", "supported_by", "opposed_by")
+
+
+def _check_choice(tree: Tree, where, node: Node, name: str, allowed: tuple, types: tuple) -> None:
+    value = node.header.get(name)
+    if value is None or node.type not in types:
+        return
+    if str(value) not in allowed:
+        tree.problems.append(f"{where}: {name}: {value!r} (use {', '.join(allowed)})")
+
+
+def _into_conclusion(node: Node, relation: str, target: Node) -> bool:
+    """A link that carries a conclusion: evidence -> conclusion (supports, opposes) or written on the conclusion."""
+    if relation in ("supports", "opposes"):
+        return target.type == "conclusion"
+    return relation in ("supported_by", "opposed_by") and node.type == "conclusion"
+
+
+def analysis_of(node: Node) -> str:
+    """confirmatory, exploratory or '' (status exploratory is the spelling before Kea 1.17)."""
+    value = str(node.header.get("analysis") or "")
+    return value or ("exploratory" if node.status == "exploratory" else "")
 
 
 # Sentences of kea init's templates (templates/home.md): a page that still holds one has not been written yet.

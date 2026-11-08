@@ -51,7 +51,7 @@ SENTINEL = "kea-pdf:/"                    # link prefix that marks a link to a p
 TYPE_COLOURS = {"experiment": "#333333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#a23c9e",
                 "step": "#2a7f62", "result": "#8c564b", "conclusion": "#c0392b", "decision": "#757575",
                 "figure": "#17818a", "artefact": "#966d09", "caveat": "#c64f00", "term": "#555566", "resource": "#5b6b2f",
-                "reference": "#555566", "dataset": "#555566", "page": "#555566"}
+                "reference": "#555566", "page": "#555566"}
 TYPE_MEANINGS = {
     "experiment": "the experiment: what it asks and what it found",
     "premise": "what is taken as given, with the reason",
@@ -698,7 +698,16 @@ class PdfWriter:
         by = (confirmed.get("by", "") if isinstance(confirmed, dict) else str(confirmed)) if confirmed else ""
         confirmed_pill = (f"#box(fill: rgb(\"#dff0e0\"), inset: (x: 5pt, y: 2pt), radius: 3pt)[#text(size: 7.5pt, fill: rgb(\"#1e5e22\"), "
                           f"weight: \"bold\")[✓ confirmed{text(' by ' + by) if by else ''}]]" if confirmed else "")
-        pills = " ".join(part for part in (status_pill(node.status), written_pill(node), confirmed_pill, extra) if part)
+        from kea.docsite.nodes import analysis_of
+        from kea.docsite.render import CAVEAT_KIND_TEXT, CERTAINTY_TEXT
+        exploratory = (f"#pill(\"#a86b00\")[exploratory]" if analysis_of(node) == "exploratory" else "")
+        certainty = str(node.header.get("certainty") or "")
+        certainty_pill = (f"#pill({string('#1b7f4b' if certainty == 'high' else '#3b4252' if certainty == 'moderate' else '#a86b00')})"
+                          f"[{text(CERTAINTY_TEXT[certainty])}]" if node.type == "conclusion" and certainty in CERTAINTY_TEXT else "")
+        kind = str(node.header.get("kind") or "")
+        kind_pill = f"#pill(\"#666677\")[{text(CAVEAT_KIND_TEXT[kind])}]" if node.type == "caveat" and kind in CAVEAT_KIND_TEXT else ""
+        pills = " ".join(part for part in (status_pill(node.status if node.status != "exploratory" else None), exploratory,
+                                           certainty_pill, kind_pill, written_pill(node), confirmed_pill, extra) if part)
         return ((f"#pagebreak(weak: true)\n" if level <= 2 else "")
                 + f"#node({string(colour)})[\n{'=' * level} {heading} {label(node.key)}\n\n"
                 + (f"#block(above: 0.5em, below: 0.7em)[{pills}]\n\n" if pills else "")
@@ -710,6 +719,12 @@ class PdfWriter:
         parts = [self.head(node, level)]
         if node.type == "figure":
             parts.append(self.figure(node, level))
+        if node.type == "hypothesis":            # what was expected and what counts as support, fixed with the claim
+            for name, title in (("prediction", "Prediction"), ("criterion", "Counts as support if")):
+                if node.header.get(name):
+                    parts.append(f"#strong[{title}:] {text(str(node.header[name]))}\n")
+        if node.type == "conclusion" and node.header.get("certainty_because"):
+            parts.append(f"#strong[Certainty:] {text(str(node.header['certainty_because']))}\n")
         parts.append(self.body(node, level))
         lines = []
         data = [self.artefact_by_path[path] for path in self.source_paths(node) if path in self.artefact_by_path]
@@ -725,6 +740,10 @@ class PdfWriter:
             keys = [key for key in dict.fromkeys(links[name]) if key in self.tree.nodes]
             if keys:
                 lines.append(f"#strong[{text(name + ' ' + linked_kinds([self.tree.nodes[key] for key in keys]))}:] {self.links(keys)}")
+                for key in keys:                 # why each link holds (because:)
+                    reason = self.tree.reason(node.key, key)
+                    if reason:
+                        lines.append(f"#h(1em)#emph[{self.links([key])}: because {text(reason)}]")
         if node.type == "step":                  # methods: what the step served and what follows from it
             used_for, results, conclusions = self.step_outcomes(node)
             for name, keys in (("Used for", used_for), ("Leads to results", results), ("Leads to conclusions", conclusions)):

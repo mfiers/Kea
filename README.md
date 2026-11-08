@@ -65,14 +65,14 @@ Kea does.
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.16.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.17.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.16.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.17.0"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.16.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.17.0 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again).
@@ -83,7 +83,7 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.16.0 kea --help
   for the PDF (see [PDF](#pdf)).
 - The agent skill is separate: copy `skill/SKILL.md` to `~/.claude/skills/kea/SKILL.md` (Claude Code), from the
   same tag:
-  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.16.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
+  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.17.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
 
 ## Use in a project
 
@@ -94,8 +94,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.16.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.16.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.17.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.17.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -122,7 +122,7 @@ The hub watches each project's agent session through the heartbeats of `kea watc
 
 To see what the hub does, add `--log events` to `kea hub serve`: one line on stderr per publish, lease change, sign-in, refused key, unknown site and reader action (comment, tag, freeze, implement). `--log requests` adds every request. Query strings are never logged, because sign-in codes travel in them.
 
-Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [steerer] [--project name]` (`kea hub users` lists who asked). A reader signs in once at the hub and each project site gets its own session; comments and verdicts carry the reader's ORCID iD. Roles: reader (reads the site and its comments, writes nothing), commenter, steerer (also freeze, implement), owner; the project passwords keep working.
+Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [steerer] [--project name]` (`kea hub users` lists who asked). A reader signs in once: every other project site of the hub then lets them in without a click (it asks the hub, which hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all of them; comments and verdicts carry the reader's ORCID iD. Roles: reader (reads the site and its comments, writes nothing), commenter, steerer (also freeze, implement), owner; the project passwords keep working.
 
 Optional: a public project. `kea hub public <name> on` makes its pages, PDF and `/id/` links readable without a login; the comments, the review cycle and uploaded data files still need a sign-in, and visitors see a "Sign in to comment" button. `kea hub public <name> off` closes it again; `kea hub list` shows which projects are public.
 

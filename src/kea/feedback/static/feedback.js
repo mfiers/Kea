@@ -53,7 +53,9 @@
     }
     return node;
   }
+  let accountName = "";                          // signed in with ORCID (kea hub): the verified name, set by the server
   function getName() {
+    if (accountName) return accountName;
     const match = document.cookie.match(/(?:^|; )fb_name=([^;]*)/);
     return match ? decodeURIComponent(match[1]) : "";
   }
@@ -816,7 +818,7 @@
     const anchored = threads.filter(thread => !thread.quote || thread._anchored);
     const orphaned = threads.filter(thread => thread.quote && !thread._anchored);
     if (!threads.length) listEl.append(el("p", { class: "fb-empty" },
-      "No comments on this page yet. Select any text to ask about it, or write about the whole page below."));
+      "No comments on this page yet. Select any text to ask about it, or write about the whole page above."));
     const resolved = anchored.filter(thread => stateOf(thread) === "resolved");
     for (const thread of anchored) if (stateOf(thread) !== "resolved") listEl.append(threadView(thread));
     if (resolved.length) {
@@ -839,7 +841,9 @@
   function renderName() {
     const name = getName();
     nameBox.replaceChildren();
-    if (name) {
+    if (accountName) {
+      nameBox.append("You comment as ", el("b", {}, accountName), " (signed in with ORCID)");
+    } else if (name) {
       nameBox.append("You comment as ", el("b", {}, name), " · ",
         el("a", { href: "#", onclick: event => { event.preventDefault(); setName(""); renderName(); } }, "change"));
     } else {
@@ -924,6 +928,7 @@
     threads = data.threads;
     if (data.tags) vocab = data.tags;
     readOnly = data.can_write === false;
+    accountName = data.account ? data.you || "" : "";
     document.body.classList.toggle("fb-readonly", readOnly);
     if (selectBtn && !selectBtn.dataset.filled) fillSelectionBar();
     renderPageStrip();
@@ -944,7 +949,7 @@
     panel.append(
       el("div", { class: "fb-head" }, el("b", {}, "Comments"),
         el("button", { class: "fb-close", title: "Close", onclick: closePanel }, "×")),
-      el("div", { class: "fb-body" }, nameBox, listEl, orphanEl, newCommentForm(null, false)));
+      el("div", { class: "fb-body" }, newCommentForm(null, false), nameBox, listEl, orphanEl));   // write first, then read
     const startForm = tagging => {
       selectBtn.hidden = true;
       if (!pendingSelection) return;
@@ -953,7 +958,7 @@
       if (existing) existing.remove();
       const form = newCommentForm(pendingSelection, tagging);
       form.classList.add("fb-selection");
-      panel.querySelector(".fb-body").insertBefore(form, listEl);
+      panel.querySelector(".fb-body").prepend(form);             // a comment on a selection: on top of everything
       if (!tagging) form.querySelector("textarea").focus();
     };
     selectBtn = selectionBar(startForm);

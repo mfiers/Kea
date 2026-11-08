@@ -55,9 +55,7 @@ The tree holds what earlier runs established. Read it before adding to it:
    - **Addressed caveats:** make sure the new work does not reopen them.
    - **Earlier results:** compare with them; do not redo them silently.
    - **Comments:** answer, or take them into the plan.
-3. **Fix the test before running it.** Write hypothesis pages with the test, the yardstick and the expectation, and
-   `fixed_before_results: true`, and commit them before the test runs; the commit time is the record. Work that
-   was not fixed in advance is labelled exploratory.
+3. **Fix the test before running it.** Write hypothesis pages with the test, `prediction:` (what you expect to observe) and `criterion:` (what result counts as support, what counts against, and what is inconclusive), and `fixed_before_results: true`, and commit them before the test runs; the commit time is the record. Work that was not fixed in advance gets `analysis: exploratory` on its results and conclusions.
 4. **Do the work reproducibly.** Write step and decision pages. Code goes in scripts with Makefile targets (one per
    step), with seeds and versions, and new versioned output files. Never analyse in the chat.
 5. **Write what came out.**
@@ -67,7 +65,7 @@ The tree holds what earlier runs established. Read it before adding to it:
    - A caveat this run dealt with: set it to `addressed` and link the step.
    - A new weakness: give it a new caveat page with `limits:`.
 7. **Conclude.**
-   - Write conclusions with `supported_by` / `opposed_by`.
+   - Write conclusions with `supported_by` / `opposed_by`, each link with its reason: `supported_by: [{id: r-x, because: "…"}]` (why this result bears on this conclusion), and `certainty:` (high, moderate, low, very_low) with `certainty_because:`.
    - Set each hypothesis's status and outcome.
    - Update the question's `answer:`, the experiment's summary and `doc/_summary.md` in the same commit.
 8. **Check.**
@@ -114,8 +112,12 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - One idea per page: `doc/<experiment>/<type>/<id>.md`, front matter `id, type, title, short, parent, status,
   relations, sources`; ids unique on the site. Types and allowed relations: `doc/_schema.yaml`.
 - `result` = what a file shows (every number from a file named in `sources:` or an artefact page);
-  `conclusion` = the interpretation, with `supported_by`/`opposed_by` results; `caveat` = what limits other pages
-  (`limits:`); hypotheses carry `fixed_before_results: true|false` and are committed before their test runs.
+  `conclusion` = the interpretation, with `supported_by`/`opposed_by` results (each with `because:`) and `certainty:`;
+  `caveat` = what limits other pages (`limits:`, and `kind:` internal, external, construct, statistical or other);
+  `premise` = what the analysis takes as given (data, methods, earlier findings), so a reader can question it;
+  hypotheses carry `fixed_before_results: true|false`, `prediction:` and `criterion:`, and are committed before
+  their test runs. `analysis: confirmatory | exploratory` on results and conclusions (not in `status:`).
+  Prefer a typed relation over `relies_on` (a step that follows a decision: `decided_in`).
 - **Steps read as the Methods section of a paper**: what was done to which data (dataset, version, n of donors and
   cells), with which tool and version (package, function, parameters, seed), which test and why (unit, sidedness,
   correction, number of permutations), and which files came out. Name the script and its Makefile target. A step

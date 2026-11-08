@@ -385,6 +385,7 @@ class HubApp:
             account=lambda request: self.accounts.account(request.cookies.get(accounts.SITE_COOKIE, ""), name),
             login_url=lambda request, next_url: self.login_url(name, next_url),
             public=lambda: hub.is_public(name),
+            sso_url=lambda request, next_url: self.check_url(name, next_url),
             states_context=lambda: hub.meta(name).get("states") or {"labels": {}, "items": {}})
         app = server.make_site_app(spec)
         self.sites[name] = (stamp, app)
@@ -422,7 +423,7 @@ class HubApp:
                 return
             await self.site_app(name)(scope, receive, send)
             return
-        if path in ("/auth/login", "/auth/orcid/callback"):
+        if path in ("/auth/login", "/auth/orcid/callback", "/auth/check", "/auth/logout"):
             await (await self.apex_auth(path, Request(scope, receive)))(scope, receive, send)
             return
         if path.startswith("/id/"):
@@ -512,6 +513,13 @@ class HubApp:
         target = self.hub.site_url(name) + (next_url if next_url.startswith("/") else "/")
         return f"{self.apex_url()}/auth/login?return={urllib.parse.quote(target, safe='')}"
 
+    def check_url(self, name: str, next_url: str) -> str | None:
+        """Where a project site asks whether the reader is signed in on the hub (None without an ORCID client)."""
+        if not accounts.orcid_settings():
+            return None
+        target = self.hub.site_url(name) + (next_url if next_url.startswith("/") else "/")
+        return f"{self.apex_url()}/auth/check?return={urllib.parse.quote(target, safe='')}"
+
     def project_of(self, url: str) -> tuple[str, str] | None:
         """(project, path) of a return address on one of this hub's project sites."""
         for name in self.hub.names():
@@ -532,11 +540,28 @@ class HubApp:
         if not settings:
             return PlainTextResponse("ORCID sign-in is not set up on this hub", status_code=404)
         callback = f"{self.apex_url()}/auth/orcid/callback"
+        session = self.accounts.current(self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex"))
+        if path == "/auth/check":                    # a project site asks: signed in here? in, or back without
+            target = request.query_params.get("return", "")
+            place = self.project_of(target)
+            if place is None:
+                return PlainTextResponse("unknown return address", status_code=400)
+            if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
+                log.info("sign-in %s -> %s (hub session, no click)", session["orcid"], place[0])
+                return self.finish_redirect(session["orcid"], *place)
+            return RedirectResponse(target, status_code=303)
+        if path == "/auth/logout":                   # sign out everywhere, then back to where the reader was
+            if session:
+                self.accounts.sign_out(session["orcid"])
+                log.info("sign-out %s (hub and every project site)", session["orcid"])
+            target = request.query_params.get("return", "")
+            response = RedirectResponse(target if self.project_of(target) else self.apex_url() + "/", status_code=303)
+            response.delete_cookie(accounts.APEX_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+            return response
         if path == "/auth/login":
             place = self.project_of(request.query_params.get("return", ""))
             if place is None:
                 return PlainTextResponse("unknown return address", status_code=400)
-            session = self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex")
             if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
                 log.info("sign-in %s -> %s (hub session)", session["orcid"], place[0])
                 return self.finish_redirect(session["orcid"], *place)
@@ -579,8 +604,14 @@ class HubApp:
 
     def site_auth(self, name: str, path: str, request: Request, cookie_path: str):
         """On a project's site: turn a one-time code from the apex into the project's own session; or sign out."""
-        if path == "/auth/logout":
-            response = RedirectResponse(cookie_path, status_code=303)
+        if path == "/auth/logout":                   # this site, then the hub (which signs out everywhere)
+            payload = self.accounts.verify(request.cookies.get(accounts.SITE_COOKIE, ""), "site")
+            if payload:
+                self.accounts.sign_out(str(payload.get("orcid")))
+            back = self.hub.site_url(name) + "/"
+            target = (f"{self.apex_url()}/auth/logout?return={urllib.parse.quote(back, safe='')}"
+                      if accounts.orcid_settings() else cookie_path)
+            response = RedirectResponse(target, status_code=303)
             response.delete_cookie(accounts.SITE_COOKIE, path=cookie_path)
             return response
         payload = self.accounts.verify(request.query_params.get("code", ""), "code")

@@ -203,3 +203,20 @@ def test_watcher_status_reads_the_silence():
     assert status({"at": at(40 * 60), "deadline": later, "exit": "planning"})["state"] == "gone"
     assert status({"at": at(600), "deadline": now - 1})["state"] == "ended"                       # deadline passed
     assert status({"at": at(5), "deadline": later, "exit": "deadline"})["state"] == "ended"
+
+
+def test_status_names_the_reader_and_logout_forgets_the_password(tmp_path):
+    """The menu bar's reader slot: /api/status says who is signed in and where to sign out; /logout drops the
+    password (and steering) cookies and leads back to the login."""
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<main>hi</main>")
+    client = TestClient(server.make_app(site, tmp_path / "events.jsonl", "pw-for-tests", tmp_path / "cycle.jsonl",
+                                        tmp_path / "heartbeat.json"))
+    client.post("/login", data={"password": "pw-for-tests", "name": "Ann", "next": "/"}, follow_redirects=False)
+    status = client.get("/api/status").json()
+    assert status["signed_in"] is True and status["account"] is False and status["sign_out"] == "/logout"
+    assert status["you"] == "Ann"
+    out = client.get("/logout", follow_redirects=False)
+    assert out.status_code == 303 and out.headers["location"] == "/login"
+    assert client.get("/api/status").status_code == 401                      # signed out

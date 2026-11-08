@@ -47,8 +47,15 @@
     banner.className = "fb-banner not-annotatable fb-banner-" + kind;
     banner.replaceChildren(...content);
     banner.hidden = false;
+    bannerOffset();
   }
-  function hideBanner() { if (banner) banner.hidden = true; }
+  function hideBanner() { if (banner) banner.hidden = true; bannerOffset(); }
+  /* The comment panel and the type bar are fixed to the top of the window: they start below the banner. */
+  function bannerOffset() {
+    const height = banner && !banner.hidden ? banner.offsetHeight : 0;
+    document.documentElement.style.setProperty("--fb-banner-h", height + "px");
+  }
+  window.addEventListener("resize", bannerOffset);
 
   // Freeze, Unfreeze, Implement and Cancel need the iteration password (a second password besides the site's);
   // the server answers 403 {need_steer: true} until it has been entered once (a cookie remembers it).
@@ -213,11 +220,70 @@
     lastState = cycle.state;
   }
 
+  /* The reader in the menu bar (render.py: <span class='user'>): the signed-in name opens a small menu with the
+     reader's comments, help and sign out; a public site read without a login shows Help and Sign in. */
+  let userKey = null;
+  function renderUser(status) {
+    const slot = document.querySelector(".topbar .user");
+    if (!slot) return;
+    const name = status && status.signed_in ? (status.you || (status.account ? status.orcid : "") || "Signed in") : "";
+    const key = status === null ? "anonymous" : name + "|" + (status && status.sign_out);
+    if (key === userKey) return;
+    userKey = key;
+    const help = el("a", { href: slot.dataset.help, title: "How to read this site, and about Kea" }, "Help");
+    if (status === null) {                       // public site, not signed in
+      const next = "/" + location.pathname.slice(new URL(BASE, location.href).pathname.length) + location.search;
+      slot.replaceChildren(help, el("a", { href: BASE + "login?next=" + encodeURIComponent(next) }, "Sign in"));
+      return;
+    }
+    if (!name) { slot.replaceChildren(help); return; }
+    const menu = el("div", { class: "user-menu", role: "menu", hidden: "" },
+      el("div", { class: "who" }, status.account ? `Signed in with ORCID ${status.orcid}` : "Signed in with the site password"),
+      el("a", { href: slot.dataset.comments + "?mine=1", role: "menuitem" }, "My comments"),
+      el("a", { href: slot.dataset.help, role: "menuitem" }, "Help"),
+      status.sign_out ? el("div", { class: "sep-line" }) : null,
+      status.sign_out ? el("a", { href: status.sign_out, role: "menuitem" }, "Sign out") : null);
+    const button = el("button", { class: "user-name", type: "button", title: name, "aria-haspopup": "true",
+      "aria-expanded": "false", onclick: event => {
+        event.stopPropagation();
+        menu.hidden = !menu.hidden;
+        button.setAttribute("aria-expanded", String(!menu.hidden));
+        slot.closest(".topbar").classList.toggle("user-open", !menu.hidden);   // above the page buttons
+      } }, name);
+    slot.replaceChildren(button, menu);
+    const close = () => { menu.hidden = true; button.setAttribute("aria-expanded", "false"); slot.closest(".topbar").classList.remove("user-open"); };
+    document.addEventListener("click", event => { if (!slot.contains(event.target)) close(); });
+    document.addEventListener("keydown", event => { if (event.key === "Escape") close(); });
+    if (window.keaFitTopbar) window.keaFitTopbar();
+    mineFilter(status, name);
+  }
+  /* feedback.html?mine=1: only the threads the reader started or answered (comments.py: data-people, data-orcid). */
+  function mineFilter(status, name) {
+    if (!/[?&]mine=1\b/.test(location.search)) return;
+    const threads = document.querySelectorAll(".fb-thread[data-people]");
+    if (!threads.length) return;
+    const who = "|" + name.trim().toLowerCase() + "|";
+    let shown = 0;
+    for (const thread of threads) {
+      const mine = thread.dataset.people.includes(who) || (status.orcid && thread.dataset.orcid === status.orcid);
+      thread.hidden = !mine;
+      shown += mine ? 1 : 0;
+    }
+    const heading = document.querySelector("main h1");
+    if (heading && !document.querySelector(".fb-mine-note")) {
+      heading.after(el("p", { class: "fb-mine-note help" }, `Your comments (${name}): ${shown}. `,
+        el("a", { href: location.pathname }, "Show all comments")));
+    }
+  }
+
   async function poll() {
     try {
       const response = await fetch(BASE + "api/status", { credentials: "same-origin", cache: "no-store" });
+      if (response.status === 401) { renderUser(null); return false; }
       if (!response.ok) return false;
-      apply(await response.json());
+      const status = await response.json();
+      renderUser(status);
+      apply(status);
       return true;
     } catch (error) {
       return false;

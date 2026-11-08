@@ -109,7 +109,10 @@ def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None 
     where = (f"<div class='fb-meta'><a href='{esc(page_href)}'>{esc(thread.page_title or thread.page)}</a></div>"
              if page_href else "")
     state, label = states.state_of(thread)
-    return (f"<div class='fb-thread fb-thread-{state}' id='fbs-{esc(thread.thread_id)}'>{where}<div class='fb-thread-head'>"
+    people = "|".join(sorted({author.strip().lower() for author, _, _ in messages if author}))
+    return (f"<div class='fb-thread fb-thread-{state}' id='fbs-{esc(thread.thread_id)}' data-people='|{esc(people)}|'"
+            f"{(' data-orcid=' + chr(39) + esc(thread.author_id) + chr(39)) if getattr(thread, 'author_id', '') else ''}>"
+            f"{where}<div class='fb-thread-head'>"
             f"<span class='fb-pill fb-state-{state}'>{esc(label)}"
             f"</span></div>{quote}{body}{status}</div>")
 

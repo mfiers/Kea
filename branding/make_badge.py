@@ -48,3 +48,9 @@ for size in (16, 24, 46, 96):
     x += size + 30
 preview.save(HERE / "badge_preview.png")
 print("wrote badge files to", STATIC)
+
+# The head alone (no disc, no rim) for the menu bar's home link, where it sits in a light rounded rectangle drawn by
+# the site's CSS: kea-head-64.png and kea-head-128.png (sharp on high-density screens), transparent background.
+head_only = icon.crop(HEAD_BOX).resize((SIZE, SIZE), Image.LANCZOS)
+for size in (128, 64):
+    head_only.resize((size, size), Image.LANCZOS).save(STATIC / f"kea-head-{size}.png")

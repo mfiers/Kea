@@ -74,6 +74,7 @@ from kea.feedback import cycle, states, store, tags
 
 PROJECT = PROJECT_ROOT
 AUTH_COOKIE = "fb_auth"
+SSO_COOKIE = "kea_sso_tried"             # the hub was asked for a session in the last hour (no loop, no repeat)
 STEER_COOKIE = "fb_steer"
 NAME_COOKIE = "fb_name"
 COOKIE_DAYS = 90
@@ -152,11 +153,12 @@ class PasswordGate(BaseHTTPMiddleware):
     write whose Origin is another host: project sites on sibling subdomains are 'same site' for the browser, so
     without this a page of one project could post to another project's API with the reader's cookie."""
 
-    def __init__(self, app, token: str, account=None, public=None):
+    def __init__(self, app, token: str, account=None, public=None, sso_url=None):
         super().__init__(app)
         self.token = token
         self.account = account
         self.public = public or (lambda: False)
+        self.sso_url = sso_url                   # kea hub: where to ask for an existing hub session (or None)
 
     async def dispatch(self, request: Request, call_next):
         path = local_path(request)
@@ -173,15 +175,23 @@ class PasswordGate(BaseHTTPMiddleware):
                                               "hub owner can make you a commenter)", "read_only": True},
                                     status_code=403)
             return await call_next(request)
-        if not self.token or path in ("/login", "/favicon.ico"):
+        if not self.token or path in ("/login", "/logout", "/favicon.ico"):
             return await call_next(request)
         if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), self.token):
             return await call_next(request)
+        target = path + (f"?{request.url.query}" if request.url.query else "")
+        page_visit = not writing and not path.startswith(("/api/", "/files/", "/_")) and path not in ("/login", "/logout")
+        if page_visit and self.sso_url and not request.cookies.get(SSO_COOKIE):
+            check = self.sso_url(request, target)   # signed in on the hub already? then in without a click
+            if check:
+                response = RedirectResponse(check, status_code=303)
+                response.set_cookie(SSO_COOKIE, "1", max_age=3600, httponly=True, samesite="lax",
+                                    secure=request.url.scheme == "https", path=site_root(request) + "/")
+                return response
         if not writing and self.public() and is_public_path(path):
             return await call_next(request)      # a public project: its pages without a login
         if path.startswith("/api/"):
             return JSONResponse({"error": "not signed in"}, status_code=401)
-        target = path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"{site_root(request)}/login?next={quote(target)}", status_code=303)
 
 
@@ -210,6 +220,7 @@ class SiteSpec:
     account: Callable[[Request], dict | None] | None = None      # kea hub: signed-in reader {orcid, name, role}
     login_url: Callable[[Request, str], str | None] | None = None  # kea hub: "Sign in with ORCID" for this next
     public: Callable[[], bool] | None = None   # kea hub: True = pages readable without a login (kea hub public)
+    sso_url: Callable[[Request, str], str | None] | None = None   # kea hub: ask the hub for its ORCID session
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
@@ -267,7 +278,25 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "unplanned": len(cycle.needs_planning(threads, current)),
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
                              "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
-                             "can_steer": may_steer(request)})
+                             "can_steer": may_steer(request), **signed_in(request)})
+
+    def signed_in(request: Request) -> dict:
+        """Who the reader is for the menu bar: signed in (account or site password) and where to sign out."""
+        account = request.scope.get("kea_account")
+        if account:
+            return {"signed_in": True, "account": True, "orcid": account.get("orcid", ""),
+                    "sign_out": site_root(request) + "/auth/logout"}
+        with_password = bool(token) and hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), token)
+        return {"signed_in": with_password, "account": False, "orcid": "",
+                "sign_out": site_root(request) + "/logout" if with_password else ""}
+
+    async def logout(request: Request) -> Response:
+        """Sign out of the site password: forget the password and steering cookies (the name stays, for next time)."""
+        root = site_root(request)
+        response = RedirectResponse(root + "/login", status_code=303)
+        for name in (AUTH_COOKIE, STEER_COOKIE):
+            response.delete_cookie(name, path=root + "/")
+        return response
 
     def may_steer(request: Request) -> bool:
         account = request.scope.get("kea_account")
@@ -411,7 +440,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         items.sort(key=lambda item: states.sort_key(item, info))
         account = request.scope.get("kea_account") or {}
         return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir),
-                             "can_write": account.get("role") != "reader"})
+                             "can_write": account.get("role") != "reader", "account": bool(account)})
 
     def tag_fields(body: dict, on_text: bool = False) -> dict:
         """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
@@ -572,6 +601,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
 
     routes = [
         Route("/login", login, methods=["GET", "POST"]),
+        Route("/logout", logout, methods=["GET"]),
         Route("/files/{path:path}", download, methods=["GET"]),
         Route("/id/{uid}", resolve_id, methods=["GET"]),
         Route("/api/status", status, methods=["GET"]),
@@ -587,7 +617,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         Mount("/", StaticFiles(directory=site_dir, html=True, check_dir=False)),
     ]
     return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token, account=spec.account,
-                                                                  public=spec.public)])
+                                                                  public=spec.public, sso_url=spec.sso_url)])
 
 
 def service_name() -> str:

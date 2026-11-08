@@ -34,7 +34,12 @@ def rel(path) -> str:
 
 
 def line(node: Node, extra: str = "") -> str:
+    from kea.docsite.nodes import analysis_of
     status = f" [{node.status}]" if node.status else ""
+    if analysis_of(node) and analysis_of(node) != node.status:
+        status += f" [{analysis_of(node)}]"
+    if node.header.get("certainty"):
+        status += f" [certainty {node.header['certainty']}]"
     path = rel(node.source)
     return f"- {node.number or TYPE_LABELS.get(node.type, node.type)} {node.title}{status}{extra} — {node.short} (`{path}`)"
 
@@ -78,20 +83,35 @@ def gaps_for_question(tree: Tree, question: Node, hypotheses, results, conclusio
     if conclusions and not questions.answer(question):
         gaps.append(f"{question.number} has conclusions but no `answer:` summary")
     if not hypotheses:
-        gaps.append(f"{question.number} has no hypothesis: write one (fixed_before_results: true) before testing, "
-                    "or label the work exploratory")
+        gaps.append(f"{question.number} has no hypothesis: write one (fixed_before_results: true, with prediction: "
+                    "and criterion:) before testing, or set analysis: exploratory on its results")
+    if not of_type(tree, question.project, "premise"):
+        gaps.append(f"{question.project} has no premises: write what the analysis takes as given (data, methods, "
+                    "earlier findings), so a reader can question it")
     tested = {key for result in results for key in result.relations.get("tests", [])}
     for hypothesis in hypotheses:
         if hypothesis.header.get("fixed_before_results") is None:
             gaps.append(f"{hypothesis.number}: fixed_before_results not stated")
+        if not (hypothesis.header.get("prediction") and hypothesis.header.get("criterion")):
+            gaps.append(f"{hypothesis.number}: no prediction: / criterion: (what you expect, and what result counts "
+                        "as support and what counts against) — fix them before the test runs")
         if hypothesis.key not in tested and hypothesis.status in (None, "", "open"):
             gaps.append(f"{hypothesis.number} is not tested yet")
     for result in results:
         if not result.header.get("sources"):
             gaps.append(f"{result.number}: no sources (every number must come from a named file)")
     for conclusion in conclusions:
-        if not conclusion.relations.get("supported_by") and not conclusion.relations.get("opposed_by"):
+        evidence = (conclusion.relations.get("supported_by", []) + conclusion.relations.get("opposed_by", [])
+                    + conclusion.incoming.get("Supported by", []) + conclusion.incoming.get("Opposed by", []))
+        if not evidence:
             gaps.append(f"{conclusion.number}: no supported_by / opposed_by")
+        unreasoned = [tree.nodes[key].label for key in dict.fromkeys(evidence)
+                      if key in tree.nodes and not tree.reason(conclusion.key, key)]
+        if unreasoned:
+            gaps.append(f"{conclusion.number}: no reason for its link(s) to {', '.join(unreasoned)} "
+                        "({id: …, because: …})")
+        if not conclusion.header.get("certainty") and conclusion.status != "deprecated":
+            gaps.append(f"{conclusion.number}: no certainty: (high, moderate, low, very_low; certainty_because: why)")
     return gaps
 
 
