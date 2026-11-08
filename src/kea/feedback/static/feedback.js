@@ -24,6 +24,7 @@
   const BASE = ASSET_BASE.replace(/_feedback\/$/, "");      // the site root (also under a hub prefix /p/<name>/)
   const API = BASE + "api/threads";
   let editable = false;
+  let readOnly = false;                          // a signed-in reader with the role "reader": sees comments, writes none
   const CONTEXT = 40;
   const NOT = "not-annotatable";
   const STATUS_TEXT = {
@@ -902,6 +903,7 @@
 
   // ---------- selection -> "Comment" button ----------
   function onSelectionEnd() {
+    if (readOnly) return;
     setTimeout(() => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || !selection.rangeCount) { selectBtn.hidden = true; return; }
@@ -921,6 +923,8 @@
     const data = await api("GET", API + "?page=" + encodeURIComponent(PAGE));
     threads = data.threads;
     if (data.tags) vocab = data.tags;
+    readOnly = data.can_write === false;
+    document.body.classList.toggle("fb-readonly", readOnly);
     if (selectBtn && !selectBtn.dataset.filled) fillSelectionBar();
     renderPageStrip();
     renderDock();
@@ -974,9 +978,19 @@
     return true;
   }
 
+  /* A public project read without a login: the comments stay hidden; one button leads to the sign-in. */
+  function signInButton() {
+    const root = new URL(BASE, location.href).pathname;       // the site root, e.g. / or /p/<name>/
+    const next = "/" + location.pathname.slice(root.length) + location.search;
+    const link = el("a", { class: "fb-dpill fb-d-signin", href: BASE + "login?next=" + encodeURIComponent(next || "/"),
+      title: "This site is public to read; sign in to see the comments and to comment" }, "Sign in to comment");
+    document.body.append(el("div", { class: "fb-dock fb-dock-anon " + NOT }, el("div", { class: "fb-dock-items" }, link)));
+  }
+
   async function start() {
     try {
       const probe = await fetch(API + "?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
+      if (probe.status === 401) { signInButton(); return; }   // a public project, not signed in: pages only
       if (!probe.ok) return;
     } catch (error) {
       return;  // no comment server: keep the static copy
@@ -986,7 +1000,7 @@
     await reload();
     try {
       const probeSource = await fetch(BASE + "api/source?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
-      editable = probeSource.ok;
+      editable = probeSource.ok && !readOnly;
     } catch (error) { editable = false; }
     renderDock();
     if (editable) addEditButtons();

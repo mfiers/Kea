@@ -85,7 +85,16 @@ def watch(args: argparse.Namespace) -> int:
         current = cycle.state(args.cycle_log)
         polls += 1
         extra = {"pid": os.getpid(), "deadline": args.deadline, "state": current.state, "cycle": current.cycle,
-                 "started": started}
+                 "started": started, "slow_interval": args.slow_interval}
+
+        def leave(reason: str, code: int) -> int:
+            """Stop on purpose: a last heartbeat says why, so the hub does not take the silence for a crash."""
+            if args.heartbeat:
+                try:
+                    client.heartbeat({**extra, "exit": reason})
+                except backend.RemoteError as error:
+                    print(f"watching: last heartbeat not sent ({error})", flush=True)
+            return code
         try:
             if args.heartbeat:
                 client.heartbeat(extra)              # also renews the lease
@@ -101,7 +110,7 @@ def watch(args: argparse.Namespace) -> int:
                   f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(args.deadline))}", flush=True)
         if current.state == "implement-requested":
             print(f"implement requested by {current.by} at {current.since} (cycle {current.cycle})")
-            return 20
+            return leave("implementing", 20)
         quiet_for = time.time() - last_reader_activity(args.events)
         if current.state in cycle.PLAN_OPEN_STATES and quiet_for >= args.settle:
             waiting = cycle.needs_planning(store.threads(args.events), current)
@@ -109,10 +118,10 @@ def watch(args: argparse.Namespace) -> int:
             if waiting or edits:
                 print(f"{len(waiting)} thread(s) and {len(edits)} direct edit commit(s) to fold into the plan of "
                       f"cycle {current.cycle}")
-                return 10
+                return leave("planning", 10)
         if time.time() >= args.deadline:
             print("deadline reached", flush=True)
-            return DEADLINE_EXIT
+            return leave("deadline", DEADLINE_EXIT)
         time.sleep(args.interval if quiet_for < args.quiet_after else args.slow_interval)
 
 

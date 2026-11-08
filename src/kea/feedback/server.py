@@ -152,10 +152,11 @@ class PasswordGate(BaseHTTPMiddleware):
     write whose Origin is another host: project sites on sibling subdomains are 'same site' for the browser, so
     without this a page of one project could post to another project's API with the reader's cookie."""
 
-    def __init__(self, app, token: str, account=None):
+    def __init__(self, app, token: str, account=None, public=None):
         super().__init__(app)
         self.token = token
         self.account = account
+        self.public = public or (lambda: False)
 
     async def dispatch(self, request: Request, call_next):
         path = local_path(request)
@@ -163,18 +164,31 @@ class PasswordGate(BaseHTTPMiddleware):
         if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin != "null" \
                 and origin.split("://")[-1].lower() != request.headers.get("host", "").lower():
             return JSONResponse({"error": "cross-site request refused"}, status_code=403)
+        writing = request.method not in ("GET", "HEAD", "OPTIONS")
         account = self.account(request) if self.account else None
         if account:
             request.scope["kea_account"] = account
+            if writing and account.get("role") == "reader" and path != "/login":
+                return JSONResponse({"error": "you can read this site but not comment (your role is reader; the "
+                                              "hub owner can make you a commenter)", "read_only": True},
+                                    status_code=403)
             return await call_next(request)
         if not self.token or path in ("/login", "/favicon.ico"):
             return await call_next(request)
         if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), self.token):
             return await call_next(request)
+        if not writing and self.public() and is_public_path(path):
+            return await call_next(request)      # a public project: its pages without a login
         if path.startswith("/api/"):
             return JSONResponse({"error": "not signed in"}, status_code=401)
         target = path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"{site_root(request)}/login?next={quote(target)}", status_code=303)
+
+
+def is_public_path(path: str) -> bool:
+    """What a public project shows without a login: the pages, the PDF, the assets and /id/ links. Not the comments
+    and the review cycle (/api/), and not the uploaded data files (/files/): those still need a sign-in."""
+    return not (path.startswith("/api/") or path.startswith("/files/"))
 
 
 @dataclass
@@ -195,6 +209,7 @@ class SiteSpec:
     versions_dir: Path | None = None       # kea hub: stored page versions (versions/<uid>/<version>.md)
     account: Callable[[Request], dict | None] | None = None      # kea hub: signed-in reader {orcid, name, role}
     login_url: Callable[[Request, str], str | None] | None = None  # kea hub: "Sign in with ORCID" for this next
+    public: Callable[[], bool] | None = None   # kea hub: True = pages readable without a login (kea hub public)
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
@@ -251,6 +266,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "open": sum(cycle.needs_attention(thread) for thread in threads),
                              "unplanned": len(cycle.needs_planning(threads, current)),
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
+                             "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
                              "can_steer": may_steer(request)})
 
     def may_steer(request: Request) -> bool:
@@ -393,7 +409,9 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                 item["state"], item["state_label"] = states.state_of(thread, info)
                 items.append(item)
         items.sort(key=lambda item: states.sort_key(item, info))
-        return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir)})
+        account = request.scope.get("kea_account") or {}
+        return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir),
+                             "can_write": account.get("role") != "reader"})
 
     def tag_fields(body: dict, on_text: bool = False) -> dict:
         """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
@@ -568,7 +586,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         Route("/api/threads/{thread_id}/tags", set_tags, methods=["POST"]),
         Mount("/", StaticFiles(directory=site_dir, html=True, check_dir=False)),
     ]
-    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token, account=spec.account)])
+    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token, account=spec.account,
+                                                                  public=spec.public)])
 
 
 def service_name() -> str:

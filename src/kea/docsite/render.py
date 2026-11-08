@@ -280,10 +280,11 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                             f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
     if here:
         segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
-    # Three entries: Map, History, PDF (Help is the kea logo). Each of the first two is a group whose own pages
-    # unfold next to it in the bar while the reader is on one of them (TOPBAR_JS marks the current link):
+    # Four entries: Map, Plan, History, PDF (Help is the kea logo). Map and History are groups whose own pages
+    # unfold next to them in the bar while the reader is on one of them (TOPBAR_JS marks the current link):
     #   Map: Relations, Objects (lists of all pages by type; under it Data and Code)
-    #   History: what changed per session (the group's own page), Review cycles, Plan, Comments
+    #   Plan: the plan of the current review cycle, on its own (what readers act on: freeze, implement)
+    #   History: what changed per session (the group's own page), Review cycles, Comments
     # Map, Relations and Objects open the current experiment's pages, the only experiment's on a site with one.
     experiments = list(tree.projects) if tree else []
     target = project if project and tree and project in tree.projects else (experiments[0] if len(experiments) == 1
@@ -303,8 +304,9 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                        [link("Relations", f"{target}/relations.html" if target else None, "The graph of relations"), objects]))
     history_members = [] if mode.MODE == "public" else [
         link("Review cycles", "history.html", "Each release with its comments, plan items and commits"),
-        link("Plan", "plan.html", "The plan of the current review cycle"),
         link("Comments", "feedback.html", "All comments on the site")]
+    if mode.MODE != "public":
+        right.append(link("Plan", "plan.html", "The plan of the current review cycle: what the next run does"))
     if mode.WITH_CHANGELOG or history_members:
         head = (link("History", "changes/index.html", "What changed, per working session") if mode.WITH_CHANGELOG
                 else link("History", "history.html"))

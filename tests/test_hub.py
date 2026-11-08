@@ -349,6 +349,13 @@ def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
     assert other_site.get("/api/threads").status_code == 401
     forged = site.post("/api/threads", json={"page": "x:r-a", "text": "x"}, headers={"Origin": "https://other.keahub.example"})
     assert forged.status_code == 403
+    # a reader reads the comments but writes nothing (not even a tag); the sign-in itself keeps working
+    assert hub.main(["--dir", str(the_hub.folder), "users", "role", orcid, "reader", "--project", "demo"]) == 0
+    listed = site.get("/api/threads")
+    assert listed.status_code == 200 and listed.json()["can_write"] is False and listed.json()["threads"]
+    refused = site.post("/api/threads", json={"page": "x:r-a", "text": "more"})
+    assert refused.status_code == 403 and refused.json()["read_only"] is True
+    assert site.post("/api/cycle/freeze", json={}).status_code == 403
     assert hub.main(["--dir", str(the_hub.folder), "users", "block", orcid]) == 0
     assert site.get("/api/threads").status_code == 401
 
@@ -381,3 +388,77 @@ def test_serve_log_lines_events_and_requests(demo, caplog):
     caplog.clear()
     TestClient(hub.HubApp(the_hub), base_url="https://testserver").get("/p/demo/hub/lease", headers=agent_headers("x"))
     assert "GET testserver" not in caplog.text                              # off: no request lines
+
+
+
+def test_public_project_pages_without_login(demo, capsys):
+    """kea hub public <name> on: pages, PDF and assets readable without a login; comments, the review cycle and data
+    files still need a sign-in; writes too. Off again: every page needs the sign-in."""
+    the_hub, secrets = demo
+    client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    archive = make_bundle(SITE)
+    published = client.post("/p/demo/hub/publish", content=archive,
+                            headers={**agent_headers(secrets["key"]), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+    assert published.status_code == 200
+    assert client.get("/p/demo/", follow_redirects=False).status_code == 303          # private: to the login
+    assert hub.main(["--dir", str(the_hub.folder), "public", "demo", "on"]) == 0
+    assert "public: anyone can read" in capsys.readouterr().out
+    visitor = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    page = visitor.get("/p/demo/", follow_redirects=False)
+    assert page.status_code == 200 and "home" in page.text
+    assert visitor.get("/p/demo/api/threads?page=x:r-a").status_code == 401           # comments: signed in only
+    assert visitor.get("/p/demo/api/status").status_code == 401
+    assert visitor.get("/p/demo/files/data/small.tsv", follow_redirects=False).status_code == 303   # data files too
+    assert visitor.post("/p/demo/api/threads", json={"page": "x:r-a", "text": "hi"}).status_code == 401
+    assert visitor.get("/p/demo/login").status_code == 200
+    hub.main(["--dir", str(the_hub.folder), "list"])
+    assert "public" in capsys.readouterr().out
+    assert hub.main(["--dir", str(the_hub.folder), "public", "demo", "off"]) == 0
+    assert TestClient(hub.HubApp(the_hub), base_url="https://testserver").get("/p/demo/", follow_redirects=False).status_code == 303
+
+
+
+def test_hub_notices_a_session_that_stopped(demo, monkeypatch):
+    """The hub's minute check: the first look only records; a watcher that stops sending heartbeats without saying
+    why becomes gone (logged, notify_url called once); its return is announced too; the site's status carries it."""
+    import yaml
+    import datetime
+    the_hub, secrets = demo
+    settings = the_hub.settings()
+    settings["notify_url"] = "https://ntfy.example/kea-alerts"
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    app = hub.HubApp(the_hub)
+    client = TestClient(app, base_url="https://testserver")
+    deadline = time.time() + 3600
+    beat = {"pid": 1, "deadline": deadline, "state": "collecting", "cycle": 1, "slow_interval": 60}
+    assert client.post("/p/demo/hub/lease", headers=agent_headers(secrets["key"]),
+                       json={"host": "h", "watching": True, "heartbeat": beat}).status_code == 200
+    assert app.check_watchers() == []                                     # first look: recorded only
+    heartbeat = the_hub.feedback("demo") / "heartbeat.json"
+    info = json.loads(heartbeat.read_text())
+    info["at"] = datetime.datetime.fromtimestamp(time.time() - 900, datetime.timezone.utc).isoformat()
+    heartbeat.write_text(json.dumps(info))                                # 15 minutes of silence
+    changes = app.check_watchers()
+    assert [(name, before, status["state"]) for name, before, status in changes] == [("demo", "watching", "gone")]
+    assert app.check_watchers() == []                                     # announced once
+    posted = []
+
+    class Reply:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+    monkeypatch.setattr(hub.urllib.request, "urlopen", lambda request, timeout: posted.append(request) or Reply())
+    app.notify("demo", changes[0][2])
+    assert posted[0].full_url == "https://ntfy.example/kea-alerts" and "stopped unexpectedly" in posted[0].get_header("Title")
+    assert posted[0].get_header("Click").endswith("/plan.html") and b"restarts the session" in posted[0].data
+    client.post("/p/demo/hub/lease", headers=agent_headers(secrets["key"]),
+                json={"host": "h", "watching": True, "heartbeat": {**beat, "exit": "implementing"}})
+    assert [status["state"] for _, _, status in app.check_watchers()] == ["working"]
+    archive = make_bundle(SITE)
+    client.post("/p/demo/hub/publish", content=archive,
+                headers={**agent_headers(secrets["key"]), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"})
+    watcher = client.get("/p/demo/api/status").json()["watcher"]
+    assert watcher["state"] == "working" and watcher["exit"] == "implementing" and watcher["seconds"] < 60

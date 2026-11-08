@@ -69,16 +69,16 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
   <h3 id="install">Installing the tool yourself</h3>
   <p>The agent normally does this, but to have the <code>kea</code> command on a machine (for example a hub
     host), install a tagged version with <a href="https://docs.astral.sh/uv/">uv</a>. Kea is not on PyPI.</p>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.15.0     # the kea command, for any project
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.15.0"       # or: a dependency of a Python/uv project
-uvx --from git+https://github.com/mfiers/Kea.git@v1.15.0 kea --help  # or: run once without installing</code></pre>
+  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.16.0     # the kea command, for any project
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.16.0"       # or: a dependency of a Python/uv project
+uvx --from git+https://github.com/mfiers/Kea.git@v1.16.0 kea --help  # or: run once without installing</code></pre>
   <p class="note">Upgrade by running the same command with the new tag (<code>uv tool install --force …@vX.Y.Z</code>);
     <code>uv tool upgrade kea</code> does not move a pinned tag. Needs <code>git</code>; the PDF needs
     <a href="https://github.com/typst/typst/releases">Typst</a>.</p>
   <h3>1. Give your agent the skill (once)</h3>
   <p>For Claude Code:</p>
   <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.15.0/skill/SKILL.md \
+curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.16.0/skill/SKILL.md \
      -o ~/.claude/skills/kea/SKILL.md</code></pre>
   <p>Other agents: put <code>skill/SKILL.md</code> wherever your agent reads its instructions, for example in the
     project's agent instructions file.</p>
@@ -94,8 +94,8 @@ curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.15.0/skill/SKILL.md \
     <pre id="skill-text">Loading the current skill from GitHub…</pre>
   </details>
   <details><summary>What the agent runs (for reference, not to type yourself)</summary>
-    <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.15.0"       # a Python project
-uv tool install git+https://github.com/mfiers/Kea.git@v1.15.0        # any other project
+    <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.16.0"       # a Python project
+uv tool install git+https://github.com/mfiers/Kea.git@v1.16.0        # any other project
 kea init --title "My analysis" --author "Your Name" --experiment first-experiment
 make site && make serve                                           # the password is in .env
 kea watch --deadline 3d                                           # waits for comments</code></pre>

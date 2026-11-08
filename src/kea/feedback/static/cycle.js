@@ -7,7 +7,9 @@
  *   While frozen, requested or implementing, a banner shows on every page and the comment controls are hidden
  *   where comments are not accepted (the server refuses them with 423 anyway).
  * - On the plan page (#fb-plan-actions) shows the buttons and a live indicator: are all comments in the plan,
- *   and when did Claude's watcher last look.
+ *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
+ *   since the last heartbeat. When the session stopped unexpectedly ("gone"), readers who may steer get a banner
+ *   on every page (dismissable until the next change).
  * The page's build id comes from data-build on this script tag.
  */
 (function () {
@@ -87,24 +89,43 @@
     poll();
   }
 
-  function ago(iso) {
-    if (!iso) return null;
-    return Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  function duration(seconds) {
+    if (seconds < 90) return seconds + " s";
+    if (seconds < 5400) return Math.round(seconds / 60) + " min";
+    if (seconds < 172800) return (seconds / 3600).toFixed(1) + " h";
+    return (seconds / 86400).toFixed(1) + " days";
+  }
+  function deadlineText(watcher) {
+    return watcher.deadline ? when(new Date(watcher.deadline * 1000).toISOString()) : "";
+  }
+  /* One line about the Claude session, from its heartbeats (cycle.watcher_status on the server). */
+  function sessionLine(status) {
+    const watcher = status.watcher || { state: "none" };
+    const last = watcher.seen_at ? `last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)})` : "";
+    const until = deadlineText(watcher);
+    const doing = { planning: "folding new comments into the plan", implementing: "implementing the plan" }[watcher.exit] || watcher.exit;
+    const parts = {
+      none: ["○", "Claude's watcher has not run on this site yet."],
+      watching: ["●", `Claude is watching: ${last}.` + (until ? ` Session until ${until}.` : "")],
+      working: ["●", `Claude is ${doing}: the watcher paused ${duration(watcher.seconds)} ago and comes back afterwards.`],
+      ended: ["○", `No Claude session at the moment: the last one ended (${last}). Comments wait until the next session.`],
+      gone: ["⚠", watcher.exit && watcher.exit !== "deadline"
+        ? `The Claude session seems to have stopped: it has been ${doing} for ${duration(watcher.seconds)}, longer than expected. Comments wait until someone restarts it.`
+        : `The Claude session stopped unexpectedly: ${last}` + (until ? `, while its deadline is ${until}` : "") + ". Comments wait until someone restarts it."],
+    }[watcher.state] || ["○", ""];
+    return el("div", { class: "fb-session fb-session-" + watcher.state, title: "From the watcher's heartbeats (kea watch)" },
+      el("span", { class: "fb-session-dot" }, parts[0]), " ", parts[1]);
   }
 
   function indicator(status) {
     const waiting = status.unplanned || 0;
-    const minutes = ago(status.watcher_seen_at);
-    const watching = minutes !== null && minutes <= 3;
-    const watcher = minutes === null ? "Claude's watcher has not run yet."
-      : watching ? `Claude is watching (last look ${when(status.watcher_seen_at)}).`
-      : `Claude is not watching at the moment (last look ${when(status.watcher_seen_at)}); comments wait until the next session.`;
+    const watching = status.watcher ? status.watcher.state === "watching" : false;
     if (waiting === 0) {
-      return el("div", { class: "fb-indicator fb-ok" }, el("b", {}, "All comments are in this plan. "), watcher);
+      return el("div", { class: "fb-indicator fb-ok" }, el("b", {}, "All comments are in this plan."));
     }
     return el("div", { class: "fb-indicator fb-wait" },
       el("b", {}, `${waiting} comment(s) are not in the plan yet. `),
-      watching ? "Claude adds them about two minutes after the last comment. " : "", watcher);
+      watching ? "Claude adds them about two minutes after the last comment." : "");
   }
 
   function planActions(status) {
@@ -113,7 +134,7 @@
     const state = status.cycle.state;
     const items = Number(box.dataset.items || 0);
     const waiting = status.unplanned || 0;
-    box.replaceChildren();
+    box.replaceChildren(sessionLine(status));
     if (state === "collecting") {
       box.append(indicator(status),
         el("button", { class: "fb-implement", onclick: () => post("freeze"),
@@ -138,13 +159,31 @@
     }
   }
 
+  function goneBanner(status) {
+    const watcher = status.watcher || {};
+    if (!status.can_steer || watcher.state !== "gone") return false;
+    let dismissed = "";
+    try { dismissed = sessionStorage.getItem("kea-gone-dismissed") || ""; } catch (error) { /* storage blocked */ }
+    if (dismissed === watcher.seen_at) return false;
+    showBanner("gone", el("b", {}, "The Claude session stopped unexpectedly. "),
+      `Last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)}); comments and plan requests wait until someone restarts it. `,
+      el("a", { href: PREFIX + "plan.html" }, "Details on the plan page"), ".",
+      el("button", { class: "fb-secondary", onclick: () => {
+        try { sessionStorage.setItem("kea-gone-dismissed", watcher.seen_at); } catch (error) { /* storage blocked */ }
+        hideBanner();
+      } }, "Dismiss"));
+    return true;
+  }
+
   function apply(status) {
     const cycle = status.cycle;
     const onPlan = !!document.getElementById("fb-plan-actions");
     const commentsHere = cycle.state === "collecting" || (cycle.state === "frozen" && onPlan);
     document.body.classList.toggle("fb-frozen", !commentsHere);
     const newBuild = status.build && status.build.build_id && BUILD && status.build.build_id !== BUILD;
-    if (cycle.state === "frozen") {
+    if (goneBanner(status)) {
+      /* shown: more urgent than the cycle banners for whoever can restart the session */
+    } else if (cycle.state === "frozen") {
       showBanner("frozen", el("b", {}, "Frozen for review. "),
         `${cycle.by} froze the site (${when(cycle.since)}); comments are open only on the plan. `,
         el("a", { href: PREFIX + "plan.html" }, "Go to the plan"), ".");

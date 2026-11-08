@@ -179,6 +179,70 @@ def read_heartbeat_info(path: Path | None = None) -> dict:
     return info if isinstance(info, dict) and info.get("at") else {}
 
 
+# How the watcher's heartbeats are read (watcher_status). A live watcher sends one at least every --slow-interval
+# seconds (60 by default); one that stops on purpose sends a last one with "exit" (planning, implementing, deadline).
+# A crash, a closed terminal, a sleeping machine or a lost network sends nothing: the heartbeats just stop, and the
+# hub infers "gone" from the silence (a dead-man's switch).
+STALE_SECONDS = 180                      # no heartbeat for this long (or 3 x the watcher's slow interval): not watching
+WORKING_LIMITS = {"planning": 30 * 60, "implementing": 4 * 3600}   # a deliberate pause longer than this: gone
+EXIT_REASONS = ("planning", "implementing", "deadline")
+
+
+def watcher_status(info: dict, now: float | None = None) -> dict:
+    """The agent's session as seen from its heartbeats: {state, seen_at, seconds, deadline, exit, text}.
+
+    state: none (never ran), watching (heartbeat fresh), working (stopped on purpose to plan comments or implement,
+    within WORKING_LIMITS), ended (deadline reached or passed), gone (heartbeats stopped without a reason while the
+    deadline is ahead, or a deliberate pause ran past its limit)."""
+    import datetime as dt
+    import time as time_module
+    now = time_module.time() if now is None else now
+    seen_at = str(info.get("at") or "")
+    if not seen_at:
+        return {"state": "none", "seen_at": "", "seconds": None, "deadline": None, "exit": "", "text": ""}
+    try:
+        seen = dt.datetime.fromisoformat(seen_at.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return {"state": "none", "seen_at": "", "seconds": None, "deadline": None, "exit": "", "text": ""}
+    seconds = max(0, round(now - seen))
+    try:
+        deadline = float(info.get("deadline")) if info.get("deadline") is not None else None
+    except (TypeError, ValueError):
+        deadline = None
+    reason = str(info.get("exit") or "")
+    try:
+        stale = max(STALE_SECONDS, 3 * float(info.get("slow_interval") or 0))
+    except (TypeError, ValueError):
+        stale = STALE_SECONDS
+    if reason == "deadline" or (deadline is not None and now >= deadline):
+        state = "ended"
+    elif reason in WORKING_LIMITS:
+        state = "working" if seconds <= WORKING_LIMITS[reason] else "gone"
+    elif seconds <= stale:
+        state = "watching"
+    else:
+        state = "gone"
+    minutes = _duration(seconds)
+    text = {"watching": f"watching; last heartbeat {minutes} ago",
+            "working": f"working ({reason}); the watcher paused {minutes} ago and comes back after",
+            "ended": f"session ended; last heartbeat {minutes} ago",
+            "gone": (f"stopped unexpectedly: {reason} for {minutes} (longer than expected)" if reason in WORKING_LIMITS
+                     else f"stopped unexpectedly: no heartbeat for {minutes}, the session's deadline is still ahead")}[state]
+    return {"state": state, "seen_at": seen_at, "seconds": seconds, "deadline": deadline, "exit": reason,
+            "text": text}
+
+
+def _duration(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 90:
+        return f"{seconds} s"
+    if seconds < 90 * 60:
+        return f"{round(seconds / 60)} min"
+    if seconds < 48 * 3600:
+        return f"{seconds / 3600:.1f} h"
+    return f"{seconds / 86400:.1f} days"
+
+
 def read_heartbeat(path: Path | None = None) -> str:
     path = path or heartbeat_path()
     try:

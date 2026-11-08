@@ -7,6 +7,8 @@ On the hub machine (behind an https reverse proxy; the hub itself listens on loc
     kea hub list                            projects, last publish, lease holder
     kea hub passwords <name> [--site] [--iteration]   new password(s) (old ones stop working)
     kea hub rotate-key <name>               new project key (the old one stops working)
+    kea hub public <name> [on|off]          on: the pages are readable without a login (comments, the review
+                                            cycle and data files still need a sign-in); no argument: show
     kea hub remove <name>                   moves the project to <dir>/removed/ (nothing is deleted)
     kea hub serve [--host 127.0.0.1 --port 8300] [--log events|requests]
                                             --log events: one line per publish, lease change, sign-in, refused key,
@@ -28,7 +30,7 @@ resolves a page's permanent id (docsite/identity.py) to the project that holds i
 under /p/<name>/.
 
 Layout of the hub folder:
-    hub.yaml                         url, created, max_upload_mb, project_domain (optional)
+    hub.yaml                         url, created, max_upload_mb, project_domain, notify_url (both optional)
     projects/<name>/versions/<uid>/  <version>.md and .json: every page version ever published (append-only)
     projects/<name>/project.json     title, salt, key_sha256, reader_token, steer_token (no clear-text secrets)
     projects/<name>/feedback/        events.jsonl, cycle.jsonl (the authority), lease.json, heartbeat.json
@@ -64,6 +66,7 @@ import tarfile
 import threading
 import time
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from starlette.requests import Request
@@ -231,6 +234,15 @@ class Hub:
         self.write_config(name, config)
         return out
 
+    def set_public(self, name: str, public: bool) -> None:
+        """A public project's pages (not its comments, review cycle or data files) are readable without a login."""
+        config = self.config(name) or sys.exit(f"no project {name!r}")
+        config["public"] = public
+        self.write_config(name, config)
+
+    def is_public(self, name: str) -> bool:
+        return bool((self.config(name) or {}).get("public"))
+
     def rotate_key(self, name: str) -> str:
         config = self.config(name) or sys.exit(f"no project {name!r}")
         key = "kea_" + secrets.token_urlsafe(32)
@@ -330,6 +342,7 @@ class HubApp:
         self.sites: dict[str, tuple[float, object]] = {}
         self.accounts = accounts.Accounts(hub.folder)
         self.log_level = log_level                 # off | events | requests
+        self.watch_states: dict[str, str] = {}     # project -> last watcher state seen by monitor()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or self.log_level == "off":
@@ -371,6 +384,7 @@ class HubApp:
             versions_dir=hub.versions_dir(name),
             account=lambda request: self.accounts.account(request.cookies.get(accounts.SITE_COOKIE, ""), name),
             login_url=lambda request, next_url: self.login_url(name, next_url),
+            public=lambda: hub.is_public(name),
             states_context=lambda: hub.meta(name).get("states") or {"labels": {}, "items": {}})
         app = server.make_site_app(spec)
         self.sites[name] = (stamp, app)
@@ -381,8 +395,11 @@ class HubApp:
             while True:
                 message = await receive()
                 if message["type"] == "lifespan.startup":
+                    self.monitor_task = asyncio.create_task(self.monitor())
                     await send({"type": "lifespan.startup.complete"})
                 elif message["type"] == "lifespan.shutdown":
+                    if getattr(self, "monitor_task", None):
+                        self.monitor_task.cancel()
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         if scope["type"] != "http":
@@ -438,6 +455,51 @@ class HubApp:
             return
         inner = dict(scope, root_path=scope.get("root_path", "") + f"/p/{name}")
         await self.site_app(name)(inner, receive, send)
+
+    # ---- is each project's agent still there? (cycle.watcher_status) ----
+    def check_watchers(self) -> list[tuple[str, str, dict]]:
+        """Compare every project's watcher state with the last check; returns the changes (project, before, now).
+        The first check after a start only records the states (no alarm for what happened while the hub was down)."""
+        changes = []
+        for name in self.hub.names():
+            status = cycle.watcher_status(cycle.read_heartbeat_info(self.hub.feedback(name) / "heartbeat.json"))
+            before = self.watch_states.get(name)
+            self.watch_states[name] = status["state"]
+            if before is not None and before != status["state"]:
+                changes.append((name, before, status))
+        return changes
+
+    async def monitor(self) -> None:
+        """Once a minute: log changes of the agents' sessions; a session that stopped unexpectedly (and its return)
+        also goes to hub.yaml notify_url (a POST with a plain-text body and Title/Click headers: works with ntfy.sh;
+        any webhook receives the text)."""
+        while True:
+            try:
+                for name, before, status in self.check_watchers():
+                    level = logging.WARNING if status["state"] == "gone" else logging.INFO
+                    log.log(level, "%s: Claude session %s -> %s (%s)", name, before, status["state"], status["text"])
+                    if status["state"] == "gone" or (before == "gone" and status["state"] in ("watching", "working")):
+                        await asyncio.to_thread(self.notify, name, status)
+            except Exception as error:                           # the monitor never takes the hub down
+                log.warning("watcher check failed: %s", error)
+            await asyncio.sleep(60)
+
+    def notify(self, name: str, status: dict) -> None:
+        url = str(self.hub.settings().get("notify_url") or "")
+        if not url:
+            return
+        gone = status["state"] == "gone"
+        title = f"Kea {name}: the Claude session {'stopped unexpectedly' if gone else 'is back'}"
+        body = (f"{title}. {status['text'][0].upper()}{status['text'][1:]}. "
+                + ("Comments wait until someone restarts the session." if gone else ""))
+        request = urllib.request.Request(url, data=body.encode(), method="POST", headers={
+            "Title": title, "Click": f"{self.hub.site_url(name)}/plan.html", "Tags": "warning" if gone else "white_check_mark",
+            "Content-Type": "text/plain; charset=utf-8"})
+        try:
+            with urllib.request.urlopen(request, timeout=15):
+                pass
+        except Exception as error:
+            log.warning("%s: notify_url refused the message (%s)", name, error)
 
     # ---- sign-in with ORCID (feedback/accounts.py) ----
     def apex_url(self) -> str:
@@ -713,6 +775,9 @@ def main(argv: list[str] | None = None) -> int:
     passwords.add_argument("name")
     passwords.add_argument("--site", action="store_true")
     passwords.add_argument("--iteration", action="store_true")
+    public = sub.add_parser("public", help="make a project's pages readable without a login (on) or not (off)")
+    public.add_argument("name")
+    public.add_argument("switch", nargs="?", choices=["on", "off"])
     rotate = sub.add_parser("rotate-key")
     rotate.add_argument("name")
     remove = sub.add_parser("remove")
@@ -755,7 +820,10 @@ def main(argv: list[str] | None = None) -> int:
             current = hub.project_dir(name) / "current"
             release = os.readlink(current) if current.is_symlink() else "not published"
             holder = hub.lease(name)
-            print(f"{name:24} {release:40} lease: {holder.get('agent', 'free')} {holder.get('renewed_at', '')}")
+            watcher = cycle.watcher_status(cycle.read_heartbeat_info(hub.feedback(name) / "heartbeat.json"))
+            print(f"{name:24} {'public ' if hub.is_public(name) else 'private'} {release:40} "
+                  f"lease: {holder.get('agent', 'free')} {holder.get('renewed_at', '')}  "
+                  f"Claude: {watcher['text'] or 'never watched'}")
         return 0
     if args.command == "users":
         book = accounts.Accounts(hub.folder)
@@ -781,6 +849,15 @@ def main(argv: list[str] | None = None) -> int:
             args.site = args.iteration = True
         for label, value in hub.new_passwords(args.name, args.site, args.iteration).items():
             print(f"{label.replace('_', ' ')}: {value}")
+        return 0
+    if args.command == "public":
+        if hub.config(args.name) is None:
+            parser.error(f"no project {args.name!r}")
+        if args.switch:
+            hub.set_public(args.name, args.switch == "on")
+        state = "public: anyone can read the pages; comments, the review cycle and data files need a sign-in" \
+            if hub.is_public(args.name) else "not public: every page needs a sign-in"
+        print(f"{args.name} ({hub.site_url(args.name)}/): {state}")
         return 0
     if args.command == "rotate-key":
         print(f"new project key (KEA_REMOTE_KEY in the project's .env; shown once):\n  {hub.rotate_key(args.name)}")

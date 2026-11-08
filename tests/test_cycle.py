@@ -182,3 +182,24 @@ def test_watch_reports_and_status(tmp_path, capsys, monkeypatch):
     assert "watching:" in out and "deadline reached" in out                      # a status line, then the end
     info = cycle.read_heartbeat_info()
     assert info["pid"] and info["deadline"] and info["state"] == "collecting"
+    assert info["exit"] == "deadline"                                            # the last heartbeat says why
+
+
+
+def test_watcher_status_reads_the_silence():
+    """watching / working / ended / gone from the heartbeat alone; a crash sends nothing, so gone is inferred."""
+    import datetime as dt
+    now = 1_800_000_000.0
+    at = lambda seconds_ago: dt.datetime.fromtimestamp(now - seconds_ago, dt.timezone.utc).isoformat()
+    later = now + 3600
+    status = lambda info: cycle.watcher_status(info, now)
+    assert status({})["state"] == "none"
+    assert status({"at": at(30), "deadline": later})["state"] == "watching"
+    gone = status({"at": at(600), "deadline": later})
+    assert gone["state"] == "gone" and gone["seconds"] == 600 and "10 min" in gone["text"]
+    assert status({"at": at(600), "deadline": later, "slow_interval": 300})["state"] == "watching"   # a slow watcher
+    assert status({"at": at(600), "deadline": later, "exit": "implementing"})["state"] == "working"
+    assert status({"at": at(5 * 3600), "deadline": now + 9 * 3600, "exit": "implementing"})["state"] == "gone"
+    assert status({"at": at(40 * 60), "deadline": later, "exit": "planning"})["state"] == "gone"
+    assert status({"at": at(600), "deadline": now - 1})["state"] == "ended"                       # deadline passed
+    assert status({"at": at(5), "deadline": later, "exit": "deadline"})["state"] == "ended"
