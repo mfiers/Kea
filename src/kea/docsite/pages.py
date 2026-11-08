@@ -427,8 +427,12 @@ class SiteRenderer:
         parts.append(f"</div><div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>About this page</span></div>")
         uid = str(node.header.get("uid") or "")
         if uid:
+            from kea.docsite import identity
+            version = identity.version_of(node)
             parts.append(f"<p class='pid not-annotatable'>Permanent identifier <a href='{prefix}id/{esc(uid)}' "
-                         f"title='Stays the same when the page is edited, renamed or moved'><code>kea:{esc(uid)}</code></a></p>")
+                         f"title='The page, as it is now: stays the same when it is edited, renamed or moved'>"
+                         f"<code>kea:{esc(uid)}</code></a> · this version <a href='{prefix}id/{esc(uid)}@{esc(version)}' "
+                         f"title='Exactly this text: cite this to point at what you read'><code>@{esc(version)}</code></a></p>")
         parts.append(self.about_html(node, prefix, context))
         self.broken += [f"{node.key}: [[{target}]]" for target in context.broken]
         title = f"{node.number} {node.title}" if node.number else node.title

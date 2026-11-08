@@ -49,6 +49,7 @@ import difflib
 import hashlib
 import hmac
 import html
+import re
 import json
 import os
 import subprocess
@@ -175,6 +176,7 @@ class SiteSpec:
     files_root: Path = PROJECT_ROOT        # where the downloads of _files.json live
     source_commit: Callable[[str], str] = field(default=lambda relative: "")
     states_context: Callable[[], dict] = field(default=lambda: states.context())
+    versions_dir: Path | None = None       # kea hub: stored page versions (versions/<uid>/<version>.md)
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
@@ -466,7 +468,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         """/id/<uid>: redirect to the page with that permanent id; /id/<uid>.json: its public facts (_ids.json)."""
         name = request.path_params["uid"]
         as_json = name.endswith(".json")
-        uid = name[:-5] if as_json else name
+        uid, _, version = (name[:-5] if as_json else name).partition("@")
         try:
             known = json.loads((site_dir / "_ids.json").read_text())
         except (OSError, ValueError):
@@ -474,9 +476,36 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         entry = known.get(uid)
         if entry is None:
             return JSONResponse({"error": f"no page with id {uid}"}, status_code=404)
+        if version and version != entry.get("version"):
+            return stored_version(request, uid, version, entry, as_json)
         if as_json:
             return JSONResponse({"id": f"kea:{uid}", **entry, "url": site_root(request) + "/" + entry["url"]})
         return RedirectResponse(site_root(request) + "/" + entry["url"], status_code=303)
+
+    def stored_version(request: Request, uid: str, version: str, entry: dict, as_json: bool) -> Response:
+        """An earlier version of a page, from the hub's version store, with a pointer to the current page."""
+        folder = spec.versions_dir
+        if folder is None or not re.match(r"^[a-z2-7]{20}$", version) or not (folder / uid / f"{version}.md").is_file():
+            return JSONResponse({"error": f"version {version} of kea:{uid} is not stored here (the current version is "
+                                          f"{entry.get('version', '?')})"}, status_code=404)
+        text = (folder / uid / f"{version}.md").read_text(encoding="utf-8")
+        facts = json.loads((folder / uid / f"{version}.json").read_text())
+        current = site_root(request) + "/" + entry["url"]
+        if as_json:
+            return JSONResponse({"id": f"kea:{uid}@{version}", **facts, "current_version": entry.get("version"),
+                                 "current_url": current, "markdown": text})
+        return HTMLResponse(
+            f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,"
+            f"initial-scale=1'><title>{html.escape(facts.get('title', uid))} (earlier version)</title><style>"
+            "body{font:15.5px/1.6 system-ui,sans-serif;color:#1d2330;max-width:900px;margin:30px auto;padding:0 18px}"
+            ".note{background:#fff3c4;border-left:4px solid #e0a030;padding:8px 12px;margin:0 0 16px}"
+            "pre{white-space:pre-wrap;background:#f5f7fa;padding:12px;border-radius:6px;font:13px/1.5 ui-monospace,monospace}"
+            "</style></head><body>"
+            f"<div class='note'>Version <code>{html.escape(version)}</code> of <code>kea:{html.escape(uid)}</code>, "
+            f"stored {html.escape(facts.get('stored_at', '')[:10])}. This is not the current text: "
+            f"<a href='{html.escape(current)}'>the page as it is now</a>.</div>"
+            f"<h1>{html.escape(facts.get('number', ''))} {html.escape(facts.get('title', ''))}</h1>"
+            f"<pre>{html.escape(text)}</pre></body></html>")
 
     async def download(request: Request) -> Response:
         relative = request.path_params["path"]

@@ -235,3 +235,67 @@ def test_remote_lease_of_an_ended_session_on_this_host_is_taken_over(live_hub, t
     monkeypatch.setenv("KEA_AGENT_ID", "third-session")
     with pytest.raises(agent.LeaseHeld):                      # elsewhere: no way to know, so refused
         backend.Remote(url, "demo", secrets["key"], events, log).take_lease()
+
+
+UID_A, UID_B = "a" * 26, "b" * 26
+
+
+def site_with_ids(version: str, text: str, uid: str = UID_A) -> dict:
+    files = dict(SITE)
+    files["site/_ids.json"] = json.dumps({uid: {"key": "x:r-a", "url": "x/r-a.html", "type": "result", "number": "R1",
+                                                "title": "A result", "short": "S.", "status": "done", "version": version,
+                                                "source": "doc/x/result/r-a.md"}})
+    files["doc/x/result/r-a.md"] = text
+    return files
+
+
+def publish_files(client, key: str, files: dict, project: str = "demo"):
+    archive = make_bundle(files)
+    return client.post(f"/p/{project}/hub/publish", content=archive,
+                       headers={**agent_headers(key), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+
+
+def test_ids_are_unique_across_projects_and_versions_are_kept(demo):
+    the_hub, secrets = demo
+    other = the_hub.add("other")
+    client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    first = publish_files(client, secrets["key"], site_with_ids("v" * 20, "---\nid: r-a\n---\nfirst text\n"))
+    assert first.status_code == 200 and first.json()["versions_stored"] == 1
+    assert publish_files(client, secrets["key"], site_with_ids("w" * 20, "---\nid: r-a\n---\nsecond text\n")).status_code == 200
+    stored = the_hub.versions_dir("demo") / UID_A
+    assert sorted(path.name for path in stored.glob("*.md")) == ["v" * 20 + ".md", "w" * 20 + ".md"]
+    assert "first text" in (stored / ("v" * 20 + ".md")).read_text()
+    taken = publish_files(client, other["key"], site_with_ids("v" * 20, "---\nid: r-a\n---\ncopy\n"), project="other")
+    assert taken.status_code >= 400 and "belong to another project" in taken.text
+    # the apex resolver: readers are sent to the project's site; a project's agent gets the facts
+    assert client.get(f"/id/{UID_A}", follow_redirects=False).headers["location"] == \
+        f"https://kea.example.org/p/demo/id/{UID_A}"
+    facts = client.get(f"/id/{UID_A}.json", headers=agent_headers(other["key"])).json()
+    assert facts["project"] == "demo" and facts["version"] == "w" * 20
+    assert client.get(f"/id/{UID_B}").status_code == 404
+    # on the project site (after login): the current version redirects, an earlier one is shown from the store
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"})
+    assert client.get(f"/p/demo/id/{UID_A}@{'w' * 20}", follow_redirects=False).headers["location"].endswith("/x/r-a.html")
+    earlier = client.get(f"/p/demo/id/{UID_A}@{'v' * 20}")
+    assert earlier.status_code == 200 and "first text" in earlier.text and "not the current text" in earlier.text
+
+
+def test_subdomains_reserved_names_and_redirects(demo):
+    the_hub, secrets = demo
+    import yaml
+    settings = the_hub.settings()
+    settings["project_domain"] = "keahub.example"
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    for bad in ("www", "id", "demo-", "xn--abc"):
+        with pytest.raises(SystemExit):
+            the_hub.add(bad)
+    client = TestClient(hub.HubApp(the_hub), base_url="https://keahub.example")
+    publish_files(client, secrets["key"], site_with_ids("v" * 20, "---\nid: r-a\n---\ntext\n"))   # the API stays on the apex
+    moved = client.get("/p/demo/x/r-a.html?a=1", follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "https://demo.keahub.example/x/r-a.html?a=1"
+    sub = TestClient(hub.HubApp(the_hub), base_url="https://demo.keahub.example")
+    assert sub.get("/", follow_redirects=False).headers["location"].startswith("/login")       # root path, own login
+    login = sub.post("/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"}, follow_redirects=False)
+    assert login.status_code == 303 and sub.get("/").status_code == 200
+    assert TestClient(hub.HubApp(the_hub), base_url="https://nope.keahub.example").get("/").status_code == 404
+    assert client.get(f"/id/{UID_A}", follow_redirects=False).headers["location"] == f"https://demo.keahub.example/id/{UID_A}"

@@ -227,7 +227,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     for row in going:
         print(f"uploaded {row['path']} ({row['size'] / 1024:.1f} kB; {row['reason']})")
-    print(f"published release {result['release']} to {remote['url'].rstrip('/')}/p/{remote['project']}/ "
+    site_url = result.get("site_url") or f"{remote['url'].rstrip('/')}/p/{remote['project']}"   # older hubs: no site_url
+    stored = f", {result['versions_stored']} new page version(s) kept" if result.get("versions_stored") else ""
+    print(f"published release {result['release']} to {site_url}/{stored} "
           f"({len(archive) / 1048576:.1f} MB bundle, {len(going)} data file(s), "
           f"{len(meta['source_commits'])} editable pages)")
     return 0

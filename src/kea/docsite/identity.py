@@ -2,8 +2,9 @@
 
 Every page gets a ``uid:`` in its front matter: 128 random bits written as 26 lower-case base32 characters
 (``kea:<uid>`` when cited). It is minted once, never changes when the page is edited, renamed or moved to another
-experiment, and is unique across a site (and, on a hub, across all its projects). Version ids (a hash of the page at
-each release) and the hub-wide resolver follow in later steps.
+experiment, and is unique across a site (and, on a hub, across all its projects). Each state of a page has a version
+id, the hash of its canonical form (:func:`version_of`); the hub keeps the text of every version it was sent, so
+``kea:<uid>@<version>`` keeps pointing at what was cited.
 
     kea check          reports malformed and duplicate uids (problems) and pages without one (one note)
     kea check --fix    writes a new uid into every page that has none (one line after ``id:``; nothing else changes)
@@ -70,8 +71,36 @@ def add_missing(tree) -> list[Path]:
     return changed
 
 
+VOLATILE = ("order",)            # front-matter fields that do not change what a page says
+
+
+def canonical(node) -> str:
+    """The page in a fixed form for its version id: front matter with sorted keys (without VOLATILE fields), then
+    the body with every run of whitespace made one space. A whitespace-only edit keeps the version; any change of
+    words, numbers, status or relations gives a new one."""
+    import json
+    header = {key: value for key, value in node.header.items() if key not in VOLATILE}
+    body = re.sub(r"\s+", " ", node.body).strip()
+    return json.dumps(header, sort_keys=True, ensure_ascii=False, default=str) + "\n" + body
+
+
+def version_of(node) -> str:
+    """20 base32 characters of the sha256 of the canonical page (100 bits): cited as kea:<uid>@<version>."""
+    import hashlib
+    digest = hashlib.sha256(canonical(node).encode("utf-8")).digest()
+    return base64.b32encode(digest).decode("ascii").lower()[:20]
+
+
 def index(tree) -> dict[str, dict]:
-    """uid -> the public facts of its page (what /id/<uid>.json answers)."""
+    """uid -> the public facts of its page (what /id/<uid>.json answers), with the current version id."""
     return {uid_of(node): {"key": node.key, "url": node.url, "type": node.type, "number": node.number or "",
-                           "title": node.title, "short": node.short, "status": str(node.status or "")}
+                           "title": node.title, "short": node.short, "status": str(node.status or ""),
+                           "version": version_of(node),
+                           "source": source_path(node.source)}
             for node in tree.nodes.values() if UID_PATTERN.match(uid_of(node))}
+
+
+def source_path(path: Path) -> str:
+    """'doc/<experiment>/<type>/<id>.md': the page's file from the project root (as in a published bundle)."""
+    parts = path.parts
+    return "/".join(parts[len(parts) - 1 - parts[::-1].index("doc"):]) if "doc" in parts else path.name

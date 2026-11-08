@@ -65,14 +65,14 @@ Kea does.
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.12.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.13.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.12.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.13.0"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.12.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.13.0 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again).
@@ -83,7 +83,7 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.12.0 kea --help
   for the PDF (see [PDF](#pdf)).
 - The agent skill is separate: copy `skill/SKILL.md` to `~/.claude/skills/kea/SKILL.md` (Claude Code), from the
   same tag:
-  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.12.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
+  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.13.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
 
 ## Use in a project
 
@@ -94,8 +94,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.12.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.12.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.13.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.13.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -117,6 +117,8 @@ kea hub init --dir /srv/kea-hub --url https://kea.example.org
 kea hub add trajectories --title Trajectories    # prints the project key, site password, iteration password
 kea hub serve --host 127.0.0.1 --port 8300       # behind the proxy, e.g. Caddy: kea.example.org { reverse_proxy 127.0.0.1:8300 }
 ```
+
+Optional: each project on its own subdomain. Put `project_domain: example.org` in the hub's `hub.yaml` and give the proxy a wildcard certificate for `*.example.org`; project `trajectories` is then read at `https://trajectories.example.org/`, old `/p/trajectories/` links redirect there, and agents keep using `https://example.org` in `remote.url`. Every page has a permanent id (`uid:`, minted by `kea check --fix`); `https://example.org/id/<uid>` finds it on any project of the hub, and `…/id/<uid>@<version>` shows a cited version even after later edits.
 
 ```
 # in the project: kea.yaml

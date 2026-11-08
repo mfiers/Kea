@@ -18,8 +18,15 @@ then `kea publish` sends the built site and `kea watch`, `kea list`, `kea reply`
 Readers: https://kea.example.org/p/<name>/ ; the site password makes them commenters (any name they like), the
 iteration password also lets them freeze the site, unfreeze it, and ask Claude to implement the plan.
 
+Addresses: with hub.yaml `project_domain: keahub.eu` every project is served at https://<name>.keahub.eu/ (one
+wildcard certificate at the proxy); https://keahub.eu/p/<name>/<page> redirects there, the agent API stays at
+https://keahub.eu/p/<name>/hub/ (also answered on the subdomain), and https://keahub.eu/id/<uid>[@<version>|.json]
+resolves a page's permanent id (docsite/identity.py) to the project that holds it. Without project_domain, sites stay
+under /p/<name>/.
+
 Layout of the hub folder:
-    hub.yaml                         url, created, max_upload_mb
+    hub.yaml                         url, created, max_upload_mb, project_domain (optional)
+    projects/<name>/versions/<uid>/  <version>.md and .json: every page version ever published (append-only)
     projects/<name>/project.json     title, salt, key_sha256, reader_token, steer_token (no clear-text secrets)
     projects/<name>/feedback/        events.jsonl, cycle.jsonl (the authority), lease.json, heartbeat.json
     projects/<name>/releases/<id>/   site/, doc/ (Markdown for the editor), files/ (uploaded data), meta.json
@@ -58,6 +65,18 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from kea.feedback import agent, cycle, server, store
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+# names a new project may not take: they are (or may become) hub addresses on the apex or as subdomains
+RESERVED = {"www", "id", "api", "hub", "admin", "mail", "static", "assets", "doi", "auth", "p", "login", "logout"}
+
+
+def check_new_name(name: str) -> None:
+    """A new project's name must also be a valid DNS label for its subdomain: no trailing '-', no 'xn--' (an
+    internationalised name in DNS), not reserved."""
+    if not NAME.match(name) or name.endswith("-") or name.startswith("xn--") or "--" in name[2:4]:
+        raise SystemExit(f"{name!r}: use lower-case letters, digits and single dashes, not at the end (it becomes a "
+                         "subdomain)")
+    if name in RESERVED:
+        raise SystemExit(f"{name!r} is reserved for the hub itself; choose another name")
 KEEP_RELEASES = 3
 AGENT_CYCLE_EVENTS = ("plan-updated", "implementing", "released")
 _locks: dict[str, threading.Lock] = {}
@@ -102,6 +121,59 @@ class Hub:
         path.write_text(yaml.safe_dump({"url": url.rstrip("/"), "created": agent.now_iso(),
                                         "max_upload_mb": max_upload_mb}))
 
+    def project_domain(self) -> str:
+        """hub.yaml project_domain (e.g. keahub.eu): each project is served at https://<name>.<domain>/."""
+        return str(self.settings().get("project_domain") or "").strip().lower().strip(".")
+
+    def site_url(self, name: str) -> str:
+        """The public address of a project's site: its subdomain, or <url>/p/<name>."""
+        url = str(self.settings().get("url", "")).rstrip("/")
+        domain = self.project_domain()
+        if domain:
+            scheme = url.split("://")[0] if "://" in url else "https"
+            return f"{scheme}://{name}.{domain}"
+        return f"{url}/p/{name}"
+
+    def ids_of(self, name: str, site: Path | None = None) -> dict:
+        try:
+            return json.loads(((site or self.project_dir(name) / "current" / "site") / "_ids.json").read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def id_index(self) -> dict[str, str]:
+        """uid -> project, over the current release of every project (cached until a project publishes)."""
+        stamp = tuple((name, os.path.realpath(self.project_dir(name) / "current")) for name in self.names())
+        if getattr(self, "_id_stamp", None) != stamp:
+            index: dict[str, str] = {}
+            for name in self.names():
+                for uid in self.ids_of(name):
+                    index.setdefault(uid, name)
+            self._id_index, self._id_stamp = index, stamp
+        return self._id_index
+
+    def versions_dir(self, name: str) -> Path:
+        return self.project_dir(name) / "versions"
+
+    def store_versions(self, name: str, release: Path) -> int:
+        """Keep the Markdown of every page version this release carries (versions/<uid>/<version>.md + .json), so
+        kea:<uid>@<version> still shows the cited text after later publishes. Append-only: a stored version is never
+        replaced or removed by a publish."""
+        stored = 0
+        for uid, entry in self.ids_of(name, release / "site").items():
+            version, source = str(entry.get("version", "")), release / str(entry.get("source", ""))
+            if not re.match(r"^[a-z2-7]{26}$", uid) or not re.match(r"^[a-z2-7]{20}$", version) or not source.is_file():
+                continue
+            target = self.versions_dir(name) / uid / f"{version}.md"
+            if target.exists():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            facts = {key: entry.get(key, "") for key in ("key", "type", "number", "title", "short", "status")}
+            (target.with_suffix(".json")).write_text(json.dumps({**facts, "stored_at": agent.now_iso(),
+                                                                 "release": release.name}, indent=1))
+            stored += 1
+        return stored
+
     # ---- projects ----
     def project_dir(self, name: str) -> Path:
         if not NAME.match(name):
@@ -125,6 +197,7 @@ class Hub:
         return sorted(path.name for path in self.projects_dir.glob("*") if (path / "project.json").exists())
 
     def add(self, name: str, title: str = "") -> dict:
+        check_new_name(name)
         folder = self.project_dir(name)
         if folder.exists():
             raise SystemExit(f"project {name!r} exists already (kea hub passwords / rotate-key to renew secrets)")
@@ -205,6 +278,12 @@ def install_release(hub: Hub, name: str, archive: bytes) -> dict:
         safe_extract(archive, staging)
         if not (staging / "site" / "index.html").is_file() or not (staging / "meta.json").is_file():
             raise ValueError("a bundle needs site/index.html and meta.json")
+        owners = hub.id_index()
+        taken = sorted(uid for uid in hub.ids_of(name, staging / "site") if owners.get(uid, name) != name)
+        if taken:
+            raise ValueError(f"{len(taken)} page id(s) belong to another project on this hub ({', '.join(taken[:3])}"
+                             f"{' …' if len(taken) > 3 else ''}): a copied page needs its own uid (delete the uid: "
+                             "line and run kea check --fix)")
         os.chmod(staging, 0o755)
         final = releases / release_id
         staging.rename(final)
@@ -216,10 +295,12 @@ def install_release(hub: Hub, name: str, archive: bytes) -> dict:
     temporary.unlink(missing_ok=True)
     temporary.symlink_to(Path("releases") / release_id)
     os.replace(temporary, link)
+    stored = hub.store_versions(name, final)
     kept = sorted(path for path in releases.iterdir() if path.is_dir() and not path.name.endswith(".partial"))
     for old in kept[:-KEEP_RELEASES]:
         shutil.rmtree(old, ignore_errors=True)
-    return {"release": release_id, "files": len(json.loads((final / "meta.json").read_text()).get("files", []))}
+    return {"release": release_id, "files": len(json.loads((final / "meta.json").read_text()).get("files", [])),
+            "versions_stored": stored, "site_url": hub.site_url(name)}
 
 
 def log_part(path: Path, start: int, local_sha: str) -> dict:
@@ -256,6 +337,7 @@ class HubApp:
             steer_token=config["steer_token"], title=config.get("title", name), salt=config["salt"],
             source_root=current, files_root=current / "files",
             source_commit=lambda relative: str(hub.meta(name).get("source_commits", {}).get(relative, "")),
+            versions_dir=hub.versions_dir(name),
             states_context=lambda: hub.meta(name).get("states") or {"labels": {}, "items": {}})
         app = server.make_site_app(spec)
         self.sites[name] = (stamp, app)
@@ -273,6 +355,23 @@ class HubApp:
         if scope["type"] != "http":
             return
         path = scope["path"]
+        domain = self.hub.project_domain()
+        host = Request(scope).headers.get("host", "").split(":")[0].lower().rstrip(".")
+        if domain and host.endswith("." + domain) and host not in ("www." + domain,):
+            name = host[:-len(domain) - 1]           # <name>.<domain>: that project's site at the root
+            if not NAME.match(name) or self.hub.config(name) is None:
+                await PlainTextResponse("no such site", status_code=404)(scope, receive, send)
+                return
+            if path.startswith("/hub/"):
+                response = await self.agent_api(name, path[len("/hub/"):], Request(scope, receive))
+                await response(scope, receive, send)
+                return
+            await self.site_app(name)(scope, receive, send)
+            return
+        if path.startswith("/id/"):
+            response = await self.resolve_id(path[len("/id/"):], Request(scope, receive))
+            await response(scope, receive, send)
+            return
         match = re.match(r"^/p/([^/]+)(/.*)?$", path)
         if not match:
             text = "ok" if path == "/healthz" else "Kea hub. Open the link to your project's site."
@@ -282,15 +381,37 @@ class HubApp:
         if not NAME.match(name) or self.hub.config(name) is None:
             await PlainTextResponse("no such site", status_code=404)(scope, receive, send)
             return
-        if rest is None:
-            await RedirectResponse(f"/p/{name}/", status_code=308)(scope, receive, send)
-            return
-        if rest.startswith("/hub/"):
+        if rest is not None and rest.startswith("/hub/"):       # the agent API stays on the apex
             response = await self.agent_api(name, rest[len("/hub/"):], Request(scope, receive))
             await response(scope, receive, send)
             return
+        if domain and scope.get("method") in ("GET", "HEAD"):   # reader pages moved to the project's subdomain
+            query = scope.get("query_string", b"").decode()
+            target = self.hub.site_url(name) + (rest or "/") + (f"?{query}" if query else "")
+            await RedirectResponse(target, status_code=308)(scope, receive, send)
+            return
+        if rest is None:
+            await RedirectResponse(f"/p/{name}/", status_code=308)(scope, receive, send)
+            return
         inner = dict(scope, root_path=scope.get("root_path", "") + f"/p/{name}")
         await self.site_app(name)(inner, receive, send)
+
+    async def resolve_id(self, rest: str, request: Request):
+        """/id/<uid>[.json|@<version>] on the hub: find the project that holds the page, then let that project's
+        site answer (it applies the project's login). A project's agent (Bearer project key) gets the facts as JSON
+        directly: that is how one project reads the state of a page it builds on in another."""
+        uid = re.split(r"[.@]", rest, maxsplit=1)[0]
+        name = self.hub.id_index().get(uid)
+        if name is None:
+            return JSONResponse({"error": f"no page with id kea:{uid} on this hub"}, status_code=404)
+        header = request.headers.get("authorization", "")
+        key = header[len("Bearer "):].strip() if header.startswith("Bearer ") else ""
+        if key and rest.endswith(".json") and any(hmac.compare_digest(sha256_hex(key), (self.hub.config(other) or {})
+                                                                     .get("key_sha256", "")) for other in self.hub.names()):
+            entry = self.hub.ids_of(name).get(uid, {})
+            return JSONResponse({"id": f"kea:{uid}", "project": name, **entry,
+                                 "url": f"{self.hub.site_url(name)}/{entry.get('url', '')}"})
+        return RedirectResponse(f"{self.hub.site_url(name)}/id/{rest}", status_code=308)
 
     # ---- agent API ----
     def authorised(self, name: str, request: Request) -> bool:

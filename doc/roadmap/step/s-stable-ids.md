@@ -59,10 +59,12 @@ Order: concept ids and the apex resolver first or together with the subdomains, 
 
 ## Status (8 November 2026)
 
-Step 1 is built (after Kea 1.12.0, not released yet):
+Built (Kea 1.13.0):
 
-- Every page has a `uid:`: 128 random bits as 26 lower-case base32 characters, cited as `kea:<uid>`. `kea check --fix` writes one into each page without it, as one line after `id:`, and changes nothing else; this site's 24 pages have theirs.
-- `kea check` reports a malformed uid and a uid used by two pages (a copied page) as problems, and pages without one as a note.
-- The build writes `_ids.json` (uid → page and its public facts). On the site, `/id/<uid>` redirects to the page and `/id/<uid>.json` answers its facts; "About this page" shows the identifier.
+- Every page has a `uid:`: 128 random bits as 26 lower-case base32 characters, cited as `kea:<uid>`. `kea check --fix` writes one into each page without it, as one line after `id:`, and changes nothing else. `kea check` reports a malformed uid and a uid used by two pages as problems, and pages without one as a note.
+- Each state of a page has a version id: 20 base32 characters of the sha256 of the page in a fixed form (front matter with sorted keys and without `order:`, body with whitespace collapsed), cited as `kea:<uid>@<version>`. "About this page" shows both.
+- The build writes `_ids.json`. On a site, `/id/<uid>` redirects to the page, `/id/<uid>.json` answers its facts, and `/id/<uid>@<version>` shows that version: the page itself when it is current, else the stored text with a pointer to the current page.
+- The hub keeps the Markdown of every version it is sent (`versions/<uid>/<version>.md`, append-only), refuses a publish whose ids belong to another project, and resolves `/id/…` on the apex: readers are sent to the project's own site (and its login); a project's agent with its key gets the facts as JSON.
+- Per-project subdomains: with `project_domain:` in hub.yaml, `<project>.<domain>` serves that project at its root; reader pages under `/p/<project>/` redirect there; the agent API stays on the apex. Reserved names and names that are not valid subdomains are refused by `kea hub add`.
 
-Next: the hub resolver on the apex (`keahub.eu/id/…`, ids unique across projects, the index sent with each publish), version ids and the version store at release, then per-project subdomains.
+Next: logins with ORCID on the hub (a session on the apex that hands each project subdomain its own session, roles per project), then grants between projects for reading another project's status.
