@@ -6,7 +6,7 @@ host: 127.0.0.1
 site_dir: report/site
 feedback_dir: data/feedback
 remote:
-  url: https://kea.fie.rs
+  url: https://keahub.eu
   project: kea
 # Kea's own repository: its vX.Y.Z tags are software releases, so the site's releases are tagged site/vX.Y.Z,
 # and its history before the rewrite (68791ab, 2026-11-05) belongs to the old Kea.

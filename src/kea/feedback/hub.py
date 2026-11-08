@@ -8,7 +8,10 @@ On the hub machine (behind an https reverse proxy; the hub itself listens on loc
     kea hub passwords <name> [--site] [--iteration]   new password(s) (old ones stop working)
     kea hub rotate-key <name>               new project key (the old one stops working)
     kea hub remove <name>                   moves the project to <dir>/removed/ (nothing is deleted)
-    kea hub serve [--host 127.0.0.1 --port 8300]
+    kea hub serve [--host 127.0.0.1 --port 8300] [--log events|requests]
+                                            --log events: one line per publish, lease change, sign-in, refused key,
+                                            unknown site and reader action (comment, tag, freeze, implement);
+                                            --log requests: also every request. Query strings are never logged.
 The hub folder is taken from --dir, else KEA_HUB_DIR, else ~/kea-hub.
 
 In a project (the agent's side): kea.yaml `remote: {url: …, project: <name>}`, KEA_REMOTE_KEY=<key> in .env;
@@ -51,6 +54,7 @@ import hmac
 import html
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -81,6 +85,7 @@ def check_new_name(name: str) -> None:
     if name in RESERVED:
         raise SystemExit(f"{name!r} is reserved for the hub itself; choose another name")
 KEEP_RELEASES = 3
+log = logging.getLogger("kea.hub")
 AGENT_CYCLE_EVENTS = ("plan-updated", "implementing", "released")
 _locks: dict[str, threading.Lock] = {}
 
@@ -320,10 +325,32 @@ def log_part(path: Path, start: int, local_sha: str) -> dict:
 class HubApp:
     """Routes /p/<name>/hub/… to the agent API and /p/<name>/… to that project's site."""
 
-    def __init__(self, hub: Hub):
+    def __init__(self, hub: Hub, log_level: str = "off"):
         self.hub = hub
         self.sites: dict[str, tuple[float, object]] = {}
         self.accounts = accounts.Accounts(hub.folder)
+        self.log_level = log_level                 # off | events | requests
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or self.log_level == "off":
+            await self.route(scope, receive, send)
+            return
+        started, status = time.monotonic(), [0]
+
+        async def watched_send(message):
+            if message["type"] == "http.response.start":
+                status[0] = message["status"]
+            await send(message)
+        try:
+            await self.route(scope, receive, watched_send)
+        finally:
+            method = scope.get("method", "")
+            path = scope.get("path", "")
+            if self.log_level == "requests" or (method not in ("GET", "HEAD") and "/hub/" not in path):
+                host = Request(scope).headers.get("host", "").split(":")[0]
+                client = (scope.get("client") or ("?",))[0]
+                log.info("%s %s%s %s %dms %s", method, host, path, status[0] or "-",
+                         round((time.monotonic() - started) * 1000), client)
 
     def site_app(self, name: str):
         config_path = self.hub.project_dir(name) / "project.json"
@@ -349,7 +376,7 @@ class HubApp:
         self.sites[name] = (stamp, app)
         return app
 
-    async def __call__(self, scope, receive, send):
+    async def route(self, scope, receive, send):
         if scope["type"] == "lifespan":
             while True:
                 message = await receive()
@@ -366,6 +393,7 @@ class HubApp:
         if domain and host.endswith("." + domain) and host not in ("www." + domain,):
             name = host[:-len(domain) - 1]           # <name>.<domain>: that project's site at the root
             if not NAME.match(name) or self.hub.config(name) is None:
+                log.info("unknown site %s (%s)", host, (scope.get("client") or ("?",))[0])
                 await PlainTextResponse("no such site", status_code=404)(scope, receive, send)
                 return
             if path.startswith("/hub/"):
@@ -448,7 +476,9 @@ class HubApp:
                 return PlainTextResponse("unknown return address", status_code=400)
             session = self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex")
             if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
+                log.info("sign-in %s -> %s (hub session)", session["orcid"], place[0])
                 return self.finish_redirect(session["orcid"], *place)
+            log.info("sign-in for %s: sent to ORCID", place[0])
             state = self.accounts.token("state", 600, project=place[0], path=place[1])
             query = urllib.parse.urlencode({"client_id": settings["client_id"], "response_type": "code",
                                             "scope": "openid", "redirect_uri": callback, "state": state})
@@ -460,6 +490,7 @@ class HubApp:
         try:
             person = await asyncio.to_thread(accounts.exchange_code, code, callback, settings)
         except Exception as error:                  # ORCID down or the code refused
+            log.warning("sign-in: ORCID refused the code (%s: %s)", type(error).__name__, error)
             return PlainTextResponse(f"ORCID did not confirm the sign-in ({type(error).__name__}); try again",
                                      status_code=502)
         orcid = person.get("orcid", "")
@@ -467,13 +498,18 @@ class HubApp:
             return PlainTextResponse("ORCID returned no iD", status_code=502)
         user = self.accounts.seen(orcid, person.get("name", ""))
         if user.get("status") == "blocked":
+            log.info("sign-in %s (%s): blocked", orcid, user.get("name", ""))
             return PlainTextResponse("This ORCID iD may not use this hub.", status_code=403)
         if accounts.rank(self.accounts.role(orcid, state["project"])) < accounts.rank("reader"):
+            log.info("sign-in %s (%s) for %s: waiting for approval (kea hub users approve %s)", orcid,
+                     user.get("name", ""), state["project"], orcid)
             return HTMLResponse(
                 "<!doctype html><meta charset='utf-8'><title>Waiting for approval</title><body style='font:15px/1.5 "
                 "system-ui;max-width:560px;margin:60px auto;padding:0 18px'><h1>Thank you</h1><p>You signed in as "
                 f"<b>{html.escape(user.get('name', ''))}</b> (ORCID <code>{html.escape(orcid)}</code>). The owner of this "
                 "hub approves new readers; you can sign in again once that is done.</p>", status_code=403)
+        log.info("sign-in %s (%s) -> %s as %s", orcid, user.get("name", ""), state["project"],
+                 self.accounts.role(orcid, state["project"]))
         response = self.finish_redirect(orcid, state["project"], state["path"])
         response.set_cookie(accounts.APEX_COOKIE, self.accounts.token("apex", accounts.SESSION_DAYS * 86400, orcid=orcid),
                             max_age=accounts.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax", path="/")
@@ -487,6 +523,7 @@ class HubApp:
             return response
         payload = self.accounts.verify(request.query_params.get("code", ""), "code")
         if not payload or payload.get("project") != name or not self.accounts.use_code(str(payload.get("nonce"))):
+            log.info("sign-in code for %s refused (expired, used or for another site)", name)
             return PlainTextResponse("sign-in code expired or already used; start again", status_code=400)
         next_path = request.query_params.get("next", "/")
         next_path = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
@@ -531,6 +568,8 @@ class HubApp:
 
     async def agent_api(self, name: str, action: str, request: Request):
         if not self.authorised(name, request):
+            log.warning("%s: wrong or missing project key (%s %s from %s)", name, request.method, action,
+                        request.client.host if request.client else "?")
             return JSONResponse({"error": "wrong or missing project key"}, status_code=401)
         agent_name = request.headers.get("x-kea-agent", "").strip()[:120]
         if not agent_name:
@@ -560,16 +599,21 @@ class HubApp:
                     "path": str(body.get("path", ""))[:300]}
             with project_lock(name):
                 if action == "lease":
+                    before = self.hub.lease(name).get("agent")
                     lease = self.take_lease(name, info, force=bool(body.get("force")),
                                             watching=bool(body.get("watching")),
                                             heartbeat=body.get("heartbeat") if isinstance(body.get("heartbeat"), dict)
                                             else None)
+                    if before != agent_name:
+                        log.info("%s: lease taken by %s (%s)%s", name, agent_name, info["host"],
+                                 f", was {before}" if before else "")
                     return JSONResponse({"lease": lease})
                 if action == "lease/release":
                     holder = self.hub.lease(name)
                     if holder and holder.get("agent") != agent_name and not body.get("force"):
                         raise agent.LeaseHeld(holder)
                     (feedback / "lease.json").unlink(missing_ok=True)
+                    log.info("%s: lease released by %s", name, agent_name)
                     return JSONResponse({"released": True})
                 holder = self.hub.lease(name)
                 same = holder.get("agent") == agent_name
@@ -578,6 +622,8 @@ class HubApp:
                 if action == "events":
                     if body.get("log") == "events":
                         event = dict(body.get("event") or {}, author=store_author())
+                        log.info("%s: agent %s wrote %s %s", name, agent_name, event.get("type", "event"),
+                                 event.get("thread_id", ""))
                         return JSONResponse({"event": store.append_event(event, feedback / "events.jsonl")})
                     if body.get("log") == "cycle":
                         kind = str(body.get("kind", ""))
@@ -585,13 +631,18 @@ class HubApp:
                             raise ValueError(f"the agent may record only {', '.join(AGENT_CYCLE_EVENTS)}")
                         fields = {key: str(value) for key, value in (body.get("fields") or {}).items()}
                         state = cycle.append(kind, store_author(), feedback / "cycle.jsonl", **fields)
+                        log.info("%s: cycle %s by %s", name, kind, agent_name)
                         return JSONResponse({"cycle": state.to_dict()})
                     raise ValueError("log must be events or cycle")
                 if action == "seed":
-                    return JSONResponse(self.seed(name, body))
+                    seeded = self.seed(name, body)
+                    log.info("%s: logs seeded by %s: %s", name, agent_name, seeded["seeded"])
+                    return JSONResponse(seeded)
         except agent.LeaseHeld as held:
+            log.info("%s: %s refused, lease held by %s", name, agent_name, held.holder.get("agent"))
             return JSONResponse({"error": str(held), "holder": held.holder}, status_code=409)
         except (store.FeedbackError, ValueError, KeyError, TypeError) as error:
+            log.info("%s: %s %s refused: %s", name, method, action, error)
             return JSONResponse({"error": str(error)}, status_code=400)
         return JSONResponse({"error": "not found"}, status_code=404)
 
@@ -617,20 +668,26 @@ class HubApp:
         async for chunk in request.stream():
             size += len(chunk)
             if size > limit:
+                log.warning("%s: publish by %s refused: larger than %d MB", name, agent_name, limit // 1048576)
                 return JSONResponse({"error": f"bundle larger than {limit // 1048576} MB (hub.yaml max_upload_mb)"},
                                     status_code=413)
             chunks.append(chunk)
         archive = b"".join(chunks)
         if not declared or not hmac.compare_digest(sha256_hex(archive), declared):
+            log.warning("%s: publish by %s refused: checksum does not match", name, agent_name)
             return JSONResponse({"error": "checksum does not match (X-Kea-Sha256)"}, status_code=400)
         with project_lock(name):
             holder = self.hub.lease(name)
             if not agent.is_free_for(holder, agent_name, check_process=False):
+                log.info("%s: publish by %s refused, lease held by %s", name, agent_name, holder.get("agent"))
                 return JSONResponse({"error": agent.describe_refusal(holder), "holder": holder}, status_code=409)
             try:
                 result = install_release(self.hub, name, archive)
             except (ValueError, tarfile.TarError, OSError) as error:
+                log.warning("%s: publish by %s refused: %s", name, agent_name, error)
                 return JSONResponse({"error": f"bundle refused: {error}"}, status_code=400)
+        log.info("%s: published release %s by %s (%.1f MB, %d new page version(s), %d data file(s))", name,
+                 result["release"], agent_name, len(archive) / 1048576, result["versions_stored"], result["files"])
         return JSONResponse(result)
 
 
@@ -670,6 +727,9 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8300)
     serve.add_argument("--trusted-proxy", default="127.0.0.1",
                        help="address(es) of the reverse proxy whose X-Forwarded-* headers are trusted")
+    serve.add_argument("--log", choices=["off", "events", "requests"], default="off",
+                       help="events: publishes, leases, sign-ins, refusals and reader actions; requests: also every "
+                            "request (to stderr; query strings are never logged)")
     args = parser.parse_args(argv)
     hub = Hub(hub_dir(args.dir))
     if args.command == "init":
@@ -730,10 +790,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "serve":
         import uvicorn
-        uvicorn.run(HubApp(hub), host=args.host, port=args.port, log_level="warning", proxy_headers=True,
+        if args.log != "off":
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname).1s %(message)s",
+                                datefmt="%Y-%m-%d %H:%M:%S", stream=sys.stderr)
+            domain = hub.project_domain()
+            log.info("kea hub %s: %s on %s:%d, %d project(s): %s; ORCID sign-in %s; log %s", _version(), hub.folder,
+                     args.host, args.port, len(hub.names()), ", ".join(hub.names()),
+                     "on" if accounts.orcid_settings() else "off", args.log)
+            log.info("readers at %s", f"https://<project>.{domain}/" if domain else f"{url}/p/<project>/")
+        uvicorn.run(HubApp(hub, args.log), host=args.host, port=args.port, log_level="warning", proxy_headers=True,
                     forwarded_allow_ips=args.trusted_proxy)
         return 0
     return 1
+
+
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("kea")
+    except Exception:
+        return "?"
 
 
 if __name__ == "__main__":

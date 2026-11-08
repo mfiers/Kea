@@ -1,6 +1,6 @@
 [project]
 name = "kea"
-version = "1.14.0"
+version = "1.15.0"
 description = "Kea: a documentation site for an analysis, with typed pages, comments, review cycles and semantic versions"
 readme = "README.md"
 requires-python = ">=3.11"

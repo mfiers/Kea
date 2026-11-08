@@ -351,3 +351,33 @@ def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
     assert forged.status_code == 403
     assert hub.main(["--dir", str(the_hub.folder), "users", "block", orcid]) == 0
     assert site.get("/api/threads").status_code == 401
+
+
+def test_serve_log_lines_events_and_requests(demo, caplog):
+    """--log events: publishes, leases, refused keys and reader actions; --log requests adds every request; query
+    strings (sign-in codes) never reach the log."""
+    import logging
+    the_hub, secrets = demo
+    key = secrets["key"]
+    archive = make_bundle(SITE)
+    sha = hashlib.sha256(archive).hexdigest()
+    caplog.set_level(logging.INFO, logger="kea.hub")
+    client = TestClient(hub.HubApp(the_hub, "events"), base_url="https://testserver")
+    client.get("/p/demo/hub/lease", headers=agent_headers("wrong"))
+    client.post("/p/demo/hub/lease", headers=agent_headers(key), json={"host": "h"})
+    client.post("/p/demo/hub/lease", headers=agent_headers(key), json={"host": "h"})       # a renewal: no line
+    client.post("/p/demo/hub/publish", content=archive, headers={**agent_headers(key), "X-Kea-Sha256": sha})
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"})
+    client.get("/p/demo/?secret-code=xyz")
+    text = caplog.text
+    assert "demo: wrong or missing project key" in text
+    assert text.count("lease taken by agent-a") == 1
+    assert "demo: published release" in text and "by agent-a" in text
+    assert "POST testserver/p/demo/login 303" in text                       # a reader action
+    assert "GET testserver/p/demo/ " not in text and "xyz" not in text      # no GETs in events mode
+    caplog.clear()
+    TestClient(hub.HubApp(the_hub, "requests"), base_url="https://testserver").get("/p/demo/?code=xyz")
+    assert "GET testserver/p/demo/ 303" in caplog.text and "xyz" not in caplog.text
+    caplog.clear()
+    TestClient(hub.HubApp(the_hub), base_url="https://testserver").get("/p/demo/hub/lease", headers=agent_headers("x"))
+    assert "GET testserver" not in caplog.text                              # off: no request lines
