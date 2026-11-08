@@ -1,5 +1,6 @@
 ---
 id: s-lean-checker
+uid: d52235gya3eohpk5ia5rsp3xo4
 type: step
 title: "Lean as a checker of supports and limits edges (optional plugin)"
 short: "Each supports or limits edge becomes a proof obligation, so a hidden assumption shows up as a proof that will not close; a lighter first step formalises only the statistical layer."

@@ -1,5 +1,6 @@
 ---
 id: home
+uid: dzeq2bcvbijwm6rk4lsiouc7dq
 type: experiment
 title: "Where should Kea go next, and in what order?"
 short: Kea makes an agent structure an analysis around questions, premises, hypotheses, results and caveats, but only implicitly; this experiment decides which additions would enforce or extend that structure without losing a small kernel.

@@ -1,5 +1,6 @@
 ---
 id: s-living-claims
+uid: sryxbjk4tohavpy3tja5pobcli
 type: step
 title: "Living claims: rerun on change and mark what held"
 short: "Results tied to code, data checksums and versions; on a change, rerun and mark which conclusions held, weakened or flipped."

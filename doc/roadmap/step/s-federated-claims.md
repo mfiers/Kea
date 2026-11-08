@@ -1,5 +1,6 @@
 ---
 id: s-federated-claims
+uid: 6rjjgdqg7l6jmoxzz3r46bktga
 type: step
 title: "Federated claims: conclusions of one project as premises of another"
 short: "A project on the hub links to another project's conclusion as its premise; when that conclusion is weakened or retracted, the premise and everything built on it are flagged."

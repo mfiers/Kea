@@ -1,5 +1,6 @@
 ---
 id: w-hash-pins-version
+uid: ydygimhk2jgu5v2rpuivhfkmp4
 type: caveat
 title: A content hash names one version, so links to a living claim break on every edit
 short: "With only a content hash, a link from another project is pinned to the wording it saw; after any edit, even a typo fix, it points at an orphan and has to walk the supersedes chain to find the current claim."

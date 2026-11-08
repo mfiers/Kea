@@ -1,5 +1,6 @@
 ---
 id: w-purge-breaks-links
+uid: gkcut6zgkq5wbjs55l6zonalmy
 type: caveat
 title: Purging old identifiers breaks links from other projects unless a tombstone stays
 short: "An identifier that is promised never to change cannot simply disappear; a purge must leave a record of what the object was and why it was removed."

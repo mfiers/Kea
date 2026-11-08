@@ -192,6 +192,10 @@ def load_tree(doc: Path = DOC) -> Tree:
     tree.notes.extend(notes)
     _number(tree)
     _validate(tree)
+    from kea.docsite import identity            # permanent ids (uid:): malformed or duplicate = problem
+    id_problems, id_notes = identity.problems_and_notes(tree)
+    tree.problems.extend(id_problems)
+    tree.notes.extend(id_notes)
     _reverse_edges(tree)
     return tree
 

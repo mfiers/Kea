@@ -1,5 +1,6 @@
 ---
 id: s-plugins
+uid: yxjfgdieb4gilefg47f5ky3dhi
 type: step
 title: "Plugins: what it would take"
 short: "Kea has no plugin mechanism, but types, relations and tags are already data. A plugin interface would turn internal structures into a public contract, so the proposal is to wait for two real plugins and keep only the hooks they use."

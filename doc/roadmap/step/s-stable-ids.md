@@ -1,5 +1,6 @@
 ---
 id: s-stable-ids
+uid: qm555kifex25djeizigkzznigm
 type: step
 title: "Permanent identifiers for every object in the graph"
 short: "Every page version gets an identifier that never changes and a URL on the host it is published on (keahub.eu or any other), so that projects can link to each other's claims and a reader can always follow a superseded object forward."
@@ -58,4 +59,10 @@ Order: concept ids and the apex resolver first or together with the subdomains, 
 
 ## Status (8 November 2026)
 
-Nothing is built: pages have no `uid:` and no version hash, and the site has no `/id/` resolver. The owner wants identifiers implemented (8 November 2026), together with the move to per-project subdomains described above. A first step that is useful on its own: `kea check --fix` writes a random `uid:` into pages without one, the site serves `/id/<uid>` as a redirect to the page, and the page footer shows that permanent link. Version ids, the forward chain and tombstones follow with the release step.
+Step 1 is built (after Kea 1.12.0, not released yet):
+
+- Every page has a `uid:`: 128 random bits as 26 lower-case base32 characters, cited as `kea:<uid>`. `kea check --fix` writes one into each page without it, as one line after `id:`, and changes nothing else; this site's 24 pages have theirs.
+- `kea check` reports a malformed uid and a uid used by two pages (a copied page) as problems, and pages without one as a note.
+- The build writes `_ids.json` (uid → page and its public facts). On the site, `/id/<uid>` redirects to the page and `/id/<uid>.json` answers its facts; "About this page" shows the identifier.
+
+Next: the hub resolver on the apex (`keahub.eu/id/…`, ids unique across projects, the index sent with each publish), version ids and the version store at release, then per-project subdomains.

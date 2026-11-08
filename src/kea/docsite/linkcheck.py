@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlsplit
 
 TAG = re.compile(r"<[a-zA-Z][^<>]*>")       # real tags only: link-like text in highlighted code is not a tag
 LINK = re.compile(r"""\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", flags=re.I)
-SERVER_PATHS = ("_feedback/", "_api/", "_files/", "files/", "login", "logout", "hub/")   # files/: data links
+SERVER_PATHS = ("_feedback/", "_api/", "_files/", "files/", "login", "logout", "hub/", "id/")   # id/: uid resolver   # files/: data links
                                                                                           # (review mode)
 
 

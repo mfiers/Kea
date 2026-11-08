@@ -1,5 +1,6 @@
 ---
 id: s-preregistration
+uid: 7a5nahuwiqjcaay2lkllifywh4
 type: step
 title: "Pre-registration: hypotheses fixed before results, checkably"
 short: "Hypotheses hashed and timestamped before results, so that 'written before' can be checked rather than claimed."

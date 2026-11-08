@@ -425,6 +425,10 @@ class SiteRenderer:
         parts.append(f"<article>{render_markdown(body_text, context)}</article>")
         colour = TYPE_COLOURS.get(node.type, '#556')
         parts.append(f"</div><div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>About this page</span></div>")
+        uid = str(node.header.get("uid") or "")
+        if uid:
+            parts.append(f"<p class='pid not-annotatable'>Permanent identifier <a href='{prefix}id/{esc(uid)}' "
+                         f"title='Stays the same when the page is edited, renamed or moved'><code>kea:{esc(uid)}</code></a></p>")
         parts.append(self.about_html(node, prefix, context))
         self.broken += [f"{node.key}: [[{target}]]" for target in context.broken]
         title = f"{node.number} {node.title}" if node.number else node.title

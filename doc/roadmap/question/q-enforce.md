@@ -1,5 +1,6 @@
 ---
 id: q-enforce
+uid: woi5wmcwjitvlhak4akyv23bmi
 type: question
 title: How should Kea enforce the structure of an analysis without losing its smallness?
 short: An orchestration layer in the style of LangChain could enforce the structure but risks over-engineering; constraints in the schema might do it in about a hundred lines.

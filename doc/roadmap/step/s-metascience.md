@@ -1,5 +1,6 @@
 ---
 id: s-metascience
+uid: sfp32rhawsubrchuszmzyohsd4
 type: step
 title: "Metascience across projects"
 short: "Across projects, measure how often hypotheses survive and where analyses branch; keep abandoned branches."

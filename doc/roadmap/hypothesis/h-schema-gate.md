@@ -1,5 +1,6 @@
 ---
 id: h-schema-gate
+uid: mj4a6a4xs7h5yzdex7ehewbn7e
 type: hypothesis
 title: Rules in the schema and a ranked list of open work can enforce the order of reasoning in about a hundred lines
 short: Transition rules in _schema.yaml make kea check a gate on commits and releases, and kea next ranks open work; the agent keeps full freedom inside a step while the graph sets the order.

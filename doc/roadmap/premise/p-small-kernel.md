@@ -1,5 +1,6 @@
 ---
 id: p-small-kernel
+uid: ybxz7supalz63vrly5g3ek6ysq
 type: premise
 title: Kea's main strength is that it is small
 short: No database, static HTML and a code base an agent can read and change during a session when a reader asks; every addition should keep a small kernel with ambition in optional parts around it.

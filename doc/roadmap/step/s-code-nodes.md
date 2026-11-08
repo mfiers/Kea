@@ -1,5 +1,6 @@
 ---
 id: s-code-nodes
+uid: slrswsadnab2tog6gwmthxo5lm
 type: step
 title: "Scripts, code and libraries as full members of the graph"
 short: "Today code is shown, not reasoned about: code pages exist, but a script is not a node with relations and a library is at most a hand-written resource. Proposal for discussion: scripts and libraries become nodes pinned to a commit or a version."

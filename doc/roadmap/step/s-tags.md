@@ -1,5 +1,6 @@
 ---
 id: s-tags
+uid: pwsnbxg5cyottefbera7ecbl5e
 type: step
 title: "Tags on text fragments and whole pages"
 short: "One-click tags on selected text or a whole page: suggestions for the next run (explain, expand, delete …), the reader's verdict on a page (confirm, reject) and the manuscript section a passage belongs in."

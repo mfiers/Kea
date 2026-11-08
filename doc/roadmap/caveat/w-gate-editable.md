@@ -1,5 +1,6 @@
 ---
 id: w-gate-editable
+uid: jeal6oz4w6qhitz4xhngjhtmd4
 type: caveat
 title: The agent held by the rules can edit the rules
 short: A gate in _schema.yaml is only as strong as the agent's inability to loosen it, and the same smallness that lets an agent change Kea lets it change the schema or skip a commit hook.

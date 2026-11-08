@@ -20,6 +20,7 @@ API (JSON):
                                     (text optional with tags; tags checked against the site's _feedback/tags.json)
     POST /api/threads/<id>/reply    {text}
     POST /api/threads/<id>/tags     {tags}: replace the thread's tags (marks may change while frozen)
+    GET  /id/<uid>                  redirect to the page with that permanent id (/id/<uid>.json: its public facts)
     POST /api/threads/<id>/status   {status, note}   (readers may set resolved or open)
     GET  /api/status                cycle state, site build id, comment counts (polled by every page)
     GET  /api/source?page=<key>     the Markdown source of a documentation page (for the editor)
@@ -461,6 +462,22 @@ def make_site_app(spec: SiteSpec) -> Starlette:
             return JSONResponse({"error": str(error)}, status_code=400)
         return await thread_json(thread_id)
 
+    async def resolve_id(request: Request) -> Response:
+        """/id/<uid>: redirect to the page with that permanent id; /id/<uid>.json: its public facts (_ids.json)."""
+        name = request.path_params["uid"]
+        as_json = name.endswith(".json")
+        uid = name[:-5] if as_json else name
+        try:
+            known = json.loads((site_dir / "_ids.json").read_text())
+        except (OSError, ValueError):
+            known = {}
+        entry = known.get(uid)
+        if entry is None:
+            return JSONResponse({"error": f"no page with id {uid}"}, status_code=404)
+        if as_json:
+            return JSONResponse({"id": f"kea:{uid}", **entry, "url": site_root(request) + "/" + entry["url"]})
+        return RedirectResponse(site_root(request) + "/" + entry["url"], status_code=303)
+
     async def download(request: Request) -> Response:
         relative = request.path_params["path"]
         allowed_file = site_dir / "_files.json"
@@ -476,6 +493,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
     routes = [
         Route("/login", login, methods=["GET", "POST"]),
         Route("/files/{path:path}", download, methods=["GET"]),
+        Route("/id/{uid}", resolve_id, methods=["GET"]),
         Route("/api/status", status, methods=["GET"]),
         Route("/api/cycle/{action}", cycle_action, methods=["POST"]),
         Route("/api/steer", steer, methods=["POST"]),

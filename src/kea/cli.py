@@ -60,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
     if command == "check":
         from kea.docsite.nodes import load_tree
         tree = load_tree()
+        if "--fix" in rest:                       # write a permanent id (uid:) into every page without one
+            from kea.docsite import identity
+            changed = identity.add_missing(tree)
+            print(f"wrote a uid into {len(changed)} page(s)")
+            tree = load_tree()
         for problem in tree.problems:
             print(f"PROBLEM {problem}")
         for note in sorted(set(tree.notes)):

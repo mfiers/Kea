@@ -1,5 +1,6 @@
 ---
 id: s-paper-compiler
+uid: x56zogthjmglbffyxhtcbjulum
 type: step
 title: "Paper and rebuttal compiler"
 short: "A manuscript generated from the graph; each reviewer point becomes a plan item tied to a commit."

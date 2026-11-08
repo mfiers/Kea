@@ -108,6 +108,7 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 
 ## Writing pages
 
+- **Permanent ids:** every page has a `uid:` (26 characters, minted once, never edited). After creating pages run `kea check --fix`, which writes one into every page without it; never copy a `uid:` to another page or change one. Cite a page from outside the site as `kea:<uid>`; `/id/<uid>` on the site redirects to it.
 - **No hard line wraps in `doc/`:** one line per paragraph and per list item. Readers edit pages in the site's
   editor, where wrapped lines look broken; the renderer joins them anyway.
 - One idea per page: `doc/<experiment>/<type>/<id>.md`, front matter `id, type, title, short, parent, status,

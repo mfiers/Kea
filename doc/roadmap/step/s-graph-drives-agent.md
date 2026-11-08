@@ -1,5 +1,6 @@
 ---
 id: s-graph-drives-agent
+uid: zz5ofwtf3sf52cvhu2xaunyzhu
 type: step
 title: "Graph drives the agent: schema rules gate commits; kea next picks the next item"
 short: "Transition rules in _schema.yaml turn kea check into a gate; kea next ranks open work, such as the untested hypothesis whose resolution would change the most conclusions."

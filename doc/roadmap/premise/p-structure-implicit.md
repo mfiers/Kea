@@ -1,5 +1,6 @@
 ---
 id: p-structure-implicit
+uid: qiya75im6imxwypl6wr5aavrna
 type: premise
 title: Kea shapes how an agent works only implicitly
 short: The page types and relations suggest an order of reasoning, but nothing stops an agent from writing a conclusion before the result behind it.

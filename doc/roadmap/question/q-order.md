@@ -1,5 +1,6 @@
 ---
 id: q-order
+uid: qtcaohemn6flnzd7n3ey7ih5ky
 type: question
 title: Which of the candidate additions should come first, and in what order?
 short: Nine ideas, an optional Lean checker and four additions of 7 November 2026, from schema rules and pre-registration to federated claims across the hub.
