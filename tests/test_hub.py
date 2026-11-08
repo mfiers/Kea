@@ -299,3 +299,55 @@ def test_subdomains_reserved_names_and_redirects(demo):
     assert login.status_code == 303 and sub.get("/").status_code == 200
     assert TestClient(hub.HubApp(the_hub), base_url="https://nope.keahub.example").get("/").status_code == 404
     assert client.get(f"/id/{UID_A}", follow_redirects=False).headers["location"] == f"https://demo.keahub.example/id/{UID_A}"
+
+
+def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
+    """Sign in at the apex with (simulated) ORCID, pending until approved, then a session per project subdomain;
+    comments carry the ORCID iD; roles decide steering; writes from another origin are refused."""
+    from urllib.parse import parse_qs, urlsplit
+
+    import yaml
+    from kea.feedback import accounts
+    the_hub, secrets = demo
+    settings = the_hub.settings()
+    settings.update({"url": "https://keahub.example", "project_domain": "keahub.example"})
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    the_hub.add("other")
+    monkeypatch.setenv("KEA_ORCID_CLIENT_ID", "APP-TEST")
+    monkeypatch.setenv("KEA_ORCID_CLIENT_SECRET", "s3cret")
+    orcid = "0000-0002-1825-0097"
+    monkeypatch.setattr(accounts, "exchange_code", lambda code, redirect, conf: {"orcid": orcid, "name": "Josiah Carberry"})
+    app = hub.HubApp(the_hub)
+    apex = TestClient(app, base_url="https://keahub.example")
+    site = TestClient(app, base_url="https://demo.keahub.example")
+    publish_files(apex, secrets["key"], site_with_ids("v" * 20, "---\nid: r-a\n---\ntext\n"))
+    login_page = site.get("/login?next=/x/r-a.html")
+    assert "Sign in with ORCID" in login_page.text
+    start = apex.get("/auth/login", params={"return": "https://demo.keahub.example/x/r-a.html"}, follow_redirects=False)
+    assert start.headers["location"].startswith("https://orcid.org/oauth/authorize?")
+    state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
+    pending = apex.get("/auth/orcid/callback", params={"code": "c1", "state": state}, follow_redirects=False)
+    assert pending.status_code == 403 and "approves new readers" in pending.text
+    assert accounts.Accounts(the_hub.folder).users()[orcid]["status"] == "pending"
+    assert hub.main(["--dir", str(the_hub.folder), "users", "approve", orcid]) == 0      # commenter on all projects
+    done = apex.get("/auth/orcid/callback", params={"code": "c2", "state": state}, follow_redirects=False)
+    finish = done.headers["location"]
+    assert finish.startswith("https://demo.keahub.example/auth/finish?code=") and "__Host-kea_session" in done.headers["set-cookie"]
+    path_and_query = finish.split("keahub.example", 1)[1]
+    entered = site.get(path_and_query, follow_redirects=False)
+    assert entered.status_code == 303 and entered.headers["location"] == "/x/r-a.html"
+    assert site.get(path_and_query, follow_redirects=False).status_code == 400            # a code works once
+    assert site.get("/api/threads").status_code == 200                                     # signed in, no password
+    created = site.post("/api/threads", json={"page": "x:r-a", "text": "A question"}).json()["thread"]
+    assert created["author"] == "Josiah Carberry" and created["author_id"] == orcid
+    assert site.post("/api/cycle/freeze", json={}).status_code == 403                        # commenter may not steer
+    assert hub.main(["--dir", str(the_hub.folder), "users", "role", orcid, "steerer", "--project", "demo"]) == 0
+    assert site.post("/api/cycle/freeze", json={}).status_code == 200
+    # the demo session does not open the other project; a write from another origin is refused
+    other_site = TestClient(app, base_url="https://other.keahub.example")
+    other_site.cookies.set(accounts.SITE_COOKIE, site.cookies.get(accounts.SITE_COOKIE))
+    assert other_site.get("/api/threads").status_code == 401
+    forged = site.post("/api/threads", json={"page": "x:r-a", "text": "x"}, headers={"Origin": "https://other.keahub.example"})
+    assert forged.status_code == 403
+    assert hub.main(["--dir", str(the_hub.folder), "users", "block", orcid]) == 0
+    assert site.get("/api/threads").status_code == 401

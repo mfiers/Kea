@@ -255,6 +255,8 @@ def describe(thread: store.Thread, sources: dict[str, str]) -> str:
         lines.append("   on text: " + textwrap.shorten(context, 400, placeholder=" …"))
     else:
         lines.append("   on: the whole page")
+    if thread.author_id:
+        lines.append(f"   signed in: {thread.author} = ORCID {thread.author_id}")
     for author, text, created in [(thread.author, thread.text, thread.created_at)] + \
             [(reply.author, reply.text, reply.created_at) for reply in thread.replies]:
         if not text:

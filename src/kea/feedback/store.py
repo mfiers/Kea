@@ -23,6 +23,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import secrets
 import threading
 from dataclasses import asdict, dataclass, field
@@ -78,6 +79,7 @@ class Thread:
     commit: str = ""
     suggestion: dict | None = None    # suggested edit: {path, base_commit, base_text, new_text, diff}
     tags: list[str] = field(default_factory=list)
+    author_id: str = ""                    # ORCID iD of the author when signed in on a hub
     replies: list[Message] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,6 +150,9 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, A
         raise FeedbackError(f"unknown event type {event_type!r}")
     stored: dict[str, Any] = {"event_id": new_id("e"), "type": event_type, "created_at": now_iso(),
                               "author": _clean(event.get("author"), MAX_NAME, "author", required=True)}
+    author_id = str(event.get("author_id") or "")
+    if re.match(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", author_id):   # the writer's ORCID iD (signed in on a hub)
+        stored["author_id"] = author_id
     with _write_lock:
         if request_id:
             for earlier in load_events(path):
@@ -238,7 +243,8 @@ def fold(events: list[dict[str, Any]]) -> dict[str, Thread]:
                 text=event.get("text", ""), created_at=event.get("created_at", ""),
                 page_commit=event.get("page_commit", ""), page_title=event.get("page_title", ""),
                 quote=event.get("quote", ""), prefix=event.get("prefix", ""), suffix=event.get("suffix", ""),
-                start=event.get("start"), end=event.get("end"), suggestion=event.get("suggestion"))
+                start=event.get("start"), end=event.get("end"), suggestion=event.get("suggestion"),
+                author_id=event.get("author_id", ""))
             _retag(result[thread_id], event.get("tags") or [], bool(event.get("mark")))
         elif thread_id in result:
             thread = result[thread_id]

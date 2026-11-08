@@ -63,7 +63,8 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "confirm", "group": "verdict", "task": True, "scope": "page", "label": "confirm",
      "help": "Keep this page as it is: it goes into the next plan, and the page records your confirmation",
      "instruction": "The reader confirms this page. In the next plan, write `confirmed:` into its front matter "
-                    "(`by:` the reader, `date:` the thread's date, `version:` the thread's page commit) and change "
+                    "(`by:` the reader's name, `orcid:` their ORCID iD when the thread has one, `date:` the thread's date, "
+                    "`version:` the page's version id from its About line, else the thread's page commit) and change "
                     "nothing else. From then on, change the page's claim (title, summary, status, numbers) only "
                     "through a plan item that names the confirmation."},
     {"name": "unconfirm", "group": "verdict", "task": True, "scope": "page", "label": "withdraw confirmation",

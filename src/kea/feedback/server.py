@@ -123,6 +123,9 @@ class LoginThrottle:
 
 
 def reader_name(request: Request) -> str:
+    account = request.scope.get("kea_account")
+    if account:                                   # signed in with ORCID (kea hub): the verified name
+        return str(account.get("name") or account.get("orcid"))[: store.MAX_NAME]
     return unquote(request.cookies.get(NAME_COOKIE, "")).strip()[: store.MAX_NAME]
 
 
@@ -145,12 +148,25 @@ button{{margin-top:16px;padding:8px 16px;border:0;border-radius:6px;background:#
 
 
 class PasswordGate(BaseHTTPMiddleware):
-    def __init__(self, app, token: str):
+    """Lets a request through with the site password's cookie or a signed-in account (kea hub, ORCID). Refuses a
+    write whose Origin is another host: project sites on sibling subdomains are 'same site' for the browser, so
+    without this a page of one project could post to another project's API with the reader's cookie."""
+
+    def __init__(self, app, token: str, account=None):
         super().__init__(app)
         self.token = token
+        self.account = account
 
     async def dispatch(self, request: Request, call_next):
         path = local_path(request)
+        origin = request.headers.get("origin", "")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin != "null" \
+                and origin.split("://")[-1].lower() != request.headers.get("host", "").lower():
+            return JSONResponse({"error": "cross-site request refused"}, status_code=403)
+        account = self.account(request) if self.account else None
+        if account:
+            request.scope["kea_account"] = account
+            return await call_next(request)
         if not self.token or path in ("/login", "/favicon.ico"):
             return await call_next(request)
         if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), self.token):
@@ -177,6 +193,8 @@ class SiteSpec:
     source_commit: Callable[[str], str] = field(default=lambda relative: "")
     states_context: Callable[[], dict] = field(default=lambda: states.context())
     versions_dir: Path | None = None       # kea hub: stored page versions (versions/<uid>/<version>.md)
+    account: Callable[[Request], dict | None] | None = None      # kea hub: signed-in reader {orcid, name, role}
+    login_url: Callable[[Request, str], str | None] | None = None  # kea hub: "Sign in with ORCID" for this next
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
@@ -236,6 +254,9 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "can_steer": may_steer(request)})
 
     def may_steer(request: Request) -> bool:
+        account = request.scope.get("kea_account")
+        if account and account.get("role") in ("steerer", "owner"):
+            return True
         return not spec.steer_token or hmac.compare_digest(request.cookies.get(STEER_COOKIE, ""), spec.steer_token)
 
     async def steer(request: Request) -> Response:
@@ -325,9 +346,18 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         return await thread_json(event["thread_id"])
 
     def login_page(request: Request, error: str, name: str, next_url: str, status: int = 200) -> HTMLResponse:
-        return HTMLResponse(LOGIN_PAGE.format(title=html.escape(spec.title or "Kea site"), error=error,
-                                              name=html.escape(name), next=html.escape(next_url),
-                                              action=html.escape(site_root(request) + "/login")), status_code=status)
+        page = LOGIN_PAGE.format(title=html.escape(spec.title or "Kea site"), error=error,
+                                 name=html.escape(name), next=html.escape(next_url),
+                                 action=html.escape(site_root(request) + "/login"))
+        orcid = spec.login_url(request, next_url) if spec.login_url else None
+        if orcid:                                 # kea hub with ORCID: the account comes first, the password second
+            page = page.replace("<p>Internal working site.", "<a class='orcid-button' href='" + html.escape(orcid)
+                                + "'>Sign in with ORCID</a><p class='or'>or with the project's shared password:</p>"
+                                "<p>Internal working site.", 1).replace(
+                "</style>", ".orcid-button{display:block;text-align:center;margin:14px 0 6px;padding:9px 16px;border-radius:6px;"
+                "background:#a6ce39;color:#1d2330;font-weight:700;text-decoration:none}"
+                ".or{margin:14px 0 4px!important}</style>", 1)
+        return HTMLResponse(page, status_code=status)
 
     async def login(request: Request) -> Response:
         root = site_root(request)
@@ -378,6 +408,9 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         """store.append_event off the event loop (a slow fsync must not block other readers), with the
         browser's request key (X-Kea-Request) so that a submit sent twice is stored once."""
         key = request.headers.get("x-kea-request", "").strip()[:80]
+        account = request.scope.get("kea_account")
+        if account and event.get("author") != "claude":
+            event = {**event, "author_id": account.get("orcid", "")}    # the verified ORCID iD of the writer
         return await run_in_threadpool(store.append_event, {**event, "request_id": key} if key else event, path)
 
     async def thread_json(thread_id: str) -> Response:
@@ -535,7 +568,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         Route("/api/threads/{thread_id}/tags", set_tags, methods=["POST"]),
         Mount("/", StaticFiles(directory=site_dir, html=True, check_dir=False)),
     ]
-    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token)])
+    return Starlette(routes=routes, middleware=[Middleware(PasswordGate, token=token, account=spec.account)])
 
 
 def service_name() -> str:

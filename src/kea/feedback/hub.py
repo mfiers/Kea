@@ -45,8 +45,10 @@ Every write needs the lease (taken automatically when free).
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import hmac
+import html
 import io
 import json
 import os
@@ -57,12 +59,13 @@ import sys
 import tarfile
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
-from kea.feedback import agent, cycle, server, store
+from kea.feedback import accounts, agent, cycle, server, store
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 # names a new project may not take: they are (or may become) hub addresses on the apex or as subdomains
@@ -320,6 +323,7 @@ class HubApp:
     def __init__(self, hub: Hub):
         self.hub = hub
         self.sites: dict[str, tuple[float, object]] = {}
+        self.accounts = accounts.Accounts(hub.folder)
 
     def site_app(self, name: str):
         config_path = self.hub.project_dir(name) / "project.json"
@@ -338,6 +342,8 @@ class HubApp:
             source_root=current, files_root=current / "files",
             source_commit=lambda relative: str(hub.meta(name).get("source_commits", {}).get(relative, "")),
             versions_dir=hub.versions_dir(name),
+            account=lambda request: self.accounts.account(request.cookies.get(accounts.SITE_COOKIE, ""), name),
+            login_url=lambda request, next_url: self.login_url(name, next_url),
             states_context=lambda: hub.meta(name).get("states") or {"labels": {}, "items": {}})
         app = server.make_site_app(spec)
         self.sites[name] = (stamp, app)
@@ -366,7 +372,13 @@ class HubApp:
                 response = await self.agent_api(name, path[len("/hub/"):], Request(scope, receive))
                 await response(scope, receive, send)
                 return
+            if path in ("/auth/finish", "/auth/logout"):
+                await self.site_auth(name, path, Request(scope, receive), "/")(scope, receive, send)
+                return
             await self.site_app(name)(scope, receive, send)
+            return
+        if path in ("/auth/login", "/auth/orcid/callback"):
+            await (await self.apex_auth(path, Request(scope, receive)))(scope, receive, send)
             return
         if path.startswith("/id/"):
             response = await self.resolve_id(path[len("/id/"):], Request(scope, receive))
@@ -380,6 +392,9 @@ class HubApp:
         name, rest = match.group(1), match.group(2)
         if not NAME.match(name) or self.hub.config(name) is None:
             await PlainTextResponse("no such site", status_code=404)(scope, receive, send)
+            return
+        if rest in ("/auth/finish", "/auth/logout") and not domain:
+            await self.site_auth(name, rest, Request(scope, receive), f"/p/{name}/")(scope, receive, send)
             return
         if rest is not None and rest.startswith("/hub/"):       # the agent API stays on the apex
             response = await self.agent_api(name, rest[len("/hub/"):], Request(scope, receive))
@@ -395,6 +410,92 @@ class HubApp:
             return
         inner = dict(scope, root_path=scope.get("root_path", "") + f"/p/{name}")
         await self.site_app(name)(inner, receive, send)
+
+    # ---- sign-in with ORCID (feedback/accounts.py) ----
+    def apex_url(self) -> str:
+        return str(self.hub.settings().get("url", "")).rstrip("/")
+
+    def login_url(self, name: str, next_url: str) -> str | None:
+        """Where "Sign in with ORCID" on a project's login page leads (None without an ORCID client)."""
+        if not accounts.orcid_settings():
+            return None
+        target = self.hub.site_url(name) + (next_url if next_url.startswith("/") else "/")
+        return f"{self.apex_url()}/auth/login?return={urllib.parse.quote(target, safe='')}"
+
+    def project_of(self, url: str) -> tuple[str, str] | None:
+        """(project, path) of a return address on one of this hub's project sites."""
+        for name in self.hub.names():
+            base = self.hub.site_url(name)
+            if url == base or url.startswith(base + "/"):
+                path = url[len(base):] or "/"
+                return (name, path) if path.startswith("/") and not path.startswith("//") else None
+        return None
+
+    def finish_redirect(self, orcid: str, name: str, path: str) -> RedirectResponse:
+        code = self.accounts.token("code", accounts.CODE_SECONDS, orcid=orcid, project=name,
+                                   nonce=secrets.token_hex(12))
+        return RedirectResponse(f"{self.hub.site_url(name)}/auth/finish?code={urllib.parse.quote(code)}"
+                                f"&next={urllib.parse.quote(path)}", status_code=303)
+
+    async def apex_auth(self, path: str, request: Request):
+        settings = accounts.orcid_settings()
+        if not settings:
+            return PlainTextResponse("ORCID sign-in is not set up on this hub", status_code=404)
+        callback = f"{self.apex_url()}/auth/orcid/callback"
+        if path == "/auth/login":
+            place = self.project_of(request.query_params.get("return", ""))
+            if place is None:
+                return PlainTextResponse("unknown return address", status_code=400)
+            session = self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex")
+            if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
+                return self.finish_redirect(session["orcid"], *place)
+            state = self.accounts.token("state", 600, project=place[0], path=place[1])
+            query = urllib.parse.urlencode({"client_id": settings["client_id"], "response_type": "code",
+                                            "scope": "openid", "redirect_uri": callback, "state": state})
+            return RedirectResponse(f"{settings['base']}/oauth/authorize?{query}", status_code=303)
+        state = self.accounts.verify(request.query_params.get("state", ""), "state")
+        code = request.query_params.get("code", "")
+        if not state or not code:
+            return PlainTextResponse("sign-in expired or not valid; start again from the site", status_code=400)
+        try:
+            person = await asyncio.to_thread(accounts.exchange_code, code, callback, settings)
+        except Exception as error:                  # ORCID down or the code refused
+            return PlainTextResponse(f"ORCID did not confirm the sign-in ({type(error).__name__}); try again",
+                                     status_code=502)
+        orcid = person.get("orcid", "")
+        if not accounts.ORCID_ID.match(orcid):
+            return PlainTextResponse("ORCID returned no iD", status_code=502)
+        user = self.accounts.seen(orcid, person.get("name", ""))
+        if user.get("status") == "blocked":
+            return PlainTextResponse("This ORCID iD may not use this hub.", status_code=403)
+        if accounts.rank(self.accounts.role(orcid, state["project"])) < accounts.rank("reader"):
+            return HTMLResponse(
+                "<!doctype html><meta charset='utf-8'><title>Waiting for approval</title><body style='font:15px/1.5 "
+                "system-ui;max-width:560px;margin:60px auto;padding:0 18px'><h1>Thank you</h1><p>You signed in as "
+                f"<b>{html.escape(user.get('name', ''))}</b> (ORCID <code>{html.escape(orcid)}</code>). The owner of this "
+                "hub approves new readers; you can sign in again once that is done.</p>", status_code=403)
+        response = self.finish_redirect(orcid, state["project"], state["path"])
+        response.set_cookie(accounts.APEX_COOKIE, self.accounts.token("apex", accounts.SESSION_DAYS * 86400, orcid=orcid),
+                            max_age=accounts.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax", path="/")
+        return response
+
+    def site_auth(self, name: str, path: str, request: Request, cookie_path: str):
+        """On a project's site: turn a one-time code from the apex into the project's own session; or sign out."""
+        if path == "/auth/logout":
+            response = RedirectResponse(cookie_path, status_code=303)
+            response.delete_cookie(accounts.SITE_COOKIE, path=cookie_path)
+            return response
+        payload = self.accounts.verify(request.query_params.get("code", ""), "code")
+        if not payload or payload.get("project") != name or not self.accounts.use_code(str(payload.get("nonce"))):
+            return PlainTextResponse("sign-in code expired or already used; start again", status_code=400)
+        next_path = request.query_params.get("next", "/")
+        next_path = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
+        response = RedirectResponse(cookie_path.rstrip("/") + next_path, status_code=303)
+        response.set_cookie(accounts.SITE_COOKIE,
+                            self.accounts.token("site", accounts.SESSION_DAYS * 86400, orcid=payload["orcid"], project=name),
+                            max_age=accounts.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax",
+                            path=cookie_path)
+        return response
 
     async def resolve_id(self, rest: str, request: Request):
         """/id/<uid>[.json|@<version>] on the hub: find the project that holds the page, then let that project's
@@ -559,6 +660,11 @@ def main(argv: list[str] | None = None) -> int:
     rotate.add_argument("name")
     remove = sub.add_parser("remove")
     remove.add_argument("name")
+    users = sub.add_parser("users", help="ORCID accounts: list, approve, role, block")
+    users.add_argument("action", nargs="?", default="list", choices=["list", "approve", "role", "block"])
+    users.add_argument("orcid", nargs="?", default="")
+    users.add_argument("role", nargs="?", default="commenter", choices=list(accounts.ROLES))
+    users.add_argument("--project", default="*", help="a project name, or * for all projects")
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8300)
@@ -590,6 +696,25 @@ def main(argv: list[str] | None = None) -> int:
             release = os.readlink(current) if current.is_symlink() else "not published"
             holder = hub.lease(name)
             print(f"{name:24} {release:40} lease: {holder.get('agent', 'free')} {holder.get('renewed_at', '')}")
+        return 0
+    if args.command == "users":
+        book = accounts.Accounts(hub.folder)
+        if args.action == "list":
+            entries = sorted(book.users().items(), key=lambda item: (item[1].get("status") != "pending", item[0]))
+            for orcid, user in entries:
+                roles = ", ".join(f"{project}: {role}" for project, role in sorted((user.get("roles") or {}).items()))
+                print(f"{orcid}  {user.get('status', '?'):9} {user.get('name', ''):30} {roles}")
+            print(f"{len(entries)} user(s); ORCID sign-in {'on' if accounts.orcid_settings() else 'off (no client in the environment)'}")
+            return 0
+        if not args.orcid:
+            parser.error("give the ORCID iD")
+        if args.action == "block":
+            book.block(args.orcid)
+        else:
+            if args.project != "*" and hub.config(args.project) is None:
+                parser.error(f"no project {args.project!r}")
+            book.approve(args.orcid, args.role, args.project, by=store_author())
+        print(json.dumps({args.orcid: book.users()[args.orcid]}, indent=1))
         return 0
     if args.command == "passwords":
         if not (args.site or args.iteration):
