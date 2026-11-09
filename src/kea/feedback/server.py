@@ -70,6 +70,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from kea.config import PROJECT_ROOT, SETTINGS, SITE_DIR
+from kea import __version__
 from kea.feedback import cycle, states, store, tags
 
 PROJECT = PROJECT_ROOT
@@ -293,7 +294,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
                              "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
                              "can_steer": may_steer(request), **signed_in(request),
-                             "hub": spec.hub_menu(request.scope.get("kea_account")) if spec.hub_menu else None})
+                             "hub": spec.hub_menu(request.scope.get("kea_account")) if spec.hub_menu else None,
+                             "server_version": __version__, "on_hub": spec.hub_menu is not None})
 
     def signed_in(request: Request) -> dict:
         """Who the reader is for the menu bar: signed in (account or site password) and where to sign out."""

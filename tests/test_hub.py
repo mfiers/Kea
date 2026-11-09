@@ -693,3 +693,70 @@ def test_publish_and_seed_never_shrink_the_hubs_comment_logs(demo):
     assert "kept" in seeded.json()["seeded"]["events"]
     assert publish().status_code == 200 and publish().status_code == 200
     assert log.read_bytes().startswith(before) and b"keep me" in log.read_bytes()
+
+
+def test_versions_are_shown(demo):
+    from kea import __version__
+    from kea.docsite import render
+    the_hub, secrets = demo
+    client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    archive = make_bundle(SITE)
+    client.post("/p/demo/hub/publish", content=archive, headers={**agent_headers(secrets["key"]),
+                "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "ann", "next": "/"},
+                follow_redirects=False)
+    status = client.get("/p/demo/api/status").json()
+    assert status["server_version"] == __version__ and status["on_hub"] is True
+    assert f"Kea {__version__}" in render.version_pill()
+    apex = TestClient(hub.HubApp(the_hub), base_url="https://kea.example.org")
+    assert f"Kea {__version__}" in apex.get("/").text
+
+
+def site_entries(page: str, big: bytes) -> dict:
+    return {"site/index.html": f"<html><body>{page}</body></html>".encode(), "site/report.pdf": big,
+            "site/_files.json": b"[]", "doc/x/result/r-a.md": b"---\nid: r-a\n---\ntext\n"}
+
+
+def test_incremental_publish_sends_only_new_files_and_resumes(live_hub, tmp_path, monkeypatch):
+    the_hub, secrets, url = live_hub
+    monkeypatch.setenv("KEA_AGENT_ID", "agent-a")
+    monkeypatch.setattr(publish, "CHUNK", 1000)                 # several chunks per file
+    client = backend.Remote(url, "demo", secrets["key"], tmp_path / "events.jsonl", tmp_path / "cycle.jsonl")
+    client.take_lease()
+    big = bytes(range(256)) * 20                                # 5120 bytes: six chunks
+    meta = {"files": [], "source_commits": {}}
+    first, sent, reused = publish.send_incremental(client, site_entries("one", big), meta)
+    assert sent == sum(len(value) for value in site_entries("one", big).values()) and reused == 0
+    current = the_hub.project_dir("demo") / "current"
+    assert (current / "site" / "report.pdf").read_bytes() == big and (current / "meta.json").is_file()
+    second, sent, reused = publish.send_incremental(client, site_entries("two", big), meta)
+    assert sent == len(b"<html><body>two</body></html>") and reused == len(big) + 2 + len(b"---\nid: r-a\n---\ntext\n")
+    assert "two" in (current / "site" / "index.html").read_text() and second["release"] != first["release"]
+    # a broken upload resumes where the hub's copy ends, and a wrong offset is answered with that point
+    other = bytes(reversed(big))
+    sha = hashlib.sha256(other).hexdigest()
+    hub.receive_chunk(the_hub, "demo", sha, 0, len(other), other[:1500])
+    assert client.request("POST", "blobs/missing", {"sha256": [sha]})["missing"] == {sha: 1500}
+    with pytest.raises(backend.RemoteError) as refused:
+        client.request("POST", f"blobs/{sha}", other[:1000], query={"offset": 0, "total": len(other)})
+    assert refused.value.status == 409 and refused.value.detail["have"] == 1500
+    publish.upload_blob(client, sha, other, len(other), 0)       # starts at 0, is told 1500, finishes
+    assert hub.blob_path(the_hub, "demo", sha).read_bytes() == other
+
+
+def test_manifest_release_refuses_unsafe_paths_and_wrong_checksums(demo):
+    the_hub, secrets = demo
+    data = b"<html>x</html>"
+    sha = hashlib.sha256(data).hexdigest()
+    hub.receive_chunk(the_hub, "demo", sha, 0, len(data), data)
+    for path in ("../x", "/etc/passwd", "other/x.html", "site/../../x"):
+        with pytest.raises(ValueError):
+            hub.install_manifest(the_hub, "demo", {"site/index.html": sha, path: sha}, {"files": []})
+    with pytest.raises(ValueError, match="never uploaded"):
+        hub.install_manifest(the_hub, "demo", {"site/index.html": "0" * 64}, {"files": []})
+    wrong = "f" * 64
+    with pytest.raises(ValueError, match="does not match"):
+        hub.receive_chunk(the_hub, "demo", wrong, 0, len(data), data)
+    assert not hub.blob_path(the_hub, "demo", wrong).exists()
+    result = hub.install_manifest(the_hub, "demo", {"site/index.html": sha}, {"files": []})
+    assert (the_hub.project_dir("demo") / "releases" / result["release"] / "site" / "index.html").read_bytes() == data

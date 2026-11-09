@@ -40,6 +40,7 @@ Layout of the hub folder:
     projects/<name>/project.json     title, salt, key_sha256, reader_token, steer_token (no clear-text secrets)
     projects/<name>/feedback/        events.jsonl, cycle.jsonl (the authority), lease.json, heartbeat.json
     projects/<name>/releases/<id>/   site/, doc/ (Markdown for the editor), files/ (uploaded data), meta.json
+    projects/<name>/blobs/           the files of the releases, by sha256 (unreferenced ones are removed)
     projects/<name>/current          symlink to the release being served (swapped atomically on publish)
 
 Agent API (Authorization: Bearer <project key>; X-Kea-Agent: <agent id>), under /p/<name>/hub/:
@@ -49,7 +50,11 @@ Agent API (Authorization: Bearer <project key>; X-Kea-Agent: <agent id>), under 
     GET  log?events_from=&events_sha=&cycle_from=&cycle_sha=   what is new in the two logs (or the whole log)
     POST events                     {log: events, event} | {log: cycle, kind, fields}: written as "claude"
     POST seed                       {events, cycle}: the project's existing logs, only while the hub's are empty
-    POST publish                    body: a .tar.gz from `kea publish` (X-Kea-Sha256: its sha256)
+    POST publish                    body: a .tar.gz from `kea publish` (X-Kea-Sha256: its sha256); older clients
+    POST blobs/missing              {sha256: [...]}: which files the hub lacks ({missing: {sha: bytes already here}})
+    POST blobs/<sha256>?offset=&total=   body: one chunk of that file, appended at offset (409 + have: resume there)
+    POST release                    {manifest: {path: sha256}, meta}: a release made of stored files only
+Files are stored once per project by checksum (projects/<name>/blobs/), so a publish sends only what changed.
 Every write needs the lease (taken automatically when free).
 """
 from __future__ import annotations
@@ -306,13 +311,118 @@ def safe_extract(archive: bytes, target: Path) -> None:
             bundle.extractall(target, members=members)
 
 
+BLOB_NAME = re.compile(r"^[0-9a-f]{64}$")
+CHUNK_MAX = 16 * 1024 * 1024                    # one chunk of a blob upload (the client sends 4 MB)
+BLOB_GRACE = 24 * 3600                          # an unreferenced or half-uploaded blob is kept this long (seconds)
+RELEASE_TOPS = ("site", "doc", "files")
+
+
+def blob_dir(hub: Hub, name: str) -> Path:
+    return hub.project_dir(name) / "blobs"
+
+
+def blob_path(hub: Hub, name: str, sha: str) -> Path:
+    if not BLOB_NAME.match(sha):
+        raise ValueError(f"not a sha256: {sha[:80]!r}")
+    return blob_dir(hub, name) / sha[:2] / sha
+
+
+def partial_path(hub: Hub, name: str, sha: str) -> Path:
+    blob_path(hub, name, sha)
+    return blob_dir(hub, name) / "partial" / sha
+
+
+def missing_blobs(hub: Hub, name: str, shas: list) -> dict:
+    """The checksums the hub does not hold yet, each with the bytes of it already received (to resume there)."""
+    missing = {}
+    for sha in dict.fromkeys(str(item) for item in shas):
+        if blob_path(hub, name, sha).is_file():
+            continue
+        partial = partial_path(hub, name, sha)
+        missing[sha] = partial.stat().st_size if partial.is_file() else 0
+    return missing
+
+
+def receive_chunk(hub: Hub, name: str, sha: str, offset: int, total: int, data: bytes) -> dict:
+    """Append one chunk to a blob being uploaded; the blob is stored once it is complete and its checksum matches.
+    Raises OffsetMismatch when the chunk does not start where the stored part ends (the client resumes there)."""
+    final = blob_path(hub, name, sha)
+    if final.is_file():
+        return {"have": final.stat().st_size, "stored": True}
+    partial = partial_path(hub, name, sha)
+    have = partial.stat().st_size if partial.is_file() else 0
+    if offset != have:
+        raise OffsetMismatch(have)
+    if have + len(data) > total:
+        raise ValueError("chunk runs past the declared total")
+    partial.parent.mkdir(parents=True, exist_ok=True)
+    with partial.open("ab") as handle:
+        handle.write(data)
+    have += len(data)
+    if have < total:
+        return {"have": have, "stored": False}
+    digest = hashlib.sha256()
+    with partial.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    if digest.hexdigest() != sha:
+        partial.unlink(missing_ok=True)
+        raise ValueError("the uploaded file does not match its sha256: send it again")
+    final.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(partial, 0o644)
+    os.replace(partial, final)
+    return {"have": have, "stored": True}
+
+
+class OffsetMismatch(Exception):
+    def __init__(self, have: int):
+        super().__init__(f"the hub holds {have} bytes of this file: resume there")
+        self.have = have
+
+
+def release_path(entry: str) -> Path:
+    path = Path(entry)
+    if entry.startswith("/") or "\\" in entry or not path.parts or ".." in path.parts or path.parts[0] not in RELEASE_TOPS \
+            or entry != path.as_posix():
+        raise ValueError(f"refused release entry {entry[:120]!r}")
+    return path
+
+
 def install_release(hub: Hub, name: str, archive: bytes) -> dict:
+    """Install a release sent as one .tar.gz (clients before 1.21)."""
+    return install(hub, name, lambda staging: safe_extract(archive, staging))
+
+
+def install_manifest(hub: Hub, name: str, manifest: dict, meta: dict) -> dict:
+    """Install a release made of stored blobs: {path in the release: sha256} plus meta.json."""
+    if not isinstance(manifest, dict) or not isinstance(meta, dict):
+        raise ValueError("a release needs manifest: {path: sha256} and meta: {...}")
+    paths = {release_path(str(entry)): str(sha) for entry, sha in manifest.items()}
+    lacking = sorted(sha for sha in set(paths.values()) if not blob_path(hub, name, sha).is_file())
+    if lacking:
+        raise ValueError(f"{len(lacking)} file(s) of this release were never uploaded ({', '.join(lacking[:2])} …)")
+
+    def fill(staging: Path) -> None:
+        for relative, sha in paths.items():
+            target = staging / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(blob_path(hub, name, sha), target)        # same disk: no copy
+            except OSError:
+                shutil.copyfile(blob_path(hub, name, sha), target)
+        (staging / "meta.json").write_text(json.dumps(meta, indent=1))
+        (staging / "manifest.json").write_text(json.dumps({path.as_posix(): sha for path, sha in paths.items()}))
+
+    return install(hub, name, fill)
+
+
+def install(hub: Hub, name: str, fill) -> dict:
     releases = hub.project_dir(name) / "releases"
     release_id = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3)
     staging = releases / (release_id + ".partial")
     staging.mkdir(parents=True)
     try:
-        safe_extract(archive, staging)
+        fill(staging)
         if not (staging / "site" / "index.html").is_file() or not (staging / "meta.json").is_file():
             raise ValueError("a bundle needs site/index.html and meta.json")
         owners = hub.id_index()
@@ -336,8 +446,30 @@ def install_release(hub: Hub, name: str, archive: bytes) -> dict:
     kept = sorted(path for path in releases.iterdir() if path.is_dir() and not path.name.endswith(".partial"))
     for old in kept[:-KEEP_RELEASES]:
         shutil.rmtree(old, ignore_errors=True)
+    prune_blobs(hub, name, kept[-KEEP_RELEASES:])
     return {"release": release_id, "files": len(json.loads((final / "meta.json").read_text()).get("files", [])),
             "versions_stored": stored, "site_url": hub.site_url(name)}
+
+
+def prune_blobs(hub: Hub, name: str, kept: list[Path]) -> None:
+    """Remove stored blobs that no kept release uses, and stale half-uploads (both after BLOB_GRACE, so a publish
+    that is still uploading keeps its files)."""
+    folder = blob_dir(hub, name)
+    if not folder.is_dir():
+        return
+    used = set()
+    for release in kept:
+        try:
+            used |= set(json.loads((release / "manifest.json").read_text()).values())
+        except (OSError, ValueError):
+            pass
+    cutoff = time.time() - BLOB_GRACE
+    for path in folder.glob("*/*"):
+        try:
+            if path.is_file() and path.name not in used and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            pass
 
 
 def log_part(path: Path, start: int, local_sha: str) -> dict:
@@ -774,6 +906,8 @@ class HubApp:
                 return JSONResponse({"error": "not found"}, status_code=404)
             if action == "publish":
                 return await self.publish(name, agent_name, request)
+            if action.startswith("blobs/") and action != "blobs/missing":
+                return await self.upload_chunk(name, agent_name, action[len("blobs/"):], request)
             body = await request.json()
             if not isinstance(body, dict):
                 raise ValueError("body must be a JSON object")
@@ -817,6 +951,16 @@ class HubApp:
                         log.info("%s: cycle %s by %s", name, kind, agent_name)
                         return JSONResponse({"cycle": state.to_dict()})
                     raise ValueError("log must be events or cycle")
+                if action == "blobs/missing":
+                    shas = body.get("sha256")
+                    if not isinstance(shas, list):
+                        raise ValueError("blobs/missing needs sha256: [...]")
+                    return JSONResponse({"missing": missing_blobs(self.hub, name, shas)})
+                if action == "release":
+                    result = install_manifest(self.hub, name, body.get("manifest"), body.get("meta"))
+                    log.info("%s: published release %s by %s (%d files, %d new page version(s))", name,
+                             result["release"], agent_name, len(body["manifest"]), result["versions_stored"])
+                    return JSONResponse(result)
                 if action == "seed":
                     seeded = self.seed(name, body)
                     log.info("%s: logs seeded by %s: %s", name, agent_name, seeded["seeded"])
@@ -824,7 +968,7 @@ class HubApp:
         except agent.LeaseHeld as held:
             log.info("%s: %s refused, lease held by %s", name, agent_name, held.holder.get("agent"))
             return JSONResponse({"error": str(held), "holder": held.holder}, status_code=409)
-        except (store.FeedbackError, ValueError, KeyError, TypeError) as error:
+        except (store.FeedbackError, ValueError, KeyError, TypeError, OSError) as error:
             log.info("%s: %s %s refused: %s", name, method, action, error)
             return JSONResponse({"error": str(error)}, status_code=400)
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -843,6 +987,36 @@ class HubApp:
             path.write_text(text if text.endswith("\n") or not text else text + "\n", encoding="utf-8")
             written[log] = f"{sum(1 for line in text.splitlines() if line.strip())} events"
         return {"seeded": written}
+
+    async def upload_chunk(self, name: str, agent_name: str, sha: str, request: Request):
+        query = request.query_params
+        try:
+            offset, total = int(query.get("offset", "")), int(query.get("total", ""))
+            blob_path(self.hub, name, sha)
+        except ValueError as error:
+            return JSONResponse({"error": f"blob upload needs a sha256, offset= and total= ({error})"},
+                                status_code=400)
+        limit = int(self.hub.settings().get("max_upload_mb", 1024)) * 1024 * 1024
+        if total > limit or total < 0 or offset < 0:
+            return JSONResponse({"error": f"file larger than {limit // 1048576} MB (hub.yaml max_upload_mb)"},
+                                status_code=413)
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > CHUNK_MAX:
+                return JSONResponse({"error": f"chunk larger than {CHUNK_MAX // 1048576} MB"}, status_code=413)
+            chunks.append(chunk)
+        with project_lock(name):
+            holder = self.hub.lease(name)
+            if not agent.is_free_for(holder, agent_name, check_process=False):
+                return JSONResponse({"error": agent.describe_refusal(holder), "holder": holder}, status_code=409)
+            try:
+                return JSONResponse(receive_chunk(self.hub, name, sha, offset, total, b"".join(chunks)))
+            except OffsetMismatch as mismatch:
+                return JSONResponse({"error": str(mismatch), "have": mismatch.have}, status_code=409)
+            except (ValueError, OSError) as error:
+                log.warning("%s: blob upload by %s refused: %s", name, agent_name, error)
+                return JSONResponse({"error": str(error)}, status_code=400)
 
     async def publish(self, name: str, agent_name: str, request: Request):
         limit = int(self.hub.settings().get("max_upload_mb", 1024)) * 1024 * 1024

@@ -13,6 +13,9 @@ Which data files go up (kea.yaml):
       upload_max_kb: 100            # data files up to this size go up, unless flagged (default 0: none)
       upload_include: [data/final/summary.tsv, "data/final/*.png"]   # always (also flagged or larger ones)
       upload_exclude: ["data/intermediate/*"]                        # never
+The hub keeps every file by checksum: a publish asks which files it lacks and sends only those, in 4 MB chunks
+that resume after a broken connection (hubs before 1.21 get the whole site as one upload).
+
 A file is flagged when it looks like it may hold identifiers (a column or key named like donor, subject,
 patient, individual, participant, sample, specimen, projid, barcode) or is a format kea cannot inspect
 (h5ad, parquet, …); flagged files go up only when named in upload_include.
@@ -129,7 +132,9 @@ def rewrite_html(text: str, uploaded: set[str]) -> str:
     return PREVIEW.sub(preview, DOWNLOAD_LINK.sub(link, text))
 
 
-def bundle(site: Path, rows: list[dict]) -> tuple[bytes, dict]:
+def entries(site: Path, rows: list[dict]) -> tuple[dict, dict]:
+    """What a release holds: {path in the release: bytes or a local file}, and meta.json (without the file list
+    of the release itself)."""
     uploaded = {row["path"] for row in rows if row["upload"]}
     sources = json.loads((site / "_sources.json").read_text()) if (site / "_sources.json").exists() else {}
     source_paths = sorted(set(sources.values()))
@@ -139,6 +144,29 @@ def bundle(site: Path, rows: list[dict]) -> tuple[bytes, dict]:
             "build": json.loads((site / "_build.json").read_text()) if (site / "_build.json").exists() else {},
             "files": sorted(uploaded), "source_commits": source_commits(source_paths),
             "states": {"labels": context.get("labels", {}), "items": context.get("items", {})}}
+    found: dict[str, bytes | Path] = {}
+    for path in sorted(site.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(site).as_posix()
+        if relative == "_files.json":
+            found["site/_files.json"] = json.dumps(sorted(uploaded), indent=1).encode()
+        elif path.suffix == ".html":
+            found[f"site/{relative}"] = rewrite_html(path.read_text(encoding="utf-8"), uploaded).encode()
+        else:
+            found[f"site/{relative}"] = path
+    for relative in source_paths:
+        path = PROJECT_ROOT / relative
+        if path.is_file() and path.resolve().is_relative_to((PROJECT_ROOT / "doc").resolve()):
+            found[relative] = path
+    for relative in sorted(uploaded):
+        found[f"files/{relative}"] = PROJECT_ROOT / relative
+    return found, meta
+
+
+def bundle(site: Path, rows: list[dict]) -> tuple[bytes, dict]:
+    """The whole release as one .tar.gz (for hubs before 1.21, which have no blob store)."""
+    found, meta = entries(site, rows)
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz", compresslevel=6) as archive:
         def add_bytes(name: str, data: bytes) -> None:
@@ -146,24 +174,76 @@ def bundle(site: Path, rows: list[dict]) -> tuple[bytes, dict]:
             info.size, info.mtime, info.mode = len(data), int(time.time()), 0o644
             archive.addfile(info, io.BytesIO(data))
 
-        for path in sorted(site.rglob("*")):
-            if not path.is_file() or path.is_symlink():
-                continue
-            relative = path.relative_to(site).as_posix()
-            if relative == "_files.json":
-                add_bytes("site/_files.json", json.dumps(sorted(uploaded), indent=1).encode())
-            elif path.suffix == ".html":
-                add_bytes(f"site/{relative}", rewrite_html(path.read_text(encoding="utf-8"), uploaded).encode())
+        for name, content in found.items():
+            if isinstance(content, Path):
+                archive.add(content, name, recursive=False)
             else:
-                archive.add(path, f"site/{relative}", recursive=False)
-        for relative in source_paths:
-            path = PROJECT_ROOT / relative
-            if path.is_file() and path.resolve().is_relative_to((PROJECT_ROOT / "doc").resolve()):
-                archive.add(path, f"{relative}", recursive=False)
-        for relative in sorted(uploaded):
-            archive.add(PROJECT_ROOT / relative, f"files/{relative}", recursive=False)
+                add_bytes(name, content)
         add_bytes("meta.json", json.dumps(meta, indent=1).encode())
     return buffer.getvalue(), meta
+
+
+CHUNK = 4 * 1024 * 1024                  # bytes per upload request
+SLOWEST = 50 * 1024                      # bytes/s assumed for a timeout: a chunk gets CHUNK / SLOWEST + 30 s
+TRIES = 4
+
+
+def file_sha(content: bytes | Path) -> tuple[str, int]:
+    if isinstance(content, bytes):
+        return hashlib.sha256(content).hexdigest(), len(content)
+    digest = hashlib.sha256()
+    with content.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest(), content.stat().st_size
+
+
+def read_part(content: bytes | Path, offset: int, size: int) -> bytes:
+    if isinstance(content, bytes):
+        return content[offset:offset + size]
+    with content.open("rb") as handle:
+        handle.seek(offset)
+        return handle.read(size)
+
+
+def upload_blob(client, sha: str, content: bytes | Path, total: int, have: int) -> None:
+    """Send one file in chunks from `have` on; a failed chunk is retried, and the hub says where to resume."""
+    failures = 0
+    while have < total or total == 0:
+        data = read_part(content, have, CHUNK)
+        try:
+            reply = client.request("POST", f"blobs/{sha}", data, headers={"Content-Type": "application/octet-stream"},
+                                   query={"offset": have, "total": total}, timeout=CHUNK / SLOWEST + 30)
+        except backend.RemoteError as error:
+            if error.status == 409 and "have" in error.detail:
+                have = int(error.detail["have"])            # the hub already holds more (or less): go on from there
+                continue
+            failures += 1
+            if failures >= TRIES or error.status in (400, 401, 413):
+                raise
+            time.sleep(2 * failures)
+            continue
+        have = int(reply["have"])
+        if reply.get("stored"):
+            return
+
+
+def send_incremental(client, found: dict, meta: dict) -> tuple[dict, int, int]:
+    """Publish by checksum: only files the hub lacks go up. Returns (hub reply, bytes sent, bytes reused).
+    Raises RemoteError with status 404 when the hub predates the blob store."""
+    manifest, sizes, contents = {}, {}, {}
+    for name, content in found.items():
+        sha, size = file_sha(content)
+        manifest[name], sizes[sha], contents[sha] = sha, size, content
+    missing = client.request("POST", "blobs/missing", {"sha256": sorted(sizes)})["missing"]
+    sent = sum(sizes[sha] - int(have) for sha, have in missing.items())
+    if missing:
+        print(f"uploading {len(missing)} of {len(sizes)} files ({sent / 1048576:.1f} MB; "
+              f"{(sum(sizes.values()) - sent) / 1048576:.1f} MB already on the hub)", file=sys.stderr)
+    for sha, have in missing.items():
+        upload_blob(client, sha, contents[sha], sizes[sha], int(have))
+    result = client.request("POST", "release", {"manifest": manifest, "meta": meta}, timeout=300)
+    return result, sent, sum(sizes.values()) - sent
 
 
 def kea_version() -> str:
@@ -214,10 +294,19 @@ def main(argv: list[str] | None = None) -> int:
             print("hub logs are empty: sending this project's comments and cycle history first:",
                   client.seed()["seeded"])
         client.sync()
-        archive, meta = bundle(site, rows)
-        result = client.request("POST", "publish", archive,
-                                headers={"Content-Type": "application/gzip",
-                                         "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+        found, meta = entries(site, rows)
+        try:
+            result, sent, reused = send_incremental(client, found, meta)
+            how = f"{sent / 1048576:.1f} MB sent, {reused / 1048576:.1f} MB reused from earlier releases"
+        except backend.RemoteError as error:
+            if error.status != 404:
+                raise
+            archive, meta = bundle(site, rows)          # a hub before 1.21: the whole site as one upload
+            result = client.request("POST", "publish", archive,
+                                    headers={"Content-Type": "application/gzip",
+                                             "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()},
+                                    timeout=max(60, len(archive) / SLOWEST))
+            how = f"{len(archive) / 1048576:.1f} MB bundle; the hub runs an older Kea, so everything was sent"
         client.sync()
     except agent.LeaseHeld as held:
         print(held, file=sys.stderr)
@@ -230,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     site_url = result.get("site_url") or f"{remote['url'].rstrip('/')}/p/{remote['project']}"   # older hubs: no site_url
     stored = f", {result['versions_stored']} new page version(s) kept" if result.get("versions_stored") else ""
     print(f"published release {result['release']} to {site_url}/{stored} "
-          f"({len(archive) / 1048576:.1f} MB bundle, {len(going)} data file(s), "
+          f"({how}, {len(going)} data file(s), "
           f"{len(meta['source_commits'])} editable pages)")
     return 0
 

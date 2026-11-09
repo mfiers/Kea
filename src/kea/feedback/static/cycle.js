@@ -225,6 +225,20 @@
   /* The reader in the menu bar (render.py: <span class='user'>): the signed-in name opens a small menu with the
      reader's comments, help and sign out; a public site read without a login shows Help and Sign in. */
   let userKey = null;
+  /* The version pill in the menu bar (render.py): the Kea that built the site; here also the Kea of the comment
+     server or hub, marked when the two differ. */
+  function renderVersion(status) {
+    const pill = document.querySelector(".topbar .kea-version");
+    if (!pill || !status || !status.server_version || pill.dataset.server === status.server_version) return;
+    pill.dataset.server = status.server_version;
+    const built = pill.dataset.kea, where = status.on_hub ? "hub" : "server";
+    const same = built === status.server_version;
+    pill.textContent = same ? "Kea " + built : `Kea ${built} · ${where} ${status.server_version}`;
+    pill.classList.toggle("differs", !same);
+    pill.title = pill.title.replace(/\. The .*$/, "") + `. The ${status.on_hub ? "Kea hub" : "comment server"} runs Kea `
+      + status.server_version + (same ? "." : ": a different version; some features may not work until both match.");
+  }
+
   function renderUser(status) {
     const slot = document.querySelector(".topbar .user");
     if (!slot) return;
@@ -292,6 +306,7 @@
       if (!response.ok) return false;
       const status = await response.json();
       renderUser(status);
+      renderVersion(status);
       apply(status);
       return true;
     } catch (error) {

@@ -30,7 +30,9 @@ KEY_VARIABLE = "KEA_REMOTE_KEY"
 
 
 class RemoteError(Exception):
-    pass
+    def __init__(self, message: str, status: int = 0, detail: dict | None = None):
+        super().__init__(message)
+        self.status, self.detail = status, detail or {}
 
 
 def remote_settings() -> dict:
@@ -105,7 +107,7 @@ class Remote(Local):
         return f"{self.url}/p/{urllib.parse.quote(self.project)}/hub/{path}"
 
     def request(self, method: str, path: str, body: dict | bytes | None = None, headers: dict | None = None,
-                query: dict | None = None) -> dict:
+                query: dict | None = None, timeout: float | None = None) -> dict:
         url = self.endpoint(path) + (f"?{urllib.parse.urlencode(query)}" if query else "")
         data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
         all_headers = {"Authorization": f"Bearer {self.key}", "X-Kea-Agent": agent.agent_id(),
@@ -115,7 +117,7 @@ class Remote(Local):
         all_headers.update(headers or {})
         request = urllib.request.Request(url, data=data, method=method, headers=all_headers)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout, context=ssl.create_default_context()) as reply:
+            with urllib.request.urlopen(request, timeout=timeout or self.timeout, context=ssl.create_default_context()) as reply:
                 return json.loads(reply.read() or b"{}")
         except urllib.error.HTTPError as error:
             try:
@@ -124,7 +126,8 @@ class Remote(Local):
                 detail = {}
             if error.code == 409 and detail.get("holder"):
                 raise agent.LeaseHeld(detail["holder"]) from None
-            raise RemoteError(f"hub {method} {path}: HTTP {error.code} {detail.get('error', error.reason)}") from None
+            raise RemoteError(f"hub {method} {path}: HTTP {error.code} {detail.get('error', error.reason)}",
+                              error.code, detail) from None
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise RemoteError(f"hub {self.url} not reachable: {error}") from None
 

@@ -58,7 +58,7 @@ display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-seri
 .topbar .user-menu a,.topbar .user-menu .who{display:block;padding:6px 14px;color:#dfe6f2}
 .topbar .user-menu a:hover{background:#2d3748;text-decoration:none}
 .topbar .user-menu .who{font-size:12.5px;color:#8a93a3;border-bottom:1px solid #2d3748;margin-bottom:4px;white-space:normal}
-.topbar .user-menu .sep-line{border-top:1px solid #2d3748;margin:4px 0}.topbar .user-menu .group{padding:6px 14px 2px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8a93a3}.topbar .user-menu a.project{display:flex;justify-content:space-between;gap:14px;max-width:320px}.topbar .user-menu a.project .role{font-size:11.5px;color:#8a93a3;white-space:nowrap}
+.topbar .user-menu .sep-line{border-top:1px solid #2d3748;margin:4px 0}.topbar .kea-version{flex:0 0 auto;font:500 11px/1 system-ui,sans-serif;color:#9aa3b2;border:1px solid #4a5468;border-radius:9px;padding:3px 7px;margin:0 10px 0 4px;white-space:nowrap;cursor:default}.topbar .kea-version.differs{color:#f0c674;border-color:#8a6d2a}@media (max-width:760px){.topbar .kea-version{display:none}}.topbar .user-menu .group{padding:6px 14px 2px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8a93a3}.topbar .user-menu a.project{display:flex;justify-content:space-between;gap:14px;max-width:320px}.topbar .user-menu a.project .role{font-size:11.5px;color:#8a93a3;white-space:nowrap}
 .topbar.user-open,body.has-kindbar .topbar.user-open{z-index:80}
 .topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
@@ -382,10 +382,19 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                      f"{esc(PDF['version'])}, commit {esc(PDF['commit'])}, made {esc(PDF['built'])}'>PDF</a>")
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
-            f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>"
+            f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>{version_pill()}"
             f"<span class='user' data-help='{prefix}help.html' data-comments='{prefix}feedback.html'>"
             f"<a href='{prefix}help.html' title='How to read this site, and about Kea'>Help</a></span>"
             f"</nav><script>{TOPBAR_JS}</script>")
+
+
+def version_pill() -> str:
+    """The Kea version that built this site (and the site's own version, when there is one); cycle.js adds the
+    comment server's or hub's Kea version from /api/status."""
+    from kea import __version__
+    site = f"; site version {PDF['version']}" if PDF and PDF.get("version") else ""
+    return (f"<span class='kea-version' data-kea='{esc(__version__)}' title='Built with Kea {esc(__version__)}{esc(site)}'>"
+            f"Kea {esc(__version__)}</span>")
 
 
 # Fold in steps until the page title has room: 1 menu into the button, 2 project, 3 experiment; the title

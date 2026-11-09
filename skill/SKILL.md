@@ -326,7 +326,8 @@ their comments; the agent works locally and talks to the hub only over https.
    data never goes up without the owner's explicit yes, file by file. On the hub, files that stay home show no
    download link and no preview.
 3. **Publish** after every `make site`: `kea publish` (it sends the site, the Markdown for the editor and the chosen
-   files; the first time also the existing comments). Tell the owner the link and the two passwords' roles.
+   files; the first time also the existing comments). Only files the hub does not hold yet go up, in resumable
+   chunks, so later publishes are small; a failed publish can simply be run again. Tell the owner the link and the two passwords' roles.
 4. **Watch** as usual: `kea watch`, `kea list`, `kea reply` and `kea cycle` read and write the hub's record; the
    local `data/feedback/*.jsonl` are kept as an exact mirror (commit them as before).
 

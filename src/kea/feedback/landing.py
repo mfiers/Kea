@@ -16,6 +16,8 @@ name), pending (bool). Every value is escaped here.
 """
 from __future__ import annotations
 
+from kea import __version__
+
 import html
 
 from kea.feedback import accounts
@@ -31,6 +33,7 @@ a{color:var(--accent)}
 .topbar img{width:30px;height:30px}
 .topbar .brand{font-weight:700;font-size:15px;color:#fff;text-decoration:none;display:flex;align-items:center;gap:10px}
 .topbar .domain{color:#aab3c5;font-size:13px}
+.topbar .version{color:#9aa3b2;font:500 11px/1 system-ui,sans-serif;border:1px solid #4a5468;border-radius:9px;padding:3px 7px;margin-left:10px;white-space:nowrap}
 .topbar .right{margin-left:auto;display:flex;gap:14px;align-items:center;font-size:14px;min-width:0}
 .topbar .right a{color:#fff}
 .topbar .who{color:#d5dbe6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -81,7 +84,8 @@ def _page(title: str, hub_title: str, domain: str, right: str, body: str) -> str
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{_esc(title)}</title>"
             f"<link rel='icon' href='{LOGO}' type='image/png'><style>{STYLE}</style></head><body>"
             f"<header class='topbar'><a class='brand' href='/'><img src='{LOGO}' alt=''>{_esc(hub_title)}</a>"
-            f"<span class='domain'>{_esc(domain)}</span><span class='right'>{right}</span></header>"
+            f"<span class='domain'>{_esc(domain)}</span><span class='version' title='This hub runs Kea {_esc(__version__)}'>"
+            f"Kea {_esc(__version__)}</span><span class='right'>{right}</span></header>"
             f"<main>{body}<footer>Kea: typed, versioned documentation sites for data analyses, reviewed by comments."
             f"</footer></main></body></html>")
 
