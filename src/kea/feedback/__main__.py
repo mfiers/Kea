@@ -12,7 +12,7 @@ Usage:
         release also needs --version X.Y.Z --kind major|minor|patch --reason "…" [--experiment NAME=X.Y.Z …]
         and writes annotated git tags (vX.Y.Z, NAME/vX.Y.Z) on the release commit
     kea watch --deadline <when> [--interval 5 --slow-interval 60 --quiet-after 3600 --report-every 3600]
-        waits until a steerer asks for something (fast polling while readers are active, slow after an hour of
+        waits until a PI asks for something (fast polling while readers are active, slow after an hour of
         quiet); comments alone never wake it. Exit 10 = "Harvest comments" pressed: fold every comment not yet in
         the plan into it and run `kea cycle plan-updated`, 20 = "Implement the plan" pressed, 30 = deadline
         reached. <when> is epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time
@@ -64,7 +64,7 @@ def last_reader_activity(events_path: Path) -> float:
 
 
 def watch(args: argparse.Namespace) -> int:
-    """Wait for a steerer's request; adaptive polling; writes nothing but its heartbeat.
+    """Wait for a PI's request; adaptive polling; writes nothing but its heartbeat.
 
     Polls every --interval seconds while a reader was active in the last --quiet-after seconds, else every
     --slow-interval. Comments do not wake it (since 1.18): a long review round costs no agent time until someone
@@ -105,7 +105,7 @@ def watch(args: argparse.Namespace) -> int:
             last_report = time.time()
             print(f"watching: {time.strftime('%Y-%m-%d %H:%M')}, cycle {current.cycle} {current.state}, "
                   f"{len(cycle.needs_planning(store.threads(args.events), current))} thread(s) not in the plan "
-                  f"(harvested when a steerer asks), {polls} polls so far, deadline "
+                  f"(harvested when a PI asks), {polls} polls so far, deadline "
                   f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(args.deadline))}", flush=True)
         if current.state == "implement-requested":
             print(f"implement requested by {current.by} at {current.since} (cycle {current.cycle})")

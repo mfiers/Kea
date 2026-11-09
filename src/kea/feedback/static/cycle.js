@@ -2,7 +2,7 @@
  *
  * - Polls the server every POLL_MS. Without a server (file:// or plain hosting) it does nothing.
  * - When a new site build has been released, offers a reload (and reloads by itself if nothing is being typed).
- * - The cycle (feedback/cycle.py, since 1.18): comments everywhere; a steerer presses "Harvest comments" and
+ * - The cycle (feedback/cycle.py, since 1.18): comments everywhere; a PI presses "Harvest comments" and
  *   Claude folds them into the plan, which then stands until the next harvest; the plan page counts the comments
  *   made since; "Implement the plan" (after a harvest) pauses comments until the release (a banner on every page,
  *   comment controls hidden; the server refuses them with 423 anyway).

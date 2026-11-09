@@ -271,14 +271,14 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
 1. **Watch:** `kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) in the background (token-free;
    comments alone never wake it; a status line every hour; check it with `kea watch --status`). Exit 30: deadline
    reached, start it again if the owner still wants it.
-2. **Harvest (exit 10):** a steerer pressed *Harvest comments*. Fold every comment not yet in the plan
+2. **Harvest (exit 10):** a PI pressed *Harvest comments*. Fold every comment not yet in the plan
    (`kea list --unplanned`; also suggested edits and direct edit commits) into `doc/_cycles/cycle-NNN.md`, with one
    `### N. title` item per change, the threads it answers, the kind of change and the proposed version (front
    matter `version:`). Reply to each thread with its item (`kea reply <thread> "…" --status planned`), commit, run
    `kea cycle plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest), `make site`
    (and `kea publish`), and watch again. The plan then stands until the next harvest; comments go on, and the plan
    page counts those made since.
-3. **Implement (exit 20):** a steerer pressed Implement (only possible after a harvest); comments made after the
+3. **Implement (exit 20):** a PI pressed Implement (only possible after a harvest); comments made after the
    harvest are not in the plan and stay for the next cycle. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
    `kea apply-suggestion <thread>`, then check every number against its source and commit with the reader as
    co-author. Never implement before Implement unless the owner asks in chat.

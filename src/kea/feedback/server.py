@@ -10,7 +10,7 @@ What it does:
       of every comment from it;
     * stores comments through feedback.store (append-only data/feedback/events.jsonl).
 
-Review cycle (feedback.cycle): comments everywhere until a steerer asks Claude to implement the plan; while
+Review cycle (feedback.cycle): comments everywhere until a PI asks Claude to implement the plan; while
 implementation is requested or running, new comments, replies and status changes are refused (HTTP 423).
 
 API (JSON):
@@ -25,15 +25,17 @@ API (JSON):
     GET  /api/source?page=<key>     the Markdown source of a documentation page (for the editor)
     POST /api/suggest               {page, page_title, text, new_text}: a suggested edit, stored as a thread with the
                                     diff; files are never written by the server
-    POST /api/cycle/harvest         a steerer asks Claude to fold the comments not yet in the plan into it
-    POST /api/cycle/implement       a steerer asks Claude to implement the plan (only after a harvest; comments
+    POST /api/cycle/harvest         a PI asks Claude to fold the comments not yet in the plan into it
+    POST /api/cycle/implement       a PI asks Claude to implement the plan (only after a harvest; comments
                                     made since stay for the next cycle)
-    POST /api/cycle/cancel          a steerer withdraws a request Claude has not started on
+    POST /api/cycle/cancel          a PI withdraws a request Claude has not started on
     POST /api/steer                 {password}: the iteration password; when one is set (SITE_STEER_PASSWORD, or the
                                     hub's per-project one) the four cycle actions need it (403 {need_steer} without)
 
-Two passwords: the site password makes a reader a commenter; the iteration password (optional locally, always on
-the hub) also lets them harvest the comments into the plan, ask Claude to implement it, or cancel a request.
+Two passwords: the site password makes a reader a reviewer; the iteration password (optional locally, always on
+the hub) makes them a PI: it also lets them harvest the comments into the plan, ask Claude to implement it, or
+cancel a request. On a hub with ORCID accounts the role comes from the account instead (accounts.ROLES: auditor,
+reviewer, PI, director); the login page then offers ORCID first and folds the password form away.
 All paths are relative to the site root, so the same app serves a project under a prefix (kea hub: /p/<name>/).
 
 Usage: kea serve [--host <ip>] [--port <port>]   (defaults from kea.yaml)
@@ -130,20 +132,35 @@ def reader_name(request: Request) -> str:
 
 LOGIN_PAGE = """<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Sign in</title>
-<style>body{{font:15px/1.5 system-ui,sans-serif;background:#f6f7f9;color:#1d2330;display:grid;place-items:center;min-height:90vh;margin:0}}
-form{{background:#fff;padding:28px 32px;border-radius:10px;box-shadow:0 1px 4px #0002;max-width:340px;width:100%}}
+<style>body{{font:15px/1.5 system-ui,sans-serif;background:#f6f7f9;color:#1d2330;display:grid;place-items:center;min-height:90vh;margin:0;padding:0 14px}}
+.card{{background:#fff;padding:28px 32px;border-radius:10px;box-shadow:0 1px 4px #0002;max-width:360px;width:100%;box-sizing:border-box}}
 h1{{font-size:19px;margin:0 0 6px}}p{{color:#555;font-size:13.5px;margin:0 0 16px}}label{{display:block;font-size:13px;margin:10px 0 4px}}
 input{{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit}}
 button{{margin-top:16px;padding:8px 16px;border:0;border-radius:6px;background:#1f5fa8;color:#fff;font:inherit;cursor:pointer}}
-.err{{color:#a00;font-size:13px}}</style>
-<form method='post' action='{action}'>
+.err{{color:#a00;font-size:13px}}
+.orcid-button{{display:flex;align-items:center;justify-content:center;gap:10px;margin:18px 0 10px;padding:13px 16px;
+border-radius:8px;background:#a6ce39;color:#1d2330;font-weight:700;font-size:16px;text-decoration:none}}
+.orcid-button:hover{{background:#97bd2f}}
+.orcid-id{{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff;color:#a6ce39;
+font-size:12px;font-weight:800}}
+details{{margin-top:18px;border-top:1px solid #e3e5ea;padding-top:10px}}
+summary{{cursor:pointer;color:#5a6270;font-size:13px}}details form{{margin-top:12px}}details p{{margin-bottom:6px}}</style>
+<main class='card'>
 <h1>{title}</h1>
+{body}
+</main>"""
+PASSWORD_FORM = """<form method='post' action='{action}'>
 <p>Internal working site. Enter the shared password. Your name is used to sign your comments.</p>
 {error}
 <label for='name'>Your name</label><input id='name' name='name' value='{name}' maxlength='60' autocomplete='name'>
-<label for='password'>Password</label><input id='password' name='password' type='password' autofocus>
+<label for='password'>Password</label><input id='password' name='password' type='password'{autofocus}>
 <input type='hidden' name='next' value='{next}'>
 <button>Enter</button></form>"""
+ORCID_SIGN_IN = """<p>Sign in with your ORCID iD. One sign-in opens every project on this hub you have access to.</p>
+<a class='orcid-button' href='{href}'><span class='orcid-id' aria-hidden='true'>iD</span>Sign in with ORCID</a>
+<details{open}><summary>Sign in with a project password</summary>
+{form}
+</details>"""
 
 
 class PasswordGate(BaseHTTPMiddleware):
@@ -168,9 +185,9 @@ class PasswordGate(BaseHTTPMiddleware):
         account = self.account(request) if self.account else None
         if account:
             request.scope["kea_account"] = account
-            if writing and account.get("role") == "reader" and path != "/login":
-                return JSONResponse({"error": "you can read this site but not comment (your role is reader; the "
-                                              "hub owner can make you a commenter)", "read_only": True},
+            if writing and account.get("role") == "auditor" and path != "/login":
+                return JSONResponse({"error": "you can read this site but not comment (your role is auditor; the "
+                                              "hub's administrator can make you a reviewer)", "read_only": True},
                                     status_code=403)
             return await call_next(request)
         if not self.token or path in ("/login", "/logout", "/favicon.ico"):
@@ -296,7 +313,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
 
     def may_steer(request: Request) -> bool:
         account = request.scope.get("kea_account")
-        if account and account.get("role") in ("steerer", "owner"):
+        if account and account.get("role") in ("pi", "director"):        # accounts.ROLES
             return True
         return not spec.steer_token or hmac.compare_digest(request.cookies.get(STEER_COOKIE, ""), spec.steer_token)
 
@@ -382,17 +399,15 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         return await thread_json(event["thread_id"])
 
     def login_page(request: Request, error: str, name: str, next_url: str, status: int = 200) -> HTMLResponse:
-        page = LOGIN_PAGE.format(title=html.escape(spec.title or "Kea site"), error=error,
-                                 name=html.escape(name), next=html.escape(next_url),
-                                 action=html.escape(site_root(request) + "/login"))
         orcid = spec.login_url(request, next_url) if spec.login_url else None
-        if orcid:                                 # kea hub with ORCID: the account comes first, the password second
-            page = page.replace("<p>Internal working site.", "<a class='orcid-button' href='" + html.escape(orcid)
-                                + "'>Sign in with ORCID</a><p class='or'>or with the project's shared password:</p>"
-                                "<p>Internal working site.", 1).replace(
-                "</style>", ".orcid-button{display:block;text-align:center;margin:14px 0 6px;padding:9px 16px;border-radius:6px;"
-                "background:#a6ce39;color:#1d2330;font-weight:700;text-decoration:none}"
-                ".or{margin:14px 0 4px!important}</style>", 1)
+        form = PASSWORD_FORM.format(error=error, name=html.escape(name), next=html.escape(next_url),
+                                    action=html.escape(site_root(request) + "/login"),
+                                    autofocus="" if orcid and not error else " autofocus")
+        if orcid:            # kea hub with ORCID: the account first and large; the shared password folded away
+            body = ORCID_SIGN_IN.format(href=html.escape(orcid), open=" open" if error else "", form=form)
+        else:
+            body = form
+        page = LOGIN_PAGE.format(title=html.escape(spec.title or "Kea site"), body=body)
         return HTMLResponse(page, status_code=status)
 
     async def login(request: Request) -> Response:
@@ -431,7 +446,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         items.sort(key=lambda item: states.sort_key(item, info))
         account = request.scope.get("kea_account") or {}
         return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir),
-                             "can_write": account.get("role") != "reader", "account": bool(account)})
+                             "can_write": account.get("role") != "auditor", "account": bool(account)})
 
     def tag_fields(body: dict, on_text: bool = False) -> dict:
         """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
@@ -667,7 +682,7 @@ def main(argv: list[str] | None = None) -> int:
 
     steer = "" if args.no_password else os.environ.get("SITE_STEER_PASSWORD", "")
     if not steer and not args.no_password:
-        print("note: no SITE_STEER_PASSWORD in .env: every signed-in reader may harvest comments and ask Claude to "
+        print("note: no SITE_STEER_PASSWORD in .env: every signed-in reader is a PI and may harvest comments and ask Claude to "
               "implement the plan")
     uvicorn.run(make_app(args.site, args.events, password, args.cycle, steer_password=steer), host=args.host,
                 port=args.port, log_level="warning")

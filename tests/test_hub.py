@@ -515,3 +515,144 @@ def test_one_orcid_sign_in_for_every_project_and_one_sign_out(demo, monkeypatch)
     out, _ = visit("https://other.keahub.example/auth/logout")         # sign out on one site ...
     assert browser.get("https://demo.keahub.example/api/status").status_code == 401   # ... ends them all
     assert browser.get("https://other.keahub.example/api/status").status_code == 401
+
+
+def test_role_names_academic_and_old_names_still_work(demo, capsys):
+    """Roles are auditor < reviewer < PI < director; the names before 1.19 (reader, commenter, steerer, owner) are
+    read from an existing users.json and accepted on the command line, and the new names are written."""
+    from kea.feedback import accounts
+    the_hub, _ = demo
+    folder = the_hub.folder
+    assert accounts.ROLES == ("auditor", "reviewer", "pi", "director")
+    assert [accounts.normalise_role(name) for name in ("reader", "commenter", "steerer", "owner", "PI", "Director")] \
+        == ["auditor", "reviewer", "pi", "director", "pi", "director"]
+    assert accounts.role_label("steerer") == "PI" and accounts.role_label("auditor") == "Auditor"
+    assert accounts.rank("steerer") == accounts.rank("pi") > accounts.rank("commenter") > accounts.rank("reader") >= 0
+    old = "0000-0002-1825-0097"
+    (folder / "users.json").write_text(json.dumps({old: {"status": "approved", "name": "Old Timer",
+                                                          "roles": {"*": "commenter", "demo": "steerer"}}}))
+    book = accounts.Accounts(folder)
+    assert book.role(old, "demo") == "pi" and book.role(old, "elsewhere") == "reviewer"
+    assert hub.main(["--dir", str(folder), "users", "role", old, "owner", "--project", "demo"]) == 0
+    stored = json.loads((folder / "users.json").read_text())[old]["roles"]
+    assert stored == {"*": "reviewer", "demo": "director"}                        # written with the new names
+    assert hub.main(["--dir", str(folder), "users", "role", old, "steerer", "--project", "demo"]) == 0
+    assert json.loads((folder / "users.json").read_text())[old]["roles"]["demo"] == "pi"
+    assert hub.main(["--dir", str(folder), "users", "role", old, "PI", "--project", "demo"]) == 0
+    new = "0000-0001-5109-3700"
+    assert hub.main(["--dir", str(folder), "users", "approve", new]) == 0         # default: reviewer everywhere
+    assert book.role(new, "demo") == "reviewer"
+    capsys.readouterr()
+    hub.main(["--dir", str(folder), "users"])
+    listing = capsys.readouterr().out
+    assert "demo: PI" in listing and "*: Reviewer" in listing
+    with pytest.raises(SystemExit):
+        hub.main(["--dir", str(folder), "users", "role", new, "boss"])
+    with pytest.raises(SystemExit):
+        book.approve(new, "boss")
+
+
+def hub_with_orcid(demo, monkeypatch, orcid: str = "0000-0002-1825-0097"):
+    """The demo hub on keahub.example with an ORCID client (simulated), a private demo and a public project."""
+    import yaml
+    from kea.feedback import accounts
+    the_hub, secrets = demo
+    settings = the_hub.settings()
+    settings.update({"url": "https://keahub.example", "project_domain": "keahub.example"})
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    opened = the_hub.add("open-atlas", "Open atlas")
+    the_hub.set_public("open-atlas", True)
+    monkeypatch.setenv("KEA_ORCID_CLIENT_ID", "APP-TEST")
+    monkeypatch.setenv("KEA_ORCID_CLIENT_SECRET", "s3cret")
+    monkeypatch.setattr(accounts, "exchange_code", lambda code, redirect, conf: {"orcid": orcid, "name": "Josiah Carberry"})
+    app = hub.HubApp(the_hub)
+    apex = TestClient(app, base_url="https://keahub.example")
+    files = dict(SITE, **{"meta.json": json.dumps({"files": ["data/small.tsv"], "published_at": "2026-11-02T10:00:00Z"})})
+    assert publish_files(apex, secrets["key"], files).status_code == 200
+    assert publish_files(apex, opened["key"], SITE, project="open-atlas").status_code == 200
+    return the_hub, app, apex
+
+
+def test_apex_landing_page_for_visitors(demo, monkeypatch):
+    """https://<domain>/ without a hub session: what Kea is, Sign in with ORCID, the public projects only; the logo is
+    served by the hub; without an ORCID client the page says so and shows no button."""
+    the_hub, app, apex = hub_with_orcid(demo, monkeypatch)
+    page = apex.get("/")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    text = page.text
+    assert "Sign in with ORCID" in text and "href='/auth/login'" in text and "Kea turns a data analysis" in text
+    assert "Open atlas" in text and "https://open-atlas.keahub.example/" in text
+    assert "Demo project" not in text                                    # private projects stay unlisted
+    assert "<script" not in text and "src='http" not in text and "href='http" not in text.replace(
+        "href='https://open-atlas.keahub.example/'", "")                   # nothing loaded from elsewhere
+    logo = apex.get("/kea-head.png")
+    assert logo.status_code == 200 and logo.headers["content-type"] == "image/png" and logo.content[:4] == b"\x89PNG"
+    assert apex.get("/healthz").text == "ok" and apex.get("/nothing-here").status_code == 404
+    monkeypatch.delenv("KEA_ORCID_CLIENT_ID")
+    plain = apex.get("/")
+    assert plain.status_code == 200 and "Sign in with ORCID" not in plain.text and "no ORCID sign-in" in plain.text
+
+
+def test_apex_landing_page_for_a_signed_in_reader(demo, monkeypatch):
+    """Sign in on the hub itself (no project): a pending reader sees that they wait; a project they asked for shows
+    as pending approval; once approved, their projects with role, what it may do, private/public and last
+    published; public projects without a role apart; Sign out returns to the visitor page."""
+    from urllib.parse import parse_qs, urlsplit
+    orcid = "0000-0002-1825-0097"
+    the_hub, app, apex = hub_with_orcid(demo, monkeypatch, orcid)
+    start = apex.get("/auth/login", follow_redirects=False)                # no return address: the hub's own page
+    assert start.status_code == 303 and start.headers["location"].startswith("https://orcid.org/oauth/authorize?")
+    state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
+    back = apex.get("/auth/orcid/callback", params={"code": "c1", "state": state}, follow_redirects=False)
+    assert back.status_code == 303 and back.headers["location"] == "https://keahub.example/"
+    assert "__Host-kea_session" in back.headers["set-cookie"]
+    waiting = apex.get("/")
+    assert waiting.status_code == 200 and "Josiah Carberry" in waiting.text and orcid in waiting.text
+    assert "waits for approval" in waiting.text and "Sign out" in waiting.text
+    assert waiting.headers["cache-control"] == "no-store"
+    assert apex.get("/auth/login", follow_redirects=False).headers["location"] == "https://keahub.example/"
+    # asking for the demo project while pending: recorded, shown as pending
+    ask = apex.get("/auth/login", params={"return": "https://demo.keahub.example/"}, follow_redirects=False)
+    project_state = parse_qs(urlsplit(ask.headers["location"]).query)["state"][0]
+    refused = apex.get("/auth/orcid/callback", params={"code": "c2", "state": project_state}, follow_redirects=False)
+    assert refused.status_code == 403 and "approves new readers" in refused.text
+    pending = apex.get("/").text
+    assert "Demo project" in pending and "pending approval" in pending
+    # approved as PI on demo (old role name on the command line): role, what it may do, private, publish date
+    assert hub.main(["--dir", str(the_hub.folder), "users", "approve", orcid, "steerer", "--project", "demo"]) == 0
+    mine = apex.get("/").text
+    assert "pending approval" not in mine and "waits for approval" not in mine
+    assert "<span class='role'>PI</span>" in mine and "harvests the comments into the plan" in mine
+    assert "pill private" in mine and "2026-11-02" in mine and "https://demo.keahub.example/" in mine
+    assert "Other public projects" in mine and "Open atlas" in mine
+    assert mine.index("Demo project") < mine.index("Other public projects") < mine.index("Open atlas")
+    # sign out: the visitor page again
+    out = apex.get("/auth/logout", follow_redirects=False)
+    assert out.status_code == 303 and out.headers["location"] == "https://keahub.example/"
+    after = apex.get("/").text
+    assert "Sign in with ORCID" in after and "Josiah Carberry" not in after
+
+
+def test_site_login_folds_the_password_under_orcid(demo, monkeypatch):
+    """With ORCID on the hub, a project's login page leads with a large ORCID button and folds the shared-password
+    form into 'Sign in with a project password' (opened after a wrong password); without ORCID the form is as it
+    was and the password still signs in."""
+    the_hub, app, apex = hub_with_orcid(demo, monkeypatch)
+    _, secrets = demo
+    site = TestClient(app, base_url="https://demo.keahub.example")
+    page = site.get("/login?next=/x/r-a.html")
+    assert page.status_code == 200
+    text = page.text
+    assert "Sign in with ORCID" in text and "<details><summary>Sign in with a project password</summary>" in text
+    assert text.index("Sign in with ORCID") < text.index("<details") < text.index("name='password'")
+    assert " autofocus" not in text                                     # the focus stays off the folded form
+    wrong = site.post("/login", data={"password": "nope", "name": "Ann", "next": "/"})
+    assert wrong.status_code == 401 and "<details open>" in wrong.text and "Wrong password." in wrong.text
+    monkeypatch.delenv("KEA_ORCID_CLIENT_ID")
+    plain = TestClient(hub.HubApp(the_hub), base_url="https://demo.keahub.example")
+    without = plain.get("/login").text
+    assert "Sign in with ORCID" not in without and "<details" not in without
+    assert "name='password' type='password' autofocus" in without
+    entered = plain.post("/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"},
+                         follow_redirects=False)
+    assert entered.status_code == 303

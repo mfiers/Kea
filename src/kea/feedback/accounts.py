@@ -1,4 +1,4 @@
-"""Hub accounts: readers sign in with ORCID; the hub owner approves them; roles per project.
+"""Hub accounts: readers sign in with ORCID; the hub's administrator approves them; roles per project.
 
 Why: a shared password per project means a second login for every project a reader follows a link into, and a
 comment or a Confirm signed with whatever name was typed. With accounts a reader signs in once, and every comment,
@@ -20,16 +20,23 @@ session straight back (a one-time code, as above) or returns without one (the si
 kea_sso_tried keeps it from asking again for an hour). Sign out on any site signs out of the hub and of every site:
 sessions issued before users.json signed_out_at stop working.
 
-Roles: reader < commenter < steerer (harvest, implement) < owner. A user's role in a project is roles[<project>],
-else roles["*"]; approving gives roles["*"] = commenter unless told otherwise. The project passwords keep working
-next to accounts.
+Roles (ROLES, lowest first): auditor (reads the site and its comments, writes nothing) < reviewer (comments, tags,
+suggests edits) < PI (also harvests the comments into the plan and asks Claude to implement it; stored as "pi") <
+director (everything a PI may; the project's lead). A user's role in a project is roles[<project>], else roles["*"];
+approving gives roles["*"] = reviewer unless told otherwise. The names before 1.19 (reader, commenter, steerer, owner)
+are still accepted on the command line and read from users.json (OLD_ROLES); the new names are written. The project
+passwords keep working next to accounts.
+
+Sign in on the hub itself: <domain>/auth/login without a return address signs in for the hub's own page (the projects
+a reader may open; hub.py, landing pages). A sign-in that is not approved yet, or not for the project it came from, is
+recorded in users.json ``requested``, so the reader's page and ``kea hub users`` show it as pending.
 
 Users live in <hub>/users.json (no secrets); the signing secret in <hub>/secret.key (0600). The ORCID client comes
 from the environment: KEA_ORCID_CLIENT_ID, KEA_ORCID_CLIENT_SECRET (and KEA_ORCID_BASE, default https://orcid.org,
 https://sandbox.orcid.org for testing). Without a client the hub has no ORCID sign-in and works as before.
 
     kea hub users                          list (pending first)
-    kea hub users approve <orcid> [--role commenter] [--project <name>|*]
+    kea hub users approve <orcid> [reviewer] [--project <name>|*]
     kea hub users role <orcid> <role> [--project <name>|*]
     kea hub users block <orcid>
 """
@@ -49,7 +56,13 @@ import urllib.request
 from pathlib import Path
 
 ORCID_ID = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$")
-ROLES = ("reader", "commenter", "steerer", "owner")
+ROLES = ("auditor", "reviewer", "pi", "director")
+OLD_ROLES = {"reader": "auditor", "commenter": "reviewer", "steerer": "pi", "owner": "director"}   # before 1.19
+ROLE_LABELS = {"auditor": "Auditor", "reviewer": "Reviewer", "pi": "PI", "director": "Director"}
+ROLE_TEXT = {"auditor": "reads the site and its comments; writes nothing",
+             "reviewer": "reads, comments, tags and suggests edits",
+             "pi": "also harvests the comments into the plan and asks Claude to implement it",
+             "director": "everything a PI may; the project's lead"}
 APEX_COOKIE = "__Host-kea_session"        # host-only on the apex: Secure, Path=/, no Domain (browser-enforced)
 SITE_COOKIE = "kea_account"               # host-only on a project subdomain (or path /p/<name>/)
 SESSION_DAYS = 30
@@ -57,7 +70,20 @@ CODE_SECONDS = 60
 _lock = threading.Lock()
 
 
+def normalise_role(role: str) -> str:
+    """The current name of a role: lower case, the names before 1.19 mapped (steerer -> pi, PI -> pi)."""
+    name = str(role or "").strip().lower()
+    return OLD_ROLES.get(name, name)
+
+
+def role_label(role: str) -> str:
+    """How a role is shown: Auditor, Reviewer, PI, Director ('' for no role)."""
+    name = normalise_role(role)
+    return ROLE_LABELS.get(name, name)
+
+
 def rank(role: str) -> int:
+    role = normalise_role(role)
     return ROLES.index(role) if role in ROLES else -1
 
 
@@ -154,9 +180,13 @@ class Accounts:
     # ---- users ----
     def users(self) -> dict:
         try:
-            return json.loads(self.path.read_text())
+            users = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return {}
+        for user in users.values():                  # names before 1.19 read as the new ones (written on next save)
+            if isinstance(user, dict) and isinstance(user.get("roles"), dict):
+                user["roles"] = {project: normalise_role(role) for project, role in user["roles"].items()}
+        return users
 
     def save(self, users: dict) -> None:
         temporary = self.path.with_suffix(".tmp")
@@ -174,17 +204,33 @@ class Accounts:
             self.save(users)
             return user
 
-    def approve(self, orcid: str, role: str = "commenter", project: str = "*", by: str = "") -> dict:
+    def request(self, orcid: str, project: str) -> None:
+        """Remember that a reader asked to open a project they have no role in yet (shown as pending)."""
+        with _lock:
+            users = self.users()
+            user = users.get(orcid)
+            if user is None or project in user.get("requested", []):
+                return
+            user["requested"] = sorted({*user.get("requested", []), project})
+            self.save(users)
+
+    def approve(self, orcid: str, role: str = "reviewer", project: str = "*", by: str = "") -> dict:
         if not ORCID_ID.match(orcid):
             raise SystemExit(f"{orcid!r} is not an ORCID iD (0000-0000-0000-000X)")
+        role = normalise_role(role)
         if role not in ROLES:
-            raise SystemExit(f"role must be one of {', '.join(ROLES)}")
+            raise SystemExit(f"role must be one of {', '.join(ROLES)} (or the old names {', '.join(OLD_ROLES)})")
         with _lock:
             users = self.users()
             user = users.setdefault(orcid, {"name": "", "roles": {}, "requested_at": _now()})
             user["status"] = "approved"
             user["roles"][project] = role
             user["approved_at"], user["approved_by"] = _now(), by
+            waiting = [] if project == "*" else [name for name in user.get("requested", []) if name != project]
+            if waiting:
+                user["requested"] = waiting
+            else:
+                user.pop("requested", None)
             self.save(users)
             return user
 
@@ -197,12 +243,12 @@ class Accounts:
             self.save(users)
 
     def role(self, orcid: str, project: str) -> str:
-        """The user's role in a project ('' when not approved or blocked)."""
+        """The user's role in a project, by its current name ('' when not approved or blocked)."""
         user = self.users().get(orcid) or {}
         if user.get("status") != "approved":
             return ""
         roles = user.get("roles") or {}
-        return roles.get(project) or roles.get("*") or ""
+        return normalise_role(roles.get(project) or roles.get("*") or "")
 
     def account(self, cookie: str, project: str) -> dict | None:
         """The signed-in reader of a project site from its session cookie: {orcid, name, role} or None."""
@@ -210,7 +256,7 @@ class Accounts:
         if not payload or payload.get("project") != project:
             return None
         role = self.role(str(payload.get("orcid")), project)
-        if rank(role) < rank("reader"):
+        if rank(role) < rank("auditor"):
             return None
         name = (self.users().get(payload["orcid"]) or {}).get("name") or payload["orcid"]
         return {"orcid": payload["orcid"], "name": name, "role": role}

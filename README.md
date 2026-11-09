@@ -25,7 +25,7 @@ comments, review cycles run by an agent, and semantic versions.
     - an append-only log in `data/feedback/events.jsonl`.
 - **Review cycles**:
     1. Readers comment anywhere; the agent waits (`kea watch`, adaptive polling, no tokens spent on comments).
-    2. A steerer presses *Harvest comments*; the agent folds every comment into one plan, which then stands until
+    2. A PI presses *Harvest comments*; the agent folds every comment into one plan, which then stands until
        the next harvest. The plan page counts the comments made since (*Harvest again* adds them).
     3. *Implement the plan*: comments pause; the agent implements, writes the change log, answers every thread in
        the plan with its commit and releases a semantic version (`kea cycle release`, git tags). Comments left out
@@ -124,7 +124,7 @@ The hub watches each project's agent session through the heartbeats of `kea watc
 
 To see what the hub does, add `--log events` to `kea hub serve`: one line on stderr per publish, lease change, sign-in, refused key, unknown site and reader action (comment, tag, harvest, implement). `--log requests` adds every request. Query strings are never logged, because sign-in codes travel in them.
 
-Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [steerer] [--project name]` (`kea hub users` lists who asked). A reader signs in once: every other project site of the hub then lets them in without a click (it asks the hub, which hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all of them; comments and verdicts carry the reader's ORCID iD. Roles: reader (reads the site and its comments, writes nothing), commenter, steerer (also harvest, implement), owner; the project passwords keep working.
+Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [pi] [--project name]` (`kea hub users` lists who asked, and for which project). A reader signs in once: every other project site of the hub then lets them in without a click (it asks the hub, which hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all of them; comments and verdicts carry the reader's ORCID iD. Roles, per project or for all: auditor (reads the site and its comments, writes nothing), reviewer (comments, tags, suggests edits; the default), PI (also harvests the comments into the plan and asks the agent to implement it), director (everything a PI may; the project's lead). The names used before 1.19 (reader, commenter, steerer, owner) still work on the command line and in an existing `users.json`. The project passwords keep working; with ORCID on, a project's login page shows the ORCID button first and folds the shared-password form under "Sign in with a project password". The hub's own address (`https://example.org/`) is a landing page: visitors see what the hub is, a Sign in with ORCID button and the public projects; a signed-in reader sees their projects with their role in each, the projects waiting for approval, the other public projects and Sign out.
 
 Optional: a public project. `kea hub public <name> on` makes its pages, PDF and `/id/` links readable without a login; the comments, the review cycle and uploaded data files still need a sign-in, and visitors see a "Sign in to comment" button. `kea hub public <name> off` closes it again; `kea hub list` shows which projects are public.
 
@@ -166,8 +166,8 @@ status|plan-updated|start|release | watch | apply-suggestion`
 conclusions, results and hypotheses, the premises, the decisions in force, every caveat on these pages and on the
 method, open comments and gaps. `kea context <experiment>` lists the open work of an experiment.
 
-`kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when a steerer pressed Harvest, 20
-when a steerer pressed Implement and 30 at the deadline (comments alone never wake it); it prints a status line every hour (`--report-every`).
+`kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when a PI pressed Harvest, 20
+when a PI pressed Implement and 30 at the deadline (comments alone never wake it); it prints a status line every hour (`--report-every`).
 `kea watch --status` says whether a watcher is running and when it last looked.
 
 ## PDF

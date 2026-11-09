@@ -246,7 +246,7 @@ html.fb-panel-open .fb-dock{right:406px}@media (max-width:820px){html.fb-panel-o
 /* a public site read without a login: one "Sign in to comment" button in the dock's place */
 .fb-dock-anon .fb-d-signin { text-decoration: none; }
 
-/* the Claude session (plan page) and the banner for steerers when it stopped unexpectedly */
+/* the Claude session (plan page) and the banner for PIs when it stopped unexpectedly */
 .fb-session{font-size:14px;margin:4px 0 8px;color:#333}
 .fb-session-dot{display:inline-block;width:1.1em;text-align:center}
 .fb-session-watching .fb-session-dot,.fb-session-working .fb-session-dot{color:#2e9e5b}

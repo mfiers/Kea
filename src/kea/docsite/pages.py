@@ -868,7 +868,7 @@ class SiteRenderer:
                         f"<span class='pill s-{esc(header.get('status', ''))}'>{esc(header.get('status', ''))}</span></li>"
                         for number, (header, _, _) in sorted(plans.items(), reverse=True))
         body = (crumbs([("Plans", None)], prefix) + "<h1>Review cycles</h1><div class='short'>Readers comment "
-                "anywhere. A steerer presses “Harvest comments”: Claude folds every comment into one plan for the whole "
+                "anywhere. A PI presses “Harvest comments”: Claude folds every comment into one plan for the whole "
                 "site, grouped by experiment, and the plan stands until the next harvest; the plan page counts the "
                 "comments made since. Then “Implement the plan”: Claude implements it, writes the change log and "
                 "releases a new version; comments not in the plan stay for the next cycle.</div>"

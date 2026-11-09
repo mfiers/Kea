@@ -12,7 +12,7 @@
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
   the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.
-- Review cycle: `kea watch` waits; comments alone never wake it. Exit 10 (a steerer pressed Harvest): fold the
+- Review cycle: `kea watch` waits; comments alone never wake it. Exit 10 (a PI pressed Harvest): fold the
   comments into `doc/_cycles/cycle-NNN.md` (`kea reply … --status planned`), then always `kea cycle plan-updated
   --commit …` (it ends the harvest). Exit 20 (Implement) → `kea cycle start`, implement, run entry, replies with
   commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a

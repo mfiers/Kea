@@ -3,16 +3,16 @@
 State is an append-only log, ``data/feedback/cycle.jsonl`` (one JSON event per line, never edited); the current
 state is the replay of all events. Transitions (since Kea 1.18, 2026-11-09):
 
-    collecting ──(steerer presses "Harvest comments")──► harvest-requested     comments everywhere
+    collecting ──(PI presses "Harvest comments")──► harvest-requested     comments everywhere
     harvest-requested ──(Claude folds the comments: plan-updated)──► harvested  the plan stands until the next harvest
-    harvested ──(steerer presses "Harvest comments" again)──► harvest-requested
-    harvested ──(steerer presses "Implement the plan")──► implement-requested   no comments
-    implement-requested / harvest-requested ──(steerer cancels)──► the state before
+    harvested ──(PI presses "Harvest comments" again)──► harvest-requested
+    harvested ──(PI presses "Implement the plan")──► implement-requested   no comments
+    implement-requested / harvest-requested ──(PI cancels)──► the state before
     implement-requested ──(Claude starts)──► implementing                       no comments
     implementing ──(Claude releases: run id + commit)──► collecting, next cycle number
 
 Claude is woken only by a harvest or an Implement, never by a comment: a long review round costs no agent time
-until a steerer asks for the plan. Comments made after a harvest are counted on the plan page ("not in the plan");
+until a PI asks for the plan. Comments made after a harvest are counted on the plan page ("not in the plan");
 on Implement they stay for the next cycle.
 
 Older logs replay too: ``frozen`` (Freeze for review, before 1.18) reads as harvested, ``unfrozen`` as collecting.

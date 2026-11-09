@@ -20,8 +20,13 @@ In a project (the agent's side): kea.yaml `remote: {url: …, project: <name>}`,
 then `kea publish` sends the built site and `kea watch`, `kea list`, `kea reply`, `kea cycle` work against the hub
 (feedback.backend).
 
-Readers: https://kea.example.org/p/<name>/ ; the site password makes them commenters (any name they like), the
-iteration password also lets them harvest the comments into the plan and ask Claude to implement it.
+Readers: https://kea.example.org/p/<name>/ ; the site password makes them reviewers (any name they like), the
+iteration password makes them PIs: it also lets them harvest the comments into the plan and ask Claude to implement
+it. With ORCID accounts (accounts.py) each reader has a role per project: auditor, reviewer, PI or director.
+
+The apex (https://kea.example.org/, or https://keahub.eu/) shows a landing page (feedback/landing.py): for a visitor,
+what Kea and the hub are, "Sign in with ORCID" and the public projects; for a reader signed in on the hub, their
+projects with their role, the ones waiting for approval, the other public projects and Sign out.
 
 Addresses: with hub.yaml `project_domain: keahub.eu` every project is served at https://<name>.keahub.eu/ (one
 wildcard certificate at the proxy); https://keahub.eu/p/<name>/<page> redirects there, the agent API stays at
@@ -70,9 +75,11 @@ import urllib.request
 from pathlib import Path
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
-from kea.feedback import accounts, agent, cycle, server, store
+from kea.feedback import accounts, agent, cycle, landing, server, store
+
+LOGO_FILE = Path(__file__).resolve().parent.parent / "docsite" / "static" / "kea-head-128.png"
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 # names a new project may not take: they are (or may become) hub addresses on the apex or as subdomains
@@ -270,6 +277,16 @@ class Hub:
         except (OSError, ValueError):
             return {}
 
+    def published_on(self, name: str) -> str:
+        """The date (UTC, YYYY-MM-DD) of the release being served; '' when the project never published."""
+        stamp = str(self.meta(name).get("published_at") or "")
+        if re.match(r"^\d{4}-\d{2}-\d{2}", stamp):
+            return stamp[:10]
+        try:                                     # a bundle without published_at: when the release was installed
+            return time.strftime("%Y-%m-%d", time.gmtime((self.project_dir(name) / "current").stat().st_mtime))
+        except OSError:
+            return ""
+
 
 # ---------------------------------------------------------------- publishing (server side)
 
@@ -430,10 +447,17 @@ class HubApp:
             response = await self.resolve_id(path[len("/id/"):], Request(scope, receive))
             await response(scope, receive, send)
             return
+        if path == "/":
+            await self.landing(Request(scope, receive))(scope, receive, send)
+            return
+        if path in (landing.LOGO, "/favicon.ico"):
+            await FileResponse(LOGO_FILE, media_type="image/png",
+                               headers={"Cache-Control": "public, max-age=86400"})(scope, receive, send)
+            return
         match = re.match(r"^/p/([^/]+)(/.*)?$", path)
         if not match:
             text = "ok" if path == "/healthz" else "Kea hub. Open the link to your project's site."
-            await PlainTextResponse(text, status_code=200 if path in ("/", "/healthz") else 404)(scope, receive, send)
+            await PlainTextResponse(text, status_code=200 if path == "/healthz" else 404)(scope, receive, send)
             return
         name, rest = match.group(1), match.group(2)
         if not NAME.match(name) or self.hub.config(name) is None:
@@ -535,18 +559,55 @@ class HubApp:
         return RedirectResponse(f"{self.hub.site_url(name)}/auth/finish?code={urllib.parse.quote(code)}"
                                 f"&next={urllib.parse.quote(path)}", status_code=303)
 
+    # ---- the apex's own pages (feedback/landing.py) ----
+    def apex_session(self, request: Request) -> dict | None:
+        return self.accounts.current(self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex"))
+
+    def project_row(self, name: str, role: str = "", pending: bool = False) -> dict:
+        config = self.hub.config(name) or {}
+        return {"name": name, "title": config.get("title") or name, "url": self.hub.site_url(name) + "/",
+                "public": bool(config.get("public")), "published": self.hub.published_on(name), "role": role,
+                "pending": pending}
+
+    def landing(self, request: Request) -> HTMLResponse:
+        """https://<domain>/: the reader's projects when signed in on the hub, else the page for visitors."""
+        settings = self.hub.settings()
+        title = str(settings.get("title") or "Kea hub")
+        domain = self.hub.project_domain() or urllib.parse.urlsplit(self.apex_url()).netloc
+        names = self.hub.names()
+        session = self.apex_session(request) if accounts.orcid_settings() else None
+        headers = {"Cache-Control": "no-store"}
+        if not session:
+            sign_in = "/auth/login" if accounts.orcid_settings() else None
+            public = [self.project_row(name) for name in names if self.hub.is_public(name)]
+            return HTMLResponse(landing.visitor_page(title, domain, sign_in, public), headers=headers)
+        orcid = str(session["orcid"])
+        user = self.accounts.users().get(orcid) or {}
+        requested = set(user.get("requested") or [])
+        rows, public = [], []
+        for name in names:
+            role = self.accounts.role(orcid, name)
+            if accounts.rank(role) >= accounts.rank("auditor"):
+                rows.append(self.project_row(name, role))
+            elif name in requested and user.get("status") != "blocked":
+                rows.append(self.project_row(name, pending=True))
+            elif self.hub.is_public(name):
+                public.append(self.project_row(name))
+        person = {"orcid": orcid, "name": user.get("name", ""), "status": user.get("status", "")}
+        return HTMLResponse(landing.reader_page(title, domain, person, rows, public, "/auth/logout"), headers=headers)
+
     async def apex_auth(self, path: str, request: Request):
         settings = accounts.orcid_settings()
         if not settings:
             return PlainTextResponse("ORCID sign-in is not set up on this hub", status_code=404)
         callback = f"{self.apex_url()}/auth/orcid/callback"
-        session = self.accounts.current(self.accounts.verify(request.cookies.get(accounts.APEX_COOKIE, ""), "apex"))
+        session = self.apex_session(request)
         if path == "/auth/check":                    # a project site asks: signed in here? in, or back without
             target = request.query_params.get("return", "")
             place = self.project_of(target)
             if place is None:
                 return PlainTextResponse("unknown return address", status_code=400)
-            if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
+            if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("auditor"):
                 log.info("sign-in %s -> %s (hub session, no click)", session["orcid"], place[0])
                 return self.finish_redirect(session["orcid"], *place)
             return RedirectResponse(target, status_code=303)
@@ -559,13 +620,19 @@ class HubApp:
             response.delete_cookie(accounts.APEX_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
             return response
         if path == "/auth/login":
-            place = self.project_of(request.query_params.get("return", ""))
-            if place is None:
-                return PlainTextResponse("unknown return address", status_code=400)
-            if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("reader"):
-                log.info("sign-in %s -> %s (hub session)", session["orcid"], place[0])
-                return self.finish_redirect(session["orcid"], *place)
-            log.info("sign-in for %s: sent to ORCID", place[0])
+            target = request.query_params.get("return", "")
+            if target in ("", self.apex_url(), self.apex_url() + "/"):    # sign in on the hub's own page
+                if session:
+                    return RedirectResponse(self.apex_url() + "/", status_code=303)
+                place = ("", "/")
+            else:
+                place = self.project_of(target)
+                if place is None:
+                    return PlainTextResponse("unknown return address", status_code=400)
+                if session and accounts.rank(self.accounts.role(session["orcid"], place[0])) >= accounts.rank("auditor"):
+                    log.info("sign-in %s -> %s (hub session)", session["orcid"], place[0])
+                    return self.finish_redirect(session["orcid"], *place)
+            log.info("sign-in for %s: sent to ORCID", place[0] or "the hub")
             state = self.accounts.token("state", 600, project=place[0], path=place[1])
             query = urllib.parse.urlencode({"client_id": settings["client_id"], "response_type": "code",
                                             "scope": "openid", "redirect_uri": callback, "state": state})
@@ -587,17 +654,26 @@ class HubApp:
         if user.get("status") == "blocked":
             log.info("sign-in %s (%s): blocked", orcid, user.get("name", ""))
             return PlainTextResponse("This ORCID iD may not use this hub.", status_code=403)
-        if accounts.rank(self.accounts.role(orcid, state["project"])) < accounts.rank("reader"):
-            log.info("sign-in %s (%s) for %s: waiting for approval (kea hub users approve %s)", orcid,
-                     user.get("name", ""), state["project"], orcid)
-            return HTMLResponse(
-                "<!doctype html><meta charset='utf-8'><title>Waiting for approval</title><body style='font:15px/1.5 "
-                "system-ui;max-width:560px;margin:60px auto;padding:0 18px'><h1>Thank you</h1><p>You signed in as "
-                f"<b>{html.escape(user.get('name', ''))}</b> (ORCID <code>{html.escape(orcid)}</code>). The owner of this "
-                "hub approves new readers; you can sign in again once that is done.</p>", status_code=403)
-        log.info("sign-in %s (%s) -> %s as %s", orcid, user.get("name", ""), state["project"],
-                 self.accounts.role(orcid, state["project"]))
-        response = self.finish_redirect(orcid, state["project"], state["path"])
+        project = str(state.get("project") or "")
+        if not project:                              # signed in on the hub's own page (pending or not)
+            log.info("sign-in %s (%s) -> the hub (%s)", orcid, user.get("name", ""), user.get("status", "?"))
+            response = RedirectResponse(self.apex_url() + "/", status_code=303)
+        elif accounts.rank(self.accounts.role(orcid, project)) < accounts.rank("auditor"):
+            self.accounts.request(orcid, project)
+            log.info("sign-in %s (%s) for %s: waiting for approval (kea hub users approve %s --project %s)", orcid,
+                     user.get("name", ""), project, orcid, project)
+            response = HTMLResponse(
+                "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>Waiting for approval</title><body style='font:15px/1.5 system-ui;max-width:560px;margin:60px "
+                "auto;padding:0 18px'><h1>Thank you</h1><p>You signed in as "
+                f"<b>{html.escape(user.get('name', ''))}</b> (ORCID <code>{html.escape(orcid)}</code>). The hub's "
+                "administrator approves new readers; you can sign in again once that is done.</p>"
+                f"<p><a href='{html.escape(self.apex_url())}/'>Your page on this hub</a> shows which projects you can "
+                "open and which wait for approval.</p>", status_code=403)
+        else:
+            log.info("sign-in %s (%s) -> %s as %s", orcid, user.get("name", ""), project,
+                     self.accounts.role(orcid, project))
+            response = self.finish_redirect(orcid, project, state["path"])
         response.set_cookie(accounts.APEX_COOKIE, self.accounts.token("apex", accounts.SESSION_DAYS * 86400, orcid=orcid),
                             max_age=accounts.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax", path="/")
         return response
@@ -816,7 +892,10 @@ def main(argv: list[str] | None = None) -> int:
     users = sub.add_parser("users", help="ORCID accounts: list, approve, role, block")
     users.add_argument("action", nargs="?", default="list", choices=["list", "approve", "role", "block"])
     users.add_argument("orcid", nargs="?", default="")
-    users.add_argument("role", nargs="?", default="commenter", choices=list(accounts.ROLES))
+    users.add_argument("role", nargs="?", default="reviewer", type=accounts.normalise_role,
+                       choices=list(accounts.ROLES),
+                       help="auditor (reads), reviewer (comments), pi (also harvest, implement), director; the old "
+                            "names reader, commenter, steerer, owner still work")
     users.add_argument("--project", default="*", help="a project name, or * for all projects")
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
@@ -841,8 +920,8 @@ def main(argv: list[str] | None = None) -> int:
         secrets_out = hub.add(args.name, args.title)
         print(f"project {args.name}: {url}/p/{args.name}/\n\n"
               f"  project key (for the project's .env, KEA_REMOTE_KEY=…; shown once):\n    {secrets_out['key']}\n"
-              f"  site password (readers; they comment under any name):\n    {secrets_out['site_password']}\n"
-              f"  iteration password (also harvest / implement):\n    {secrets_out['iteration_password']}\n\n"
+              f"  site password (reviewers; they comment under any name):\n    {secrets_out['site_password']}\n"
+              f"  iteration password (PIs: also harvest / implement):\n    {secrets_out['iteration_password']}\n\n"
               f"In the project's kea.yaml:\n  remote:\n    url: {url}\n    project: {args.name}\n"
               "The hub stores only hashes: write these down now.")
         return 0
@@ -861,8 +940,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "list":
             entries = sorted(book.users().items(), key=lambda item: (item[1].get("status") != "pending", item[0]))
             for orcid, user in entries:
-                roles = ", ".join(f"{project}: {role}" for project, role in sorted((user.get("roles") or {}).items()))
-                print(f"{orcid}  {user.get('status', '?'):9} {user.get('name', ''):30} {roles}")
+                roles = ", ".join(f"{project}: {accounts.role_label(role)}"
+                                  for project, role in sorted((user.get("roles") or {}).items()))
+                waiting = ", ".join(user.get("requested") or [])
+                print(f"{orcid}  {user.get('status', '?'):9} {user.get('name', ''):30} {roles}"
+                      + (f"  (asked for: {waiting})" if waiting else ""))
             print(f"{len(entries)} user(s); ORCID sign-in {'on' if accounts.orcid_settings() else 'off (no client in the environment)'}")
             return 0
         if not args.orcid:
