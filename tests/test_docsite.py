@@ -269,3 +269,30 @@ def test_release_table_links_only_written_plans(tmp_path, monkeypatch):
     assert pages.cycle_cell("2") == "<a href='../cycles/cycle-002.html'>cycle 2</a>"
     assert pages.cycle_cell("5") == "cycle 5"                     # released without a written plan: no page
     assert pages.cycle_cell("0") == ""
+
+
+def test_references_get_an_author_year_pill_and_terms_link_in_tables_and_per_section(toy_doc):
+    write_page(toy_doc, "proj/reference/ref-ak.md", "id: ref-ak\ntype: reference\ntitle: \"Akiyama et al. 1994, J "
+               "Neuroimmunol: MRP14 in microglia\"\nshort: Staining.\nparent: home")
+    write_page(toy_doc, "proj/reference/ref-solo.md", "id: ref-solo\ntype: reference\ntitle: A paper\nshort: S.\n"
+               "parent: home\ncitation: 'Smith, J. A title. J Thing 3, 1 (2001).'")
+    write_page(toy_doc, "proj/term/t-acc.md", "id: t-acc\ntype: term\ntitle: ACC\nshort: \"ACC: anterior cingulate "
+               "cortex.\"\nparent: home", "<!-- generated -->\n**ACC**: anterior cingulate cortex.\n\nMore.")
+    write_page(toy_doc, "proj/resource/o-ds.md", "id: o-ds\ntype: resource\ntitle: Dataset G23\nshort: Data.\n"
+               "parent: home\naliases: [G23/MIC]")
+    tree = nodes.load_tree(toy_doc)
+    reference = tree.nodes["proj:ref-ak"]
+    assert reference.tag == "Akiyama et al. 1994" and reference.tag_title == "J Neuroimmunol: MRP14 in microglia"
+    assert tree.nodes["proj:ref-solo"].tag == "Smith 2001"
+    context = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: (None, target))
+    html = render_markdown("As shown ([[ref-ak]]; [[ref-ak|Akiyama 1994, p.3]]).", context)
+    assert html.count("class='tag t-reference'") == 2 and ">Akiyama et al. 1994</a>" in html
+    assert ">Akiyama 1994, p.3</a>" in html and "MRP14" not in html.split("title=")[0]
+    table = "ACC in text.\n\n| ACC | n |\n|---|---|\n| ACC | G23/MIC |\n\n## Next\n\nACC again."
+    html = render_markdown(table, LinkContext(tree, "proj", "", lambda target, prefix: None,
+                                              lambda target, prefix: (None, target)))
+    assert html.count(">ACC</a>") == 2                      # first use, then once more after the ## heading
+    assert "<th>ACC</th>" in html                           # never in a table header
+    assert "term-resource" in html and ">G23/MIC</a>" in html  # a resource alias, linked in a table cell
+    from kea.docsite.pages import repeats_body
+    assert repeats_body(tree.nodes["proj:t-acc"]) and not repeats_body(tree.nodes["proj:r-a"])

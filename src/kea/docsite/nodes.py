@@ -102,6 +102,51 @@ class Node:
         """Short label used in links: the number (P1, C2) or, without one, the title."""
         return self.number or self.title
 
+    @property
+    def tag(self) -> str:
+        """What the page's pill shows: its number (R2, T5), or for a reference its author and year
+        ("Akiyama et al. 1994"); '' for pages without either."""
+        if self.number:
+            return self.number
+        return author_year(self) if self.type == "reference" else ""
+
+    @property
+    def tag_title(self) -> str:
+        """The title as shown next to the pill: a reference's title without the author and year the pill holds."""
+        if self.type == "reference" and not self.number:
+            tag = author_year(self)
+            if tag and self.title.startswith(tag):
+                rest = self.title[len(tag):].lstrip(" ,:;.–—-")
+                return rest or self.title
+        return self.title
+
+
+YEAR = r"(?:1[6-9]|20)\d\d[a-z]?"
+
+
+def author_year(node: "Node") -> str:
+    """'Akiyama et al. 1994' for a reference: from the start of its title when it begins that way, else from
+    authors:/year: or citation:, else the title."""
+    title = str(node.title or "")
+    found = re.match(rf"^([^,:;()]{{1,60}}?\b{YEAR})\b", title)
+    if found:
+        return found.group(1).strip()
+    header = node.header
+    year = str(header.get("year") or "")
+    authors = header.get("authors")
+    citation = str(header.get("citation") or "")
+    if not year:
+        match = re.search(rf"\(({YEAR})\)|\b({YEAR})\b", citation)
+        year = (match.group(1) or match.group(2)) if match else ""
+    if isinstance(authors, list) and authors:
+        first, several = str(authors[0]).split(",")[0].split()[-1], len(authors) > 1
+    else:
+        first = citation.split(",")[0].strip()
+        several = bool(re.search(r" & | and |et al", citation.split(f"({year})")[0] if year else citation))
+    if first and year and len(first) < 40:
+        return f"{first}{' et al.' if several else ''} {year}"
+    return title[:40]
+
 
 @dataclass
 class Tree:

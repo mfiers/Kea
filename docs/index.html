@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kea</title>
-<meta name="description" content="Kea turns a data analysis into a navigable, commentable website of linked claims and evidence, reviewed in cycles by people and an AI agent.">
+<meta name="description" content="Kea turns a data analysis into a website of small, linked, commentable pages of claims and evidence, reviewed in cycles by people and an AI agent.">
 <link rel="icon" href="favicon.ico">
+<!-- Generated from README.md by src/build_web.py (make web). Do not edit by hand. -->
 <style>
 :root{--fg:#1d2330;--muted:#5b6475;--line:#d9dde5;--bg:#ffffff;--soft:#f5f7fa;--accent:#4f6b1f;--accent2:#d9822b;--code:#f3f5f8}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#e6e9ef;--muted:#a3abba;--line:#323a48;--bg:#14181f;--soft:#1b212b;--accent:#a8c46a;--accent2:#f0a050;--code:#1f2632}}
@@ -14,9 +15,9 @@
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:880px;margin:0 auto;padding:28px 16px 70px}
 a{color:var(--accent)}
-.hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin:10px 0 30px}
+.hero{display:flex;justify-content:center;margin:10px 0 24px}
 .hero img{width:min(420px,90%);height:auto;background:#fff;border-radius:14px;padding:14px 18px}
-.hero p{font-size:19px;color:var(--muted);max-width:640px;margin:6px 0 0}
+h1{font-size:30px;margin:10px 0 6px}
 h2{font-size:22px;margin:38px 0 10px;padding-bottom:4px;border-bottom:1px solid var(--line)}
 h3{font-size:17px;margin:22px 0 6px}
 pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
@@ -24,188 +25,289 @@ pre{background:var(--code);border:1px solid var(--line);border-radius:8px;paddin
 code{background:var(--code);padding:1px 4px;border-radius:4px}
 pre code{background:none;padding:0}
 .copy{position:absolute;top:8px;right:8px;font-size:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:2px 8px;cursor:pointer}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
-.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--soft)}
-.card b{display:block;margin-bottom:4px}
-ol.cycle{padding-left:20px}ol.cycle li{margin:4px 0}
-.note{border-left:4px solid var(--accent2);background:var(--soft);padding:8px 12px;border-radius:0 8px 8px 0;color:var(--fg)}
-details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--soft)}
-details summary{cursor:pointer;font-weight:600}
-#skill-text{max-height:520px;overflow:auto;white-space:pre-wrap;font-size:12.5px}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14.5px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--soft)}
+blockquote{border-left:4px solid var(--accent2);background:var(--soft);margin:12px 0;padding:6px 12px;border-radius:0 8px 8px 0}
+.tag{display:inline-flex;align-items:center;gap:4px;color:#fff;font:700 12px system-ui,sans-serif;border-radius:11px;padding:1px 8px 1px 6px;white-space:nowrap}
+.tag .ico{width:13px;height:13px}
 footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
-.tag{display:inline-flex;align-items:center;gap:4px;color:#fff;font:700 12px system-ui,sans-serif;border-radius:11px;padding:1px 8px 1px 6px;white-space:nowrap}.tag .ico{width:13px;height:13px}table.kinds td{padding:3px 8px;vertical-align:top;font-size:14px}
 </style>
 </head>
 <body>
 <main>
-  <div class="hero">
-    <img src="logo.png" alt="kea">
-    <p>Kea turns a data analysis into a website of linked claims and evidence that readers comment on, and that an
-      AI agent revises in review cycles, release by release.</p>
-  </div>
+<div class="hero"><img src="logo.png" alt="kea"></div>
+<h1 id="kea">Kea</h1>
+<p>Kea turns a data analysis into a website of small pages: one question, hypothesis, step, result, conclusion or caveat per page, linked by typed relations. Readers comment on the pages. An AI agent writes and revises them in review cycles and releases numbered versions. The pages are Markdown files in git; the site is static HTML.</p>
+<p>Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see <a href="#how-to-use-it">How to use it</a>.</p>
+<h2 id="why">Why</h2>
+<p>An analysis produces claims, and whether a claim holds depends on things that are hard to see: the file a number came from, the test that was run, what was assumed, when the hypothesis was written, and what changed since. In a report or a notebook that chain is not inspectable. The number is there but not its file; the hypothesis reads as if it came first; a premise was revised weeks ago and nothing downstream was looked at again.</p>
+<p>An AI agent makes this worse. It produces more claims, faster, and the reasoning that connects them sits in a chat log nobody will read again.</p>
+<p>Review has the same problem. Comments on a PDF or in an email thread lose their place: which version was commented on, what was done about it, and in which release.</p>
+<p>Kea writes the chain down and keeps it checkable: every claim is a page, every page says what it rests on, every change is recorded, and a reader's comment is answered with the commit that dealt with it.</p>
+<h2 id="why-small-pages">Why small pages</h2>
+<p>One claim per page, so that each claim can be handled on its own. A page can be linked by a typed relation (this result supports that conclusion; this caveat limits it), cited by a permanent id that survives edits and renames, commented on, approved or dropped by a reader, rechecked when something it rests on changes, and versioned with the rest of the site.</p>
+<p>The evidence chain becomes checkable because every link is written down. A result names the file every number comes from. A conclusion names the results for and against it, with a reason per link and a certainty. A hypothesis states its prediction and what would count as support, and whether that was written before or after the test. <code>kea check</code> reads the links as a graph on every build.</p>
+<p>A page is also the right unit for an agent and for a reader. The agent works, is reviewed and corrected one page at a time. A reader with five minutes reads a question's answer and stops, or follows the links down to the file.</p>
+<h2 id="how-a-project-progresses">How a project progresses</h2>
+<p>Every analysis follows one route, and each page is a stop on it: experiment → question → hypothesis → step → result → conclusion → the question's answer. Premises, decisions, caveats, figures, artefacts and resources feed in from the side.</p>
+<ul>
+<li>A question is proposed, and approved before anything is built on it.</li>
+<li>Hypotheses are written before the test, with a prediction and a criterion for support, and committed; the commit time is the record. Work not fixed in advance is labelled exploratory on its results and conclusions.</li>
+<li>Steps do the work from scripts (Makefile targets, seeds, versions) and make results; every number on a result page comes from a named file.</li>
+<li>Conclusions are drawn from results only, with the evidence for and against, a reason per link and a certainty. The question's answer and the summaries change in the same commit.</li>
+<li>After each run the caveats are read again: addressed by this run, or still limiting the new result.</li>
+</ul>
+<p>One step at a time (<code>pace: guided</code>, the default of <code>kea init</code>). The agent takes one step along the route and stops for the owner's review: it proposes questions and waits; for an approved question it proposes hypotheses and planned steps and waits; it runs approved steps, writes the results and waits; it concludes from reviewed results. A page that waits carries a "waiting for approval" pill. The reader's verdicts on it are Approve (the next step may build on it), Revise (say what to change; it is rewritten and waits again) and Drop (remove it, with every page that rests only on it). On a settled page the verdicts are Confirm (keep it as it is; recorded on the page), Revise and Drop. Approval can also be given in the agent's chat; either way it is written on the page (<code>approved:</code>), and <code>kea check</code> refuses work built on unapproved pages.</p>
+<p>What Kea checks on every build (<code>kea check</code>; <code>kea build --strict</code> fails on a problem): a conclusion rests on at least one result or figure, not on a hypothesis or a question; no conclusions support each other in a loop; a live conclusion does not rest on deprecated evidence; a confirmatory conclusion does not rest on exploratory results only; a hypothesis with an outcome names the result that tested it; a hypothesis fixed before its results states its prediction and criterion; every relation connects the right kinds of page; every linked page and file exists.</p>
+<p>When a page upstream changes (a premise is revised, a result redone, a decision changed), every page that rests on it, directly or further down, gets a red "recheck" pill. The agent reads each against the change, updates it when it is even slightly affected, and records the check (<code>kea recheck</code>, ledger <code>doc/_checks.yaml</code>). A version is not released while pages wait for a recheck.</p>
+<p>Versions. Each release is a semantic version and a git tag: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages, PATCH for wording only; before 1.0 a major change counts as minor. Each page shows the release in which it last changed, so settled parts stand out from parts in flux. The site and the PDF are two views of one version.</p>
+<h2 id="reading-a-kea-site">Reading a Kea site</h2>
+<p>Start at the top. With one experiment the site opens at the experiment's page: its summary, then every question with its answer in short. With more experiments the project page summarises them first. A question page leads with its answer so far, then its conclusions, results and hypotheses. Details are one click further down.</p>
+<p>Every page has a type, shown as a coloured tag with an icon and a number (Q1, R2, C3; references show author and year). The tag is the link to the page; hover it for the page's one-line summary. In lists of pages the whole line is the link.</p>
 
-  <h2>What it does</h2>
-  <div class="grid">
-    <div class="card"><b>Typed pages</b>Questions, premises, hypotheses (stated before or after the results), steps,
-      results, conclusions, caveats, figures, data files, glossary terms and references, each on its own page and
-      linked by typed relations: supports, opposes, tests, limits.</div>
-    <div class="card"><b>Evidence attached</b>Every number points to the file it comes from. Code pages have line
-      anchors. Data files have checksums and downloads. Every figure has a full caption and links to its table and
-      script.</div>
-    <div class="card"><b>Review cycles</b>Readers select text and comment, or suggest an edit. A PI presses
-      Harvest and the agent folds the comments into a plan; then Implement. The agent makes the changes and releases a
-      new semantic version.</div>
-    <div class="card"><b>What changed, and how settled</b>A change log per agent run. A history of every review
-      cycle. Each page shows when it last changed and whether its claim changed, so settled parts stand out from
-      parts in flux.</div>
-  </div>
 
-  <h2>How to use it: through an AI agent</h2>
-  <p class="note"><b>Kea is meant to be run by an AI coding agent</b>: Claude Code, or another agent harness that
-    can read a skill file and run shell commands. The agent installs the tool, sets up the pages, runs the analysis
-    through them, serves the site, watches for comments and runs the review cycles. You talk to the agent and read
-    and comment on the site. Installing and running Kea by hand is possible but is not the intended way to use it:
-    keeping the pages, hypotheses, change logs and review cycles consistent is the work the agent does.</p>
-  <h3 id="install">Installing the tool yourself</h3>
-  <p>The agent normally does this, but to have the <code>kea</code> command on a machine (for example a hub
-    host), install a tagged version with <a href="https://docs.astral.sh/uv/">uv</a>. Kea is not on PyPI.</p>
-  <pre><code>uv tool install git+https://github.com/mfiers/Kea.git@v1.21.0     # the kea command, for any project
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.21.0"       # or: a dependency of a Python/uv project
-uvx --from git+https://github.com/mfiers/Kea.git@v1.21.0 kea --help  # or: run once without installing</code></pre>
-  <p class="note">Upgrade by running the same command with the new tag (<code>uv tool install --force …@vX.Y.Z</code>);
-    <code>uv tool upgrade kea</code> does not move a pinned tag. Needs <code>git</code>; the PDF needs
-    <a href="https://github.com/typst/typst/releases">Typst</a>.</p>
-  <h3>1. Give your agent the skill (once)</h3>
-  <p>For Claude Code:</p>
-  <pre><code>mkdir -p ~/.claude/skills/kea
-curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.21.0/skill/SKILL.md \
-     -o ~/.claude/skills/kea/SKILL.md</code></pre>
-  <p>Other agents: put <code>skill/SKILL.md</code> wherever your agent reads its instructions, for example in the
-    project's agent instructions file.</p>
-  <h3>2. Say "use Kea"</h3>
-  <p>In your project, tell the agent <i>"use Kea"</i>. It asks for a short outline of the project and its first
-    experiment, unless that is already clear. It then installs a tagged version of Kea, writes the first pages,
-    builds the site, agrees with you on where to host it (on your own machine unless you need more), gives you the
-    link and starts watching for comments. From then on, ask it to work on a question: it reads what the site
-    already holds for that question before it starts (<code>kea context</code>).</p>
-  <details><summary>Read the skill</summary>
-    <p><a href="https://github.com/mfiers/Kea/blob/main/skill/SKILL.md">skill/SKILL.md on GitHub</a> ·
-      <a href="https://raw.githubusercontent.com/mfiers/Kea/main/skill/SKILL.md" download="SKILL.md">download</a></p>
-    <pre id="skill-text">Loading the current skill from GitHub…</pre>
-  </details>
-  <details><summary>What the agent runs (for reference, not to type yourself)</summary>
-    <pre><code>uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.21.0"       # a Python project
-uv tool install git+https://github.com/mfiers/Kea.git@v1.21.0        # any other project
-kea init --title "My analysis" --author "Your Name" --experiment first-experiment
-make site && make serve                                           # the password is in .env
-kea watch --deadline 3d                                           # waits for comments</code></pre>
-    <p class="note">The agent installs a <b>tagged</b> version, so a project does not change when Kea does
-      (<a href="https://github.com/mfiers/Kea/tags">tags</a>).</p>
-  </details>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class='tag' style='background:#333'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='12' r='5.5'/><circle cx='12' cy='12' r='1.6'/></svg>Experiment</span></td>
+<td>the experiment's home page: its summary, then every question with its answer in short</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#6a4c93'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M12 2 2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>Premise</span></td>
+<td>what the analysis takes as given, so a reader can question it</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#1f77b4'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/><path d='M12 17h.01'/></svg>Question</span></td>
+<td>what is asked; leads with its answer so far and the conclusions behind it</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#a23c9e'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z'/></svg>Hypothesis</span></td>
+<td>what was expected, with its prediction and criterion, and whether it was written before its test</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#2a7f62'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7 12h10'/><path d='M13 8l4 4-4 4'/></svg>Step</span></td>
+<td>what was done (the methods: data, tool, version, test, output files)</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#757575'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='6' cy='19' r='2.5'/><circle cx='18' cy='6' r='2.5'/><path d='M6 3v13.5'/><path d='M18 8.5a9 9 0 0 1-9 9'/></svg>Decision</span></td>
+<td>a choice made along the way, why, and the alternatives</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#8c564b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M3 21h18'/><path d='M6 21v-7'/><path d='M11 21V7'/><path d='M16 21v-11'/><path d='M21 21V4'/></svg>Result</span></td>
+<td>what a file shows; every number comes from a named file</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#c0392b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7.5 12.5l3 3 6-7'/></svg>Conclusion</span></td>
+<td>what the results mean, with the evidence for and against and a certainty</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#17818a'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.6'/><path d='M21 15l-5-5L5 21'/></svg>Figure</span></td>
+<td>a figure with its full caption, script and table</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#966d09'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/><path d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/></svg>Artefact</span></td>
+<td>a data file the analysis made, with checksum, preview and download</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#5b6b2f'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/><path d='M3.3 7 12 12l8.7-5'/><path d='M12 22V12'/></svg>Resource</span></td>
+<td>what the analysis takes from outside (a database, dataset, file or tool), with version, retrieval date and checksum</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#c64f00'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg>Caveat</span></td>
+<td>what limits a result, conclusion or premise; open until a step addresses it</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#5f6b7a'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>Term</span></td>
+<td>a glossary entry; words with a dotted underline link to it</td>
+</tr>
+<tr>
+<td><span class='tag' style='background:#3d5a80'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/></svg>Reference</span></td>
+<td>a paper, with its abstract and why it is cited</td>
+</tr>
+</tbody>
+</table>
+<p>On a page:</p>
+<ul>
+<li>The coloured bar on the left and the word above the title say the type. The page's own content (title, summary, text) is set in a serif face. Under the line "About this page" is what Kea knows about it: its permanent identifier (<code>kea:…</code>, which stays when the page is edited or moved, and <code>@…</code> for exactly this version, to cite), its sources, and its links to other pages as tables ("Tested by this step", "Supported by these results"), with the reason each link holds.</li>
+<li>Pills next to the title: the status (green: supported, done or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or dropped); "exploratory"; on a hypothesis "written before its test" or "written after results"; on a conclusion its certainty; "waiting for approval", "approved", "confirmed", "recheck"; and the release in which the page last changed.</li>
+<li>The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (all pages as one document); Help.</li>
+</ul>
+<p>Commenting, on a site served with comments: select text for Comment, Edit (that passage) or a one-click tag (explain, expand, shorten, delete, challenge, needs source; or the manuscript section the passage belongs in). The buttons at the bottom right act on the whole page: Comment, Edit, the verdicts, Propose (the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …), Next run and Manuscript. Edits are saved as suggestions and shown as a diff. Sign in with the site password and your name, or with ORCID on a hub that offers it.</p>
+<h2 id="the-review-cycle">The review cycle</h2>
+<ol>
+<li>Comment. Readers comment, tag, edit and propose for as long as the round takes. The agent waits (<code>kea watch</code>) without reading them; comments alone never wake it, so a long round costs nothing.</li>
+<li>Harvest. A PI presses "Harvest comments". The agent folds every comment into one plan of numbered items (what will change, on which pages, the version it will make) and answers each comment with its item. Approve, Revise and Drop on pages waiting for approval are applied at the harvest itself, so the route never waits for an Implement. The plan stands until the next harvest; the plan page counts the comments made since, and "Harvest again" adds them.</li>
+<li>Implement. A PI presses "Implement the plan". Comments pause. The agent changes the pages item by item, checks every number against its file, works through the rechecks, commits each change and answers each comment with its commit: page changed, answered, or won't fix with the reason.</li>
+<li>Release. A new version and git tag, with the run's change log. Open pages reload and comments reopen. Comments left out of the plan stay for the next cycle. The History page links each comment to its plan item, commit and pages.</li>
+</ol>
+<p>The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.</p>
+<h2 id="how-to-use-it">How to use it</h2>
+<p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
+<p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
+<p>For Claude Code, the skill is one file:</p>
+<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.22.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+</code></pre>
+<p>Other agents: put <code>skill/SKILL.md</code> where the agent reads its instructions, for example in the project's agent instructions file.</p>
+<h2 id="install">Install</h2>
+<p>Kea is not on PyPI; install it from this repository with <a href="https://docs.astral.sh/uv/">uv</a> (it fetches Python ≥ 3.11 if needed). Always name a tag (see <a href="https://github.com/mfiers/Kea/tags">tags</a>), so a project does not change when Kea does. The agent normally does this itself.</p>
+<pre><code># as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
+uv tool install git+https://github.com/mfiers/Kea.git@v1.22.0
+kea --help
 
-  <h2 id="reading">Reading a Kea site</h2>
-  <p>A Kea site documents one analysis as small pages, one idea per page, linked by typed relations (supports,
-    opposes, answers, tests, limits). The project's home page has its summary; each experiment's page has its own
-    summary and every question with its answer in short; a question page leads with its conclusions and results;
-    the details sit one click further down.</p>
-  <table class="kinds">
-      <tr><td><span class='tag' style='background:#333333'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='12' r='5.5'/><circle cx='12' cy='12' r='1.6'/></svg>Goal</span></td><td>the experiment's home page: its summary and every question with its answer in short</td></tr>
-      <tr><td><span class='tag' style='background:#6a4c93'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M12 2 2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>Premise</span></td><td>what the analysis takes as given</td></tr>
-      <tr><td><span class='tag' style='background:#1f77b4'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/><path d='M12 17h.01'/></svg>Question</span></td><td>what is asked; leads with its answer in short, its conclusions and results</td></tr>
-      <tr><td><span class='tag' style='background:#9467bd'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z'/></svg>Hypothesis</span></td><td>what was expected, and whether it was written before its test</td></tr>
-      <tr><td><span class='tag' style='background:#2a7f62'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7 12h10'/><path d='M13 8l4 4-4 4'/></svg>Step</span></td><td>what was done (methods)</td></tr>
-      <tr><td><span class='tag' style='background:#7f7f7f'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='6' cy='19' r='2.5'/><circle cx='18' cy='6' r='2.5'/><path d='M6 3v13.5'/><path d='M18 8.5a9 9 0 0 1-9 9'/></svg>Decision</span></td><td>a choice made along the way, why, and the alternatives</td></tr>
-      <tr><td><span class='tag' style='background:#8c564b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M3 21h18'/><path d='M6 21v-7'/><path d='M11 21V7'/><path d='M16 21v-11'/><path d='M21 21V4'/></svg>Result</span></td><td>what a file shows; every number comes from a named file</td></tr>
-      <tr><td><span class='tag' style='background:#c0392b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='M7.5 12.5l3 3 6-7'/></svg>Conclusion</span></td><td>what the results mean, with the evidence for and against</td></tr>
-      <tr><td><span class='tag' style='background:#17818a'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.6'/><path d='M21 15l-5-5L5 21'/></svg>Figure</span></td><td>a figure with its full caption</td></tr>
-      <tr><td><span class='tag' style='background:#b8860b'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/><path d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/></svg>Artefact</span></td><td>a data file, with checksum and download</td></tr>
-      <tr><td><span class='tag' style='background:#d35400'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg>Caveat</span></td><td>what limits a result or a conclusion</td></tr>
-      <tr><td><span class='tag' style='background:#556677'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>Term</span></td><td>a glossary entry; words with a dotted underline link to it</td></tr>
-      <tr><td><span class='tag' style='background:#556677'><svg class='ico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/></svg>Reference</span></td><td>a paper, with its abstract and why it is cited</td></tr>
-  </table>
-  <ul>
-    <li><b>Tags are links.</b> Every page has a coloured tag with its type's icon and a number (Q1, R2, C3). The tag
-      is always the link to that page, and hovering it shows the page's one-line summary. In a list of pages the
-      whole line is the link; in running text only the tag is.</li>
-    <li><b>Status.</b> The pill next to a tag is the page's status: green settled or supported, amber exploratory
-      or open, red rejected. Hypotheses say whether they were written before their test or after the results.</li>
-    <li><b>The menu bar</b> shows where you are: <i>Kea</i> (home) / project / experiment / page. When space is
-      short, the menu folds first and the page title stays longest. The kea logo opens the site's help page.</li>
-    <li><b>Comments and edits.</b> Select text and press Comment. The Edit button in the menu bar opens the page's
-      Markdown; the pencil beside a section heading edits only that section. Edits are saved as suggestions and
-      folded into the next review cycle.</li>
-    <li><b>Versions.</b> The project's version belongs to its set of pages. The site and the PDF are two views of the
-      same version; the PDF carries it on its title page.</li>
-  </ul>
+# or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
+uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.22.0&quot;
 
-  <h2>Analysis runs that build on what is known</h2>
-  <p>Before the agent works on a question, <code>kea context &lt;question&gt;</code> prints the part of the
-    knowledge tree it has to take into account: the answer so far, earlier results and hypotheses, the premises,
-    the decisions in force, every caveat on those pages and on the method, open comments, and what is still missing.
-    The skill makes this the first step of every run. The agent then fixes and commits its hypotheses before the
-    test, runs the analysis from scripts, writes results with their source files, checks the caveats again, and
-    updates the answer and the summaries.</p>
-  <p>Saying <i>use Kea</i> to the agent starts it in order. It asks for an outline of the project and the first
-    experiment, sets up the pages and builds the site. It then agrees on hosting (localhost unless you need more),
-    sends you the link and starts watching for comments.</p>
-
-  <h2>The review cycle</h2>
-  <ol class="cycle">
-    <li><b>Comment.</b> Readers select text and comment, or suggest an edit, for as long as the round takes. The
-      agent's watcher waits without spending tokens; comments alone do not wake it.</li>
-    <li><b>Harvest.</b> A PI presses Harvest. The agent folds every comment into one plan, which then stands
-      until the next harvest. The plan page counts the comments made since.</li>
-    <li><b>Implement.</b> A reader presses Implement. The agent makes the changes and records them in a change
-      log. It answers every comment with the commit that dealt with it.</li>
-    <li><b>Release.</b> The agent tags a semantic version: major when a conclusion changes direction, minor for new
-      results, patch for wording. Open pages reload, and comments reopen. Comments that were not in the plan stay for the next cycle.</li>
-  </ol>
-
-  <h2>Small enough to change while you use it</h2>
-  <p>Kea is about 4,000 lines of Python and 700 lines of its own JavaScript and CSS, with nine Python dependencies.
-    It has no database: pages are Markdown in git, and comments are an append-only log. The site is static HTML,
-    rebuilt in seconds. So the agent running your review cycle can also change the tool during the session when
-    you ask: a new page type, a different menu, a public build. Most of Kea's features were added that way, at a
-    reader's request.</p>
-
-  <h2>Builds</h2>
-  <p><code>kea build</code> builds the review site with comments. <code>kea build --mode local</code> builds a
-    static copy without comments, with links into the project's data, to read from disk. <code>kea build --mode
-    public --out DIR</code> builds a copy for any web host. It contains no comments, no data files and no previews
-    of controlled tables, and it lists what it left out.</p>
-  <p><code>kea pdf</code> puts every page into one PDF, typeset with <a href="https://typst.app">Typst</a> and ordered for
-    a reader on paper. Each experiment opens with its conclusions; the methods follow, then each question with its
-    hypotheses, results and figures, then the caveats. An appendix gives overview tables of every page, numbered
-    references in journal style and what changed in each version. Cross-references carry page numbers, and a
-    closing chapter explains how to read it. The title page carries the project's summary, its version, the author and the
-    repository; with more than one experiment the next page summarises each. <code>kea build</code> adds it to the site, linked from the home page, and recompiles it only when the pages
-    change. Typst is optional; without it Kea writes the source file and says how to install it.</p>
-
-  <h2>About</h2>
-  <p class="note" id="disclaimer"><b>Written with an AI assistant.</b> Kea was developed by Mark Fiers together
-    with Claude (Anthropic), an AI coding assistant. Mark directed the design and tested it in use; much of the code
-    and text was written by Claude. Treat Kea as research software: check what it builds before you rely on it.</p>
-
-  <footer>Kea · <a href="https://github.com/mfiers/Kea">github.com/mfiers/Kea</a></footer>
+# or once, without installing
+uvx --from git+https://github.com/mfiers/Kea.git@v1.22.0 kea --help
+</code></pre>
+<ul>
+<li>Upgrade: run the same command with the new tag (<code>uv tool install --force git+…@vX.Y.Z</code>, or <code>uv add</code> again). <code>uv tool upgrade kea</code> does not move a pinned tag.</li>
+<li>Remove: <code>uv tool uninstall kea</code> (or <code>uv remove kea</code>).</li>
+<li>If <code>kea</code> is not found after <code>uv tool install</code>, run <code>uv tool update-shell</code> and open a new shell.</li>
+<li>Needs <code>git</code> (for the install, the change logs and the versions). Optional: <a href="https://github.com/typst/typst/releases">Typst</a> for the PDF (see <a href="#pdf">PDF</a>).</li>
+<li>The agent skill is separate: copy <code>skill/SKILL.md</code> to <code>~/.claude/skills/kea/SKILL.md</code> (Claude Code) from the same tag, as under <a href="#how-to-use-it">How to use it</a>.</li>
+</ul>
+<h2 id="reference">Reference</h2>
+<h3 id="what-the-agent-runs-in-a-project">What the agent runs in a project</h3>
+<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.22.0&quot;     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.22.0
+kea init --title &quot;My project&quot; --author &quot;Your Name&quot; --experiment first-experiment --question &quot;What does it ask?&quot;
+make site &amp;&amp; make serve                                       # the password is in .env
+kea watch --deadline 3d                                       # waits for Harvest or Implement
+kea serve --install-service --host &lt;ip&gt; --port 8210 --enable   # optional: keep it running (systemd user unit)
+</code></pre>
+<p><code>kea init</code> never overwrites a file; it adds <code>kea.yaml</code> (with <code>pace: guided</code>), <code>doc/_schema.yaml</code>, a first experiment, <code>.env</code> with a random <code>SITE_PASSWORD</code>, Makefile targets and a section in <code>CLAUDE.md</code>. <code>kea new experiment &lt;name&gt; --title "…"</code> adds an experiment; from two experiments on the site starts at the project page and needs <code>doc/_summary.md</code>.</p>
+<h3 id="pages-and-the-site">Pages and the site</h3>
+<ul>
+<li>Pages live in <code>doc/&lt;experiment&gt;/&lt;type&gt;/&lt;id&gt;.md</code> with YAML front matter: <code>id</code>, <code>uid</code> (permanent, minted by <code>kea check --fix</code>), <code>type</code>, <code>title</code>, <code>short</code>, <code>parent</code>, <code>status</code>, the relations (<code>supports</code>, <code>opposes</code>, <code>supported_by</code>, <code>opposed_by</code>, <code>answers</code>, <code>tests</code>, <code>limits</code>, <code>made_by</code>, <code>uses</code>, <code>cites</code>, …) and <code>sources</code>. Types, statuses and allowed relations are in <code>doc/_schema.yaml</code>; <code>kea check</code> validates every page against it. A relation can carry its reason: <code>supported_by: [{id: r-x, because: "…"}]</code>.</li>
+<li>Links in text: <code>[[id]]</code> shows the page's tag; <code>[[id|text]]</code> shows the text with the tag after it; <code>[[code:path#symbol]]</code> and <code>[[data:path]]</code> link code and data. A heading <code>### [[q-x]]</code> shows the question's tag and title.</li>
+<li>Extra fields: hypotheses <code>fixed_before_results</code>, <code>prediction</code>, <code>criterion</code>; results and conclusions <code>analysis: confirmatory | exploratory</code>; conclusions <code>certainty</code> (high, moderate, low, very_low) with <code>certainty_because</code>; caveats <code>kind</code> (internal, external, construct, statistical, other) and <code>limits</code>; resources <code>kind</code>, <code>url</code>, <code>version</code>, <code>retrieved</code>, <code>sha256</code>, <code>size</code>, <code>local</code>, <code>access</code>, <code>licence</code>, <code>rrid</code>, <code>accession</code> or <code>dataset_id</code>, <code>part_of</code>. A source (a database, catalog, API or MCP server) is one resource; each record taken from it (a dataset, a study, a file) is a resource of its own, part of the source.</li>
+<li>Terms carry <code>aliases:</code> and are linked at their first use in each section, in prose and table cells (<code>link: every</code> links every use, case-sensitive); a term or aliased resource page lists where it is used. References carry <code>pmid:</code>/<code>doi:</code>; <code>kea cite --write</code> fills <code>citation:</code> from Europe PMC (Crossref for DOIs it lacks). <code>kea rrid</code> checks every resource's RRID against SciCrunch.</li>
+<li>Executive summaries at three levels: the project (<code>doc/_summary.md</code>), each experiment (its home page's text before the first <code>##</code>) and each question (<code>answer:</code>, two or three sentences). Figure captions: title, take-home, then per panel take-home / Shows / Method / Statistics (the build notes missing parts).</li>
+<li>The site (<code>kea build</code>, <code>make site</code>) has: the node pages with their connections; per experiment a Map (tree), Relations (interactive graph) and Objects (one table of every page, built for thousands); code pages with line anchors; artefact pages with preview, checksum and download; a Data page of every file the pages refer to; one change-log page per agent run and a page per commit; a History page of releases and review cycles; a Help page; site-wide pages from <code>doc/_site/*.md</code>; the PDF when Typst is installed. Every page shows the release in which it last changed. A grey pill in the menu bar names the Kea version that built the site.</li>
+<li>Modes: <code>kea build</code> (review, with comments), <code>kea build --mode local</code> (no comments; data links into the project folder, for reading from disk), <code>kea build --mode public --out DIR</code> (no comments, no data files, no previews of controlled tables; for any static host; <code>_public_report.json</code> lists what was left out). <code>--no-pdf</code> skips the PDF.</li>
+<li>Comments (<code>kea serve</code>): a shared password (<code>SITE_PASSWORD</code> in <code>.env</code>) with a free-form name; <code>SITE_STEER_PASSWORD</code> gives a second password for Harvest and Implement (without it every signed-in reader may). Comments, tags, suggested edits and proposals go to an append-only log, <code>data/feedback/events.jsonl</code>; the cycle state to <code>data/feedback/cycle.jsonl</code>. Both are committed. Tags come from <code>feedback/tags.py</code> plus <code>tags:</code> in <code>kea.yaml</code>; <code>free_tags: false</code> turns off tags outside the list.</li>
+<li>One agent per project: <code>kea lease take</code> at the start of a session; a second agent is refused until the lease expires (2 h after its last action) or is taken over (<code>--force</code>). The lease is in <code>data/feedback/agent_lease.json</code>, or on the hub.</li>
+</ul>
+<h3 id="commands">Commands</h3>
+<pre><code>kea init [--title T] [--author A] [--experiment E] [--question Q] [--port N]
+kea new experiment &lt;name&gt; --title &quot;…&quot;
+kea build [--strict] [--mode review|local|public] [--out DIR] [--no-pdf]
+kea serve [--host H] [--port P] [--install-service [--enable]]
+kea check [--fix]                   validate doc/ and the graph; --fix mints missing uids
+kea context &lt;question|experiment&gt;   what a run must take into account; the next step on the route
+kea recheck --list | &lt;id&gt; … --because &quot;…&quot;
+kea drop &lt;id&gt;                       what a Drop of that page removes (lists only)
+kea pdf [--out FILE]
+kea cite [--write] [ID …]           citations from Europe PMC
+kea rrid                            check RRIDs against SciCrunch
+kea list [--unplanned] | show | reply | status | tags [names…]
+kea cycle status | plan-updated --commit SHA | start | release --version X.Y.Z --kind major|minor|patch --reason &quot;…&quot;
+kea watch --deadline 3d|12h|&lt;ISO&gt;|&lt;epoch&gt; [--report-every S] | kea watch --status
+kea apply-suggestion &lt;thread&gt;
+kea lease status | take [--force] | release
+kea publish [--files]
+kea hub init | add | list | passwords | rotate-key | remove | public &lt;name&gt; on|off | users [list|approve|role|block] | serve
+</code></pre>
+<p><code>kea context &lt;question&gt;</code> prints what an analysis run on that question must take into account: the next step on the route, its answer so far, conclusions, results and hypotheses, the premises, the decisions in force, every caveat on these pages and on the method, open comments and gaps. <code>kea context &lt;experiment&gt;</code> lists the open work of an experiment.</p>
+<p><code>kea watch --deadline 3d</code> (or 12h, an ISO date/time, epoch seconds) exits 10 when a PI pressed Harvest, 20 when a PI pressed Implement and 30 at the deadline; comments alone never wake it. It prints a status line every hour (<code>--report-every</code>) and writes a heartbeat the hub reads. <code>kea watch --status</code> says whether a watcher is running and when it last looked.</p>
+<h3 id="kea-yaml">kea.yaml</h3>
+<p>All keys are optional.</p>
+<pre><code>title: Trajectories                 # site name in the menu bar
+heading: &quot;Trajectories: …&quot;          # heading of the site home
+author: Mark Fiers                  # author(s) on the PDF's title page
+repository: https://github.com/x/y  # default: the git remote origin
+pace: guided                        # one step along the route at a time (kea init writes it); free turns the gate off
+port: 8210                          # kea serve
+host: 127.0.0.1
+site_dir: report/site               # the built site (never edited by hand)
+feedback_dir: data/feedback         # events.jsonl, cycle.jsonl, server log, watcher heartbeat
+code_paths: [src/, tests/]          # folders that get code pages
+code_files: [Makefile]              # single files that get code pages
+typst: /path/to/typst               # default: typst on PATH
+tag_prefix: site/                   # release tags &lt;prefix&gt;vX.Y.Z, for a repository whose plain tags mean something else
+changes_since: 68791ab              # commit pages and the change log start after this commit
+tags: [{name: abstract, group: manuscript, task: false}]   # more tags, or changed ones
+free_tags: true                     # readers may add tags outside the list
+cookie_salt: &lt;text&gt;                 # default &quot;kea-site:&lt;project folder name&gt;&quot;
+remote: {url: …, project: …}        # a Kea hub (below)
+</code></pre>
+<h3 id="hosting-on-a-kea-hub">Hosting on a Kea hub</h3>
+<p>One server hosts the sites of many projects and collects their comments, while each project's agent works on its own machine. The hub runs on any Linux host behind an https reverse proxy (Caddy, nginx); kea talks to it only over https.</p>
+<pre><code># on the hub
+kea hub init --dir /srv/kea-hub --url https://kea.example.org
+kea hub add trajectories --title Trajectories    # prints the project key, site password, iteration password
+kea hub serve --host 127.0.0.1 --port 8300       # behind the proxy, e.g. Caddy: kea.example.org { reverse_proxy 127.0.0.1:8300 }
+</code></pre>
+<pre><code># in the project: kea.yaml
+remote:
+  url: https://kea.example.org
+  project: trajectories
+  upload_max_kb: 100                 # data files up to this size go up (default 0: none) …
+  upload_include: []                 # … plus these (also flagged ones), never these:
+  upload_exclude: []
+# .env: KEA_REMOTE_KEY=&lt;project key&gt;
+kea publish --files                  # what would go up, and why not
+kea publish                          # after every build: sends only files the hub lacks, in resumable chunks
+</code></pre>
+<ul>
+<li>Readers open <code>https://kea.example.org/p/trajectories/</code>. The site password lets them comment under any name; the iteration password also lets them harvest the comments into the plan and ask the agent to implement it.</li>
+<li>The agent publishes the built site (with the Markdown for the editor), and <code>kea watch</code>, <code>list</code>, <code>reply</code> and <code>cycle</code> read and write the hub's record. The local <code>data/feedback/*.jsonl</code> stay an exact mirror.</li>
+<li>Data stays home unless chosen: files that may hold identifiers (donor, subject, sample … columns) or that kea cannot inspect (h5ad, parquet, npz) are flagged and go up only when named in <code>upload_include</code>. On the hub a file that stayed home has no download link and no preview.</li>
+<li>One agent per project: the hub keeps the lease. A second agent (another session, another machine) is refused until the first one's lease expires (2 h after its last action) or the owner says to take over (<code>kea lease take --force</code>).</li>
+<li>Secrets: the hub stores only hashes of the key and passwords. Renew them with <code>kea hub passwords</code> and <code>kea hub rotate-key</code>. Wrong passwords are throttled (10 per 10 minutes per address). Cookies are per project and secure over https.</li>
+<li>Sessions: the hub watches each project's agent through the heartbeats of <code>kea watch</code>. A watcher that stops on purpose (to plan, to implement, or at its deadline) says so in a last heartbeat; one that falls silent without saying why, while its deadline is still ahead, counts as stopped unexpectedly (a crash, a closed terminal, a sleeping machine, a lost network). The plan page shows the session's state and the time since the last heartbeat; PIs get a banner on every page. With <code>notify_url: https://ntfy.sh/&lt;your-topic&gt;</code> in <code>hub.yaml</code> the hub also posts a message when a session stops unexpectedly and when it is back (a plain-text POST with Title and Click headers; any webhook works). <code>kea hub list</code> shows each project's session.</li>
+<li>Logging: <code>kea hub serve --log events</code> prints one line on stderr per publish, lease change, sign-in, refused key, unknown site and reader action (comment, tag, harvest, implement); <code>--log requests</code> adds every request. Query strings are never logged, because sign-in codes travel in them.</li>
+<li>ORCID sign-in instead of shared passwords (optional). Register a client at orcid.org (Developer tools; redirect URI <code>https://example.org/auth/orcid/callback</code>), give the hub <code>KEA_ORCID_CLIENT_ID</code> and <code>KEA_ORCID_CLIENT_SECRET</code> in its environment, and approve readers with <code>kea hub users approve &lt;orcid&gt; [role] [--project name]</code> (<code>kea hub users</code> lists who asked, and for which project). A reader signs in once; every other project site of the hub then lets them in without a click (the hub hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all. Comments and verdicts carry the reader's ORCID iD. Roles, per project or for all: auditor (reads the site and its comments, writes nothing), reviewer (comments, tags, suggests edits; the default), PI (also harvests the comments into the plan and asks the agent to implement it), director (everything a PI may; the project's lead). The names used before 1.19 (reader, commenter, steerer, owner) still work on the command line and in an existing <code>users.json</code>. The project passwords keep working; with ORCID on, a project's login page shows the ORCID button first and folds the shared-password form under "Sign in with a project password". The hub's own address (<code>https://example.org/</code>) is a landing page: visitors see what the hub is, a Sign in with ORCID button and the public projects; a signed-in reader sees their projects with their role in each, the projects waiting for approval, the other public projects and Sign out.</li>
+<li>Public projects (optional): <code>kea hub public &lt;name&gt; on</code> makes a project's pages, PDF and <code>/id/</code> links readable without a login; the comments, the review cycle and uploaded data files still need a sign-in, and visitors see a "Sign in to comment" button. <code>kea hub public &lt;name&gt; off</code> closes it again; <code>kea hub list</code> shows which projects are public.</li>
+<li>Subdomains (optional): put <code>project_domain: example.org</code> in the hub's <code>hub.yaml</code> and give the proxy a wildcard certificate for <code>*.example.org</code>; project <code>trajectories</code> is then read at <code>https://trajectories.example.org/</code>, old <code>/p/trajectories/</code> links redirect there, and agents keep using <code>https://example.org</code> in <code>remote.url</code>.</li>
+<li>Permanent ids: every page has a <code>uid:</code> (minted by <code>kea check --fix</code>); <code>https://example.org/id/&lt;uid&gt;</code> finds it on any project of the hub, and <code>…/id/&lt;uid&gt;@&lt;version&gt;</code> shows a cited version even after later edits.</li>
+<li>Locally, without a hub, <code>SITE_STEER_PASSWORD</code> in <code>.env</code> gives <code>kea serve</code> the same second password.</li>
+</ul>
+<h3 id="pdf">PDF</h3>
+<p><code>kea pdf</code> (or <code>make pdf</code>) puts every page into one PDF, ordered for a reader on paper. The title page has the project's summary, its version (the version of the pages; the site and the PDF are two views of it), the author (<code>author:</code> in <code>kea.yaml</code>), the repository (<code>repository:</code>, or the git remote) and a link to Kea. With more than one experiment, page 2 summarises each experiment and each is a chapter; with one, the PDF reads as that experiment. Then:</p>
+<ul>
+<li><em>At a glance</em>: every question with its answer in short and its conclusions, each conclusion in full once, and the open caveats;</li>
+<li>background and scope, premises;</li>
+<li>one part per question: a table of its hypotheses, then the results with their figures;</li>
+<li>conclusions, caveats and methods (steps, each followed by its decisions);</li>
+<li>closing chapters: overview of all pages (one table per kind: tag, one line, status, question, linked pages), hypotheses in full, data and resources (resources O1 … with version, retrieval date, checksum and local copy; data files; figure files), the glossary (terms T1 …, then groups such as <em>Genes</em>), the references, and what changed (releases with kind, plan and commit; runs with their commits).</li>
+</ul>
+<p>References are numbered B1, B2 … in order of first citation, shown in the text as tags like every other page (not superscript), and listed like a journal's reference list from each page's <code>citation:</code> (<code>kea cite --write</code> fills it from Europe PMC, Nature style). Full names read as the kind in its colour followed by the tag (Question [Q1]); lists of pages carry the status and page number at the end of each line. Figures are printed at their own size (from the PNG's dpi), at most the text width and 19 cm high; the build notes figures it has to shrink below 80 %. A figure page may set <code>pdf_width:</code> (<code>100%</code>, <code>12cm</code>) to override the automatic size. The Methods list the tools each step uses with their RRIDs, plus the questions, results and conclusions that follow from the step.</p>
+<p>A standard closing chapter, <em>About this document</em>, explains the parts present, the page types (in the site's colours), the numbers, the statuses and the page references. Every link to a page shows its page number.</p>
+<p>It leaves out comments, plans, code listings, the relations graph (the overview tables are its printed form) and the contents of data files, so no donor-level rows reach the PDF. It needs <a href="https://github.com/typst/typst/releases">Typst</a> (a single binary; or <code>typst:</code> in <code>kea.yaml</code>). Without it the <code>.typ</code> source is still written. Output goes to <code>report/pdf/&lt;title&gt;_&lt;date&gt;_&lt;version&gt;_&lt;commit&gt;.pdf</code> and is never overwritten.</p>
+<p><code>kea build</code> also puts the PDF into the site, linked from the menu bar, when Typst is installed. It is recompiled only when something in it changes: the cache key (<code>report/pdf/_cache/</code>) covers the whole Typst source, every image file's bytes, the Kea version and the Typst version, and the build prints why it reused or rebuilt the PDF. <code>--no-pdf</code> skips it.</p>
+<h3 id="small-enough-to-change-while-you-use-it">Small enough to change while you use it</h3>
+<p>Kea is deliberately small: about 11,500 lines of Python and 1,900 lines of its own JavaScript and CSS; nine Python dependencies, with three JavaScript libraries copied in at fixed versions; no database (the pages are Markdown in git, and comments and review-cycle state are append-only JSON-lines files); plain static HTML, rebuilt in seconds.</p>
+<p>So the agent that runs the review cycle can also change the tool during the session, when a reader asks for it. In the project where Kea was built, the menu bar, comment states per version, static builds for public hosting, the in-page editor and the History page all came from reader requests and were added within the same session, most within minutes. A wish for one project goes into <code>kea.yaml</code> or the project's own pages. A wish that would help every project goes into Kea, with a test, as a new tagged version.</p>
+<h3 id="third-party-files-copied-pinned">Third-party files (copied, pinned)</h3>
+<p>Recogito text-annotator 4.3.7 (BSD-3), Cytoscape.js 3.30.2 (MIT), marked 12.0.2 (MIT); versions and checksums in <code>src/kea/feedback/static/VENDOR.md</code> and <code>src/kea/docsite/static/README.md</code>.</p>
+<h3 id="history">History</h3>
+<p>Developed inside the trajectories project (KU Leuven) in November 2026 (<code>src/docsite</code>, <code>src/feedback</code>, then <code>packages/kea</code>) and moved here on 2026-11-05. This repository previously held an unrelated older Kea (a helper to make command line tools more intelligent, last PyPI release 0.0.28); its history is kept: tag <code>legacy-0.0.28</code>, branches <code>master</code> and <code>prefix_mode</code>.</p>
+<h3 id="tests">Tests</h3>
+<p><code>uv run pytest</code> (unit tests, the comment server, the review cycle, the graph rules, the hub, and an example project built from scratch).</p>
+<h3 id="about">About</h3>
+<p>Kea was developed by Mark Fiers together with Claude (Anthropic), an AI coding assistant. Mark directed the design and tested it in use; much of the code and text was written by Claude. Treat Kea as research software: check what it builds before you rely on it.</p>
+<footer>Kea · <a href="https://github.com/mfiers/Kea">github.com/mfiers/Kea</a> · this page is README.md</footer>
 </main>
 <script>
-(function () {
-  document.querySelectorAll("pre > code").forEach(function (code) {
-    var button = document.createElement("button");
-    button.className = "copy"; button.textContent = "copy";
-    button.addEventListener("click", function () {
-      navigator.clipboard.writeText(code.textContent).then(function () {
-        button.textContent = "copied"; setTimeout(function () { button.textContent = "copy"; }, 1500);
-      });
+document.querySelectorAll("pre > code").forEach(function (code) {
+  var button = document.createElement("button");
+  button.className = "copy"; button.textContent = "copy";
+  button.addEventListener("click", function () {
+    navigator.clipboard.writeText(code.textContent).then(function () {
+      button.textContent = "copied"; setTimeout(function () { button.textContent = "copy"; }, 1500);
     });
-    code.parentElement.appendChild(button);
   });
-  var target = document.getElementById("skill-text");
-  fetch("https://raw.githubusercontent.com/mfiers/Kea/main/skill/SKILL.md")
-    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.text(); })
-    .then(function (text) { target.textContent = text; })
-    .catch(function () { target.textContent = "Could not load the skill here; use the links above."; });
-})();
+  code.parentElement.appendChild(button);
+});
 </script>
 </body>
 </html>

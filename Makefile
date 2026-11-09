@@ -39,3 +39,8 @@ DEV_HOST ?= 127.0.0.1          # e.g. make dev DEV_HOST=10.42.0.3 to listen on t
 dev:
 	DEV_HOST=$(DEV_HOST) DEV_PORT=$(DEV_PORT) ./src/dev_serve.sh
 .PHONY: dev
+
+# web: docs/index.html (https://mfiers.github.io/Kea/) generated from README.md, so the web page mirrors GitHub
+web:
+	uv run --locked python src/build_web.py
+.PHONY: web

@@ -28,6 +28,22 @@ RESOURCE_LABELS = (("kind", "Kind"), ("rrid", "RRID"), ("url", "Where"), ("datas
                    ("local", "Local copy"), ("access", "Access"), ("licence", "Licence"))
 
 
+def plain_words(text: str) -> str:
+    """Text without Markdown marks, links and spacing differences: for comparing a summary with the page text."""
+    text = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]|\[\[([^\]]*)\]\]", lambda m: m.group(1) or m.group(2), text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    return " ".join(re.sub(r"[*_`>#]", "", text).split()).lower().rstrip(".")
+
+
+def repeats_body(node: Node) -> bool:
+    """True when the page text opens with its own summary (a term's definition, say): the summary box would only
+    repeat it."""
+    short = plain_words(node.short or "")
+    body = re.sub(r"<!--.*?-->", "", node.body, flags=re.S).strip()
+    first = next((block for block in re.split(r"\n\s*\n", body) if block.strip()), "")
+    return bool(short) and plain_words(first).startswith(short)
+
+
 def resource_panel(node: Node) -> str:
     """The facts that make a resource reproducible, as a small table (missing ones marked)."""
     from kea.docsite.nodes import RESOURCE_FIELDS
@@ -286,6 +302,11 @@ class SiteRenderer:
             html = ("".join(self.figure_html(child, prefix, context, False) for child in members) if node_type == "figure"
                     else self.node_table(members, prefix))
             section(f"{TYPE_PLURALS.get(node_type, node_type)} under this {own}", html)
+        if node.type in ("term", "resource"):      # where the term (or the resource's alias) is used in the text
+            users = [user for user in self.mentions().get(node.key, []) if user.key not in shown]
+            if users:
+                section(f"Used on {kinds(users)}", self.node_table(users, prefix))
+                shown.update(user.key for user in users)
         sources = self.sources_html(node, prefix)
         if sources:
             section("Sources", sources)
@@ -294,6 +315,26 @@ class SiteRenderer:
             if render.SOLE_PROJECT == node.project:
                 sections.append(getattr(self, "sole_extras", ""))
         return "".join(sections)
+
+    def mentions(self) -> dict[str, list[Node]]:
+        """Term (and aliased resource) key -> the pages whose text uses it, as the auto-links find it."""
+        if getattr(self, "_mentions", None) is None:
+            from kea.docsite.render import term_patterns
+            found: dict[str, list[Node]] = {}
+            for project in self.tree.projects:
+                patterns = term_patterns(self.tree, project)
+                for page in self.tree.nodes.values():
+                    if page.project != project:
+                        continue
+                    text = "\n".join([page.short or "", page.body or ""])
+                    for pattern, term in patterns:
+                        if term.key != page.key and pattern.search(text) and page not in found.get(term.key, []):
+                            found.setdefault(term.key, []).append(page)
+            self._mentions = {key: sorted(pages, key=lambda page: (CHILD_ORDER.index(page.type)
+                                                                   if page.type in CHILD_ORDER else 99,
+                                                                   natural(page.number), page.title))
+                              for key, pages in found.items()}
+        return self._mentions
 
     def answer_list(self, label: str, members: list[Node], prefix: str, project: str) -> str:
         if not members:
@@ -314,10 +355,18 @@ class SiteRenderer:
             return f"<div class='cell-note'>because {esc(text)}</div>" if text else ""
         # the status also inline after the title (m-status): phones show the rows as cards, with the pills
         # flowing at the end of the title line instead of a column of their own
+        pills = {member.key: status_pill(member) + (extra(member) if extra else "") for member in members}
+        if not any(pill.strip() for pill in pills.values()):        # references, terms: no status to show
+            rows = [f"<tr><td>{tagline(member, prefix)}</td><td>{esc(member.short)}{because(member)}</td></tr>"
+                    for member in members]
+            rows += [f"<tr><td><span class='ref-missing' title='project has no pages yet'>{esc(key)}</span></td>"
+                     f"<td></td></tr>" for key in missing or []]
+            return ("<table class='nodes no-status'><colgroup><col class='c-page'><col></colgroup>"
+                    "<tr><th>Page</th><th>In short</th></tr>" + "".join(rows) + "</table>")
         rows = [f"<tr class='{status_row_class(member)}'><td>{tagline(member, prefix)}"
-                f"<span class='m-status'>{status_pill(member)}{extra(member) if extra else ''}</span></td>"
+                f"<span class='m-status'>{pills[member.key]}</span></td>"
                 f"<td>{esc(member.short)}{because(member)}</td>"
-                f"<td>{status_pill(member)}{extra(member) if extra else ''}</td></tr>" for member in members]
+                f"<td>{pills[member.key]}</td></tr>" for member in members]
         rows += [f"<tr><td><span class='ref-missing' title='project has no pages yet'>{esc(key)}</span></td><td></td>"
                  f"<td></td></tr>" for key in missing or []]
         return ("<table class='nodes'><colgroup><col class='c-page'><col><col class='c-status'></colgroup>"
@@ -409,8 +458,8 @@ class SiteRenderer:
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
                  f"<span class='pills'>{pills}</span></div>"
-                 f"<h1><span class='node-title'>{esc(node.title)}</span></h1>"
-                 f"<div class='short'>{esc(node.short)}</div>"]
+                 f"<h1><span class='node-title'>{esc(node.tag_title)}</span></h1>"
+                 + ("" if repeats_body(node) else f"<div class='short'>{esc(node.short)}</div>")]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
         if node.type == "artefact":
@@ -487,7 +536,7 @@ class SiteRenderer:
         data = {"prefix": prefix,
                 "types": [{"key": kind, "label": TYPE_PLURALS.get(kind, kind)} for kind in present],
                 "icons": {kind: icons.svg(kind) for kind in present},
-                "rows": [{"id": node.id, "k": node.type, "n": node.number or "", "t": node.title, "s": node.short,
+                "rows": [{"id": node.id, "k": node.type, "n": node.tag, "t": node.tag_title, "s": node.short,
                           "st": str(node.status or ""), "h": node.url, "r": status_row_class(node)} for node in members]}
         payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
         contents = " · ".join(f"<a href='#type={esc(kind)}'>{esc(TYPE_PLURALS.get(kind, kind))} "
@@ -509,7 +558,7 @@ class SiteRenderer:
         def branch(node: Node) -> str:
             children = self.tree.children(node)
             info = self.stability.of(node.source)
-            line = (f"{tagline(node, prefix) if node.number else type_badge(node) + node_link(node, prefix)} "
+            line = (f"{tagline(node, prefix) if node.tag else type_badge(node) + node_link(node, prefix)} "
                     f"{status_pill(node)} <span class='dot stab-{info.state}' title='{esc(info.text)}'></span>")
             if not children:
                 return f"<li>{line}</li>"
@@ -757,22 +806,34 @@ class SiteRenderer:
                 "<b>Objects</b> (every page in one table you can search, filter by type and status, and sort; under "
                 "it <b>Data</b> and <b>Code</b>).</li>"
                 + ("<li><b>Plan</b>: the plan of the current review cycle (below).</li>" if review else "")
-                + "<li><b>History</b>: what changed in each working session"
+                + "<li><b>History</b>: what changed in each agent run"
                 + ("; under it <b>Review cycles</b> (each release with its comments, plan items and commits) and "
                    "<b>Comments</b> (all comments on the site)" if review else "") + ".</li>"
                 "<li><b>PDF</b>: all pages as one document.</li>"
-                "<li>After the bar at the right: <b>Help</b> (this page), or, when you are signed in, your name: "
-                "it opens <b>My comments</b>, Help and <b>Sign out</b>.</li>")
+                "<li>After the bar at the right: <b>Help</b> (this page)"
+                + (", or, when you are signed in, your name: it opens <b>My comments</b>, Help and <b>Sign out</b>"
+                   if review else "") + ".</li>")
         body = (crumbs([("Help", None)], "") + "<h1>How to read this site</h1>"
-                "<div class='short'>The documentation of a data analysis as a tree of small pages, one idea per page, "
-                "linked by typed relations (supports, opposes, answers, tests, limits).</div>"
+                "<div class='short'>This site documents one data analysis as small pages, one claim per page, "
+                "linked by typed relations (supports, opposes, answers, tests, limits). Every claim says what it "
+                "rests on, and every change is recorded.</div>"
+                "<h2>Why small pages</h2>"
+                "<p>Whether a claim holds depends on the file its numbers came from, the test that was run, what was "
+                "assumed, when the hypothesis was written, and what changed since. In a report that chain is hard to "
+                "inspect. Here every claim is its own page, so each can be linked to by a typed relation, cited by a "
+                "permanent id, commented on, approved or dropped, rechecked when something it rests on changes, and "
+                "versioned on its own. A result names the file every number comes from; a conclusion names the "
+                "results for and against it, with a reason per link and a certainty; a hypothesis says what it "
+                "predicted and whether that was written before the test. The links are checked as a graph on every "
+                "build (below).</p>"
                 "<h2>Where to start</h2><ul>"
-                "<li>The home page has the project's summary; each experiment's page has its summary and every "
-                "question with its answer in short. A question page leads with its answer, then its conclusions, "
-                "results and hypotheses.</li>"
-                "<li>The menu bar shows where you are (the kea head, which leads home / project / experiment / page) and has the "
+                "<li>With one experiment the site starts at the experiment's page: its summary, then every question "
+                "with its answer in short. With more, the project page summarises the experiments first. A question "
+                "page leads with its answer so far, then its conclusions, results and hypotheses; the details are "
+                "one click further down.</li>"
+                "<li>The menu bar shows where you are (the kea head leads home, then project / experiment / page) and has the "
                 f"menu:<ul>{menu}</ul></li></ul>"
-                + self.route_html(legend) +
+                + self.route_html(legend, review) +
                 "<h2>Reading a page</h2><ul>"
                 "<li>The coloured bar on the left and the kind above the title say what sort of page it is "
                 "(table below). The page's own content (title, summary in the framed line, and text) is set in a "
@@ -783,20 +844,27 @@ class SiteRenderer:
                 "(\"Tested by this step\", \"Supported by these results\"). A line starting with <i>because</i> "
                 "under a linked page says why the link holds.</li>"
                 "<li>A hypothesis shows its <b>prediction</b> and what <b>counts as support</b>, fixed together "
-                "with the hypothesis before its test.</li></ul>"
+                "with the hypothesis before its test.</li>"
+                "<li>A question's <b>answer so far</b> stands under its own rule: it summarises the conclusions and "
+                "results linked under it and is not itself evidence.</li></ul>"
                 "<h2>Types and colours</h2><p>Each page has a type, shown as a coloured tag with an icon and a "
-                "number (Q1, R2, C3). The tag is always the link to that page; hover it for the page's one-line "
-                "summary. In lists of pages the whole line is the link.</p>"
+                "number (Q1, R2, C3; a reference shows its author and year). The tag is always the link to that page; "
+                "hover it for the page's one-line summary. In lists of pages the whole line is the link.</p>"
                 f"<table class='not-annotatable'>{rows}</table>"
                 "<p>The pills next to the title:</p><ul>"
-                "<li>the <b>status</b>, also the coloured bar at the left of each table row (green: settled or "
-                "supported; amber: open, planned or inconclusive; dark red: rejected or withdrawn);</li>"
+                "<li>the <b>status</b>, also the coloured bar at the left of each table row (green: supported, done "
+                "or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or "
+                "dropped);</li>"
                 "<li><b>exploratory</b>: the analysis was chosen after earlier results were seen; it suggests, and "
                 "needs new data to confirm;</li>"
                 "<li>on a hypothesis, <b>written before its test</b> or <b>written after results</b>;</li>"
                 "<li>on a conclusion, its <b>certainty</b> (high, moderate, low, very low; hover for why); on a "
                 "caveat, the kind of limit it names;</li>"
-                "<li><b>✓ confirmed</b>: a reader confirmed the page as it is.</li></ul>"
+                "<li><b>waiting for approval</b>, <b>approved</b> and <b>✓ confirmed</b>: where the page stands with "
+                "its reviewers (the route, above); <span class='pill s-recheck'>recheck</span>: a page it rests on "
+                "changed and the agent has not read it against the change yet;</li>"
+                "<li>the release in which the page last changed (green: unchanged for three or more releases; "
+                "amber: changed in the latest release or now).</li></ul>"
                 "<p>Words with a dotted underline link to the glossary.</p>")
         if review:
             body += ("<h2>Comments, tags and edits</h2><ul>"
@@ -835,12 +903,13 @@ class SiteRenderer:
                      "<li><b>A PI harvests</b> (Harvest comments, on the <a href='plan.html'>plan</a> page; PI is the "
                      "role that steers the review, or whoever has the iteration password). The agent reads every "
                      "comment, groups them into numbered plan items (what will change, on which pages, and the "
-                     "version it will make), and replies to each comment with its item: <i>in the plan</i>.</li>"
+                     "version it will make), and replies to each comment with its item: <i>in the plan</i>. Approve, "
+                     "Revise and Drop on pages that wait for approval are applied at the harvest itself.</li>"
                      "<li><b>The plan stands.</b> Comments go on; the plan page counts those made since the harvest. "
                      "<b>Harvest again</b> adds them; you can comment on the plan itself.</li>"
                      "<li><b>A PI presses Implement.</b> Comments pause. The agent changes the pages item by item, "
                      "checks every number against its source file, rechecks every page downstream of a change "
-                     "(below), commits each change, and answers each comment with its commit: <i>page changed</i>, "
+                     "(above), commits each change, and answers each comment with its commit: <i>page changed</i>, "
                      "<i>answered</i>, or <i>won't fix</i> with the reason.</li>"
                      "<li><b>Release.</b> A new version (major when a conclusion changes direction or is withdrawn, "
                      "minor for new results or pages, patch for wording). Open pages reload and comments reopen; "
@@ -851,9 +920,10 @@ class SiteRenderer:
                      "heartbeat), <i>working</i> on the plan, <i>ended</i>, or <i>stopped unexpectedly</i>; PIs then "
                      "also see a red banner on every page. A blue banner offers a new version of the "
                      "site; an amber one says the plan is being implemented.</li></ul>")
-        body += ("<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
-                 "commentable pages. More help, the page types in full and how to install it: "
-                 "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
+        body += ("<h2>About Kea</h2><p>This site is built with Kea, a tool that documents a data analysis as small, "
+                 "linked, commentable pages that an AI agent writes and revises in review cycles. Why it exists, how a "
+                 "project progresses, the page types in full and how to install it: "
+                 "<a href='https://mfiers.github.io/Kea/#reading-a-kea-site'>mfiers.github.io/Kea</a>.</p>")
         self.write("help.html", page("Help", body, "", None, self.tree))
 
     def drop_labels(self, node) -> str:
@@ -862,9 +932,10 @@ class SiteRenderer:
         return ", ".join(self.tree.nodes[key].label for key in graph.drop_set(self.tree, node.key)[1:])
 
     @staticmethod
-    def route_html(legend) -> str:
+    def route_html(legend, review: bool = True) -> str:
         """The help page's overview of the reasoning route: the main line from experiment to conclusion, what feeds
-        into it from the side, what Kea checks on every build, and what happens when a page upstream changes."""
+        into it from the side, how a project moves along it one step at a time, what Kea checks on every build, and
+        what happens when a page upstream changes. ``review``: the site has the comment server (verdict buttons)."""
         arrow = lambda word: f"<span class='route-arrow'><span>{esc(word)}</span>→</span>"
         line = "".join([legend("experiment"), arrow("asks"), legend("question"), arrow("expects"), legend("hypothesis"),
                         arrow("tested by"), legend("step"), arrow("makes"), legend("result"), arrow("supports or opposes"),
@@ -878,28 +949,37 @@ class SiteRenderer:
                 "addresses it</td></tr>"
                 f"<tr><td>{legend('figure')} {legend('artefact')} {legend('resource')}</td><td>what a step makes or "
                 "uses: figures, data files, and the outside sources with their versions</td></tr></table>")
-        return ("<h2>The reasoning route</h2><p>Every analysis here follows one route, and every page is one stop on "
-                "it. A question comes first; what we expect is written down, with what would count as support, "
-                "<i>before</i> the test runs; a step does the work and makes results; conclusions are drawn from "
-                "results only, each link saying why it holds, with a certainty.</p>"
+        approve_how = ("with <b>Approve</b> on its page (the page buttons, bottom right) or in the agent's chat"
+                       if review else "in the agent's chat, or with Approve on the site that has comments")
+        return ("<h2>How the analysis progresses</h2><p>Every analysis here follows one route, and every page is one "
+                "stop on it. A question comes first; what we expect is written down, with what would count as "
+                "support, <i>before</i> the test runs; a step does the work and makes results; conclusions are drawn "
+                "from results only, each link saying why it holds, with a certainty; the question's answer is "
+                "updated last.</p>"
                 f"<div class='route not-annotatable'>{line}</div>"
                 f"<p>Feeding into it from the side:</p>{side}"
+                "<p><b>One step at a time.</b> The agent takes one step along the route and then stops for review: "
+                "it proposes questions, and waits; for an approved question it proposes hypotheses and planned "
+                "steps, and waits; it runs approved steps and writes the results, and waits; it concludes from "
+                "reviewed results. A page that waits carries a <span class='pill s-waiting'>waiting for approval"
+                f"</span> pill; until it is approved, {approve_how}, nothing is built on it. A reviewer can also ask "
+                "for a page to be revised (it is rewritten and waits again) or dropped (removed, with every page "
+                "that rests only on it), and can confirm a settled page as it is.</p>"
                 "<p><b>What Kea checks on every build</b> (the site is not released while one fails): a conclusion "
                 "rests on at least one result or figure, not on a hypothesis or a question; no conclusions support "
                 "each other in a loop; a conclusion resting on deprecated evidence must be rechecked; a "
                 "confirmatory conclusion cannot rest on exploratory results only; a hypothesis with an outcome "
                 "names the result that tested it; a hypothesis fixed before its results states its prediction and "
-                "its criterion; every link connects the right kinds of page.</p>"
+                "its criterion; every link connects the right kinds of page; work built on an unapproved page is "
+                "refused.</p>"
                 "<p><b>When a page upstream changes</b> (a premise is revised, a result is redone, a decision "
                 "changes), every page that rests on it, directly or further down, gets the red <span class='pill "
                 "s-recheck'>recheck</span> pill: it may be affected. The agent reads each against what changed, "
                 "updates it when it is even slightly affected, and records the check and its finding; a version "
-                "is not released while pages wait for a recheck.</p>" +
-                "<p><b>One step at a time.</b> The agent takes one step along the route and then stops: it proposes "
-                "questions, and waits; for an approved question it proposes hypotheses and planned steps, and "
-                "waits; it runs approved steps and writes the results, and waits; it concludes from reviewed "
-                "results. You approve a step with <b>Confirm</b> on its pages (or the owner says so in the agent's "
-                "chat); until then nothing is built on it.</p>")
+                "is not released while pages wait for a recheck.</p>"
+                "<p><b>Versions.</b> Each release of the pages is a numbered version: major when a conclusion "
+                "changes direction or is withdrawn, minor for new results or pages, patch for wording only. Every "
+                "page shows the release in which it last changed, so settled parts stand out from parts in flux.</p>")
 
     def site_pages(self) -> list[tuple[str, str, str]]:
         """Site-wide pages from doc/_site/*.md (title, short in front matter) into site/<name>.html.

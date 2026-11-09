@@ -18,7 +18,7 @@ from kea.docsite.nodes import DOC, LINK_PATTERN, TYPE_LABELS, TYPE_PLURALS, Node
 RUN_ID = re.compile(r"\d{4}-\d{2}-\d{2}-[\w-]+")
 
 SITE_TITLE = SETTINGS["title"]     # the project (kea.yaml); its parts (doc/<folder>/) are experiments
-SKIP_AUTOLINK_TAGS = {"a", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "table", "script", "style"}
+SKIP_AUTOLINK_TAGS = {"a", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "th", "script", "style"}
 
 CSS = """
 :root{--fg:#1d2330;--muted:#5b6475;--line:#d9dde5;--bg:#fff;--soft:#f5f7fa;--accent:#1f5fa8;--warn:#a33;
@@ -65,10 +65,10 @@ display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-seri
 h1{font-size:25px;line-height:1.25;margin:6px 0 8px}h2{font-size:19px;margin:28px 0 8px;border-bottom:1px solid var(--line);padding-bottom:3px}
 h3{font-size:16px;margin:20px 0 6px}
 .badge{display:inline-block;font-size:12px;font-weight:600;color:#fff;background:#556;border-radius:4px;padding:1px 7px;margin-right:6px;vertical-align:middle}
-.kindbar{position:fixed;left:0;top:0;bottom:0;width:30px;z-index:5;display:flex;justify-content:center;align-items:flex-start;padding-top:58px;box-sizing:border-box;color:#fff}.kindbar{flex-direction:column;align-items:center!important;justify-content:flex-start!important;gap:9px}.kindbar .ico{width:18px;height:18px;flex:0 0 auto;stroke:#fff;color:#fff}.kindbar span{writing-mode:vertical-rl;transform:rotate(180deg);font:700 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:.95}body.has-kindbar{padding-left:30px}body.has-kindbar .topbar{margin-left:-30px;z-index:6}@media (max-width:760px){.kindbar{width:7px}.kindbar span,.kindbar .ico{display:none}body.has-kindbar{padding-left:7px}body.has-kindbar .topbar{margin-left:-7px}}@media print{.kindbar{display:none}body.has-kindbar{padding-left:0}body.has-kindbar .topbar{margin-left:0}}.node-content{margin:4px 0 0}.pid{font-size:12.5px;color:var(--muted);margin:2px 0 0;text-align:right}.node-data-sep{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.node-data-sep .pid{display:block;margin:0;padding:12px 0 0;border-radius:0;font:400 11.5px/1.3 system-ui,sans-serif;letter-spacing:0;text-transform:none;text-align:left;color:#7a8394;background:none}.node-data-sep .pid a{color:#7a8394;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:copy}.node-data-sep .pid a:hover{color:var(--accent);text-decoration:underline}.node-data-sep .pid a.copied{color:#1e6e3e}.node-data-sep .sep-label{margin-left:auto}.obj-search{width:100%;box-sizing:border-box;font:15px system-ui,sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:7px;margin:6px 0 10px}.obj-search:focus{outline:2px solid var(--accent);outline-offset:0}.obj-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0}.obj-label{font:600 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);width:56px}.obj-chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:2px 10px;font:600 12.5px system-ui,sans-serif;cursor:pointer;color:var(--fg)}.obj-chip .obj-count{font-weight:400;color:var(--muted)}.obj-chip.on{box-shadow:inset 0 0 0 2px #5b6475;background:#f5f7fa}.obj-chip.s-chip.on{background:#eef1f5}.obj-clear{border:0;background:none;color:var(--accent);cursor:pointer;font:13px system-ui,sans-serif;text-decoration:underline;margin-left:6px}.obj-info{font-size:13px;color:var(--muted);margin:10px 0 0}.obj-table th button{border:0;background:none;font:inherit;font-weight:700;cursor:pointer;padding:0;color:inherit}.obj-pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0;font-size:13px}.obj-pager button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}.obj-pager button:disabled{opacity:.4;cursor:default}table.nodes{display:table;width:100%;table-layout:fixed;margin:8px 0 4px}table.nodes col.c-page{width:36%}table.nodes col.c-status{width:132px}table.nodes td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}table.nodes td:last-child,table.nodes th:last-child{text-align:right}table.nodes .cell-note{font-size:12px;color:var(--muted);margin-top:3px}.m-status{display:none}@media (max-width:640px){table.nodes col.c-page{width:42%}table.nodes col.c-status{width:96px}}.kindrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 2px}.kindrow .kind{font-size:15px;font-weight:700;letter-spacing:.02em}.kindrow .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}.kindrow .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}.kindrow .pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}.kindrow .pills .pill{font-size:11px;font-weight:400;margin:0}.node-content h1{margin-top:0}.pill.fb-pp-ok{background:#dff0e0;color:#1e5e22;border-color:#9fd3b5;font-weight:600}.node-content h1 .node-title,.node-content .short,.node-content article{font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif}.node-content .short{font-size:16.5px;border-left-color:var(--kc)}.node-content article{font-size:16.5px;line-height:1.65}.node-content article h2,.node-content article h3{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.node-data-sep{margin:64px 0 6px;border-top:6px solid var(--kc,#556);text-align:right;line-height:0}.node-data-sep span{display:inline-block;background:var(--kc,#556);color:#fff;padding:3px 12px 4px;border-radius:0 0 6px 6px;line-height:1.3;font:700 11.5px system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}section.about h2,section.questions h2{font-size:17px}.answer-label{display:block;font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-bottom:2px}ul.sources{margin:4px 0}.t-experiment{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#a23c9e}
+.kindbar{position:fixed;left:0;top:0;bottom:0;width:30px;z-index:5;display:flex;justify-content:center;align-items:flex-start;padding-top:58px;box-sizing:border-box;color:#fff}.kindbar{flex-direction:column;align-items:center!important;justify-content:flex-start!important;gap:9px}.kindbar .ico{width:18px;height:18px;flex:0 0 auto;stroke:#fff;color:#fff}.kindbar span{writing-mode:vertical-rl;transform:rotate(180deg);font:700 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:.95}body.has-kindbar{padding-left:30px}body.has-kindbar .topbar{margin-left:-30px;z-index:6}@media (max-width:760px){.kindbar{width:7px}.kindbar span,.kindbar .ico{display:none}body.has-kindbar{padding-left:7px}body.has-kindbar .topbar{margin-left:-7px}}@media print{.kindbar{display:none}body.has-kindbar{padding-left:0}body.has-kindbar .topbar{margin-left:0}}.node-content{margin:4px 0 0}.pid{font-size:12.5px;color:var(--muted);margin:2px 0 0;text-align:right}.node-data-sep{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.node-data-sep .pid{display:block;margin:0;padding:12px 0 0;border-radius:0;font:400 11.5px/1.3 system-ui,sans-serif;letter-spacing:0;text-transform:none;text-align:left;color:#7a8394;background:none}.node-data-sep .pid a{color:#7a8394;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:copy}.node-data-sep .pid a:hover{color:var(--accent);text-decoration:underline}.node-data-sep .pid a.copied{color:#1e6e3e}.node-data-sep .sep-label{margin-left:auto}.obj-search{width:100%;box-sizing:border-box;font:15px system-ui,sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:7px;margin:6px 0 10px}.obj-search:focus{outline:2px solid var(--accent);outline-offset:0}.obj-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0}.obj-label{font:600 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);width:56px}.obj-chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:2px 10px;font:600 12.5px system-ui,sans-serif;cursor:pointer;color:var(--fg)}.obj-chip .obj-count{font-weight:400;color:var(--muted)}.obj-chip.on{box-shadow:inset 0 0 0 2px #5b6475;background:#f5f7fa}.obj-chip.s-chip.on{background:#eef1f5}.obj-clear{border:0;background:none;color:var(--accent);cursor:pointer;font:13px system-ui,sans-serif;text-decoration:underline;margin-left:6px}.obj-info{font-size:13px;color:var(--muted);margin:10px 0 0}.obj-table th button{border:0;background:none;font:inherit;font-weight:700;cursor:pointer;padding:0;color:inherit}.obj-pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0;font-size:13px}.obj-pager button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}.obj-pager button:disabled{opacity:.4;cursor:default}table.nodes{display:table;width:100%;table-layout:fixed;margin:8px 0 4px}table.nodes col.c-page{width:36%}table.nodes col.c-status{width:132px}table.nodes td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}table.nodes td:last-child,table.nodes th:last-child{text-align:right}table.nodes.no-status td:last-child,table.nodes.no-status th:last-child{text-align:left}table.nodes .cell-note{font-size:12px;color:var(--muted);margin-top:3px}.m-status{display:none}@media (max-width:640px){table.nodes col.c-page{width:42%}table.nodes col.c-status{width:96px}}.kindrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 2px}.kindrow .kind{font-size:15px;font-weight:700;letter-spacing:.02em}.kindrow .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}.kindrow .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}.kindrow .pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}.kindrow .pills .pill{font-size:11px;font-weight:400;margin:0}.node-content h1{margin-top:0}.pill.fb-pp-ok{background:#dff0e0;color:#1e5e22;border-color:#9fd3b5;font-weight:600}.node-content h1 .node-title,.node-content .short,.node-content article{font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif}.node-content .short{font-size:16.5px;border-left-color:var(--kc)}.node-content article{font-size:16.5px;line-height:1.65}.node-content article h2,.node-content article h3{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.node-data-sep{margin:64px 0 6px;border-top:6px solid var(--kc,#556);text-align:right;line-height:0}.node-data-sep span{display:inline-block;background:var(--kc,#556);color:#fff;padding:3px 12px 4px;border-radius:0 0 6px 6px;line-height:1.3;font:700 11.5px system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}section.about h2,section.questions h2{font-size:17px}.answer-label{display:block;font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-bottom:2px}ul.sources{margin:4px 0}.t-experiment{background:#333}.t-premise{background:#6a4c93}.t-question{background:#1f77b4}.t-hypothesis{background:#a23c9e}
 .t-step{background:#2a7f62}.t-result{background:#8c564b}.t-conclusion{background:#c0392b}.t-decision{background:#757575}
 .t-figure{background:#17818a}.t-artefact{background:#966d09}.t-caveat{background:#c64f00}
-.t-term,.t-reference,.t-page{background:#556}.t-resource{background:#5b6b2f}
+.t-term,.t-reference,.t-page{background:#556}.t-resource{background:#5b6b2f}.t-term{background:#5f6b7a}.t-reference{background:#3d5a80}
 .badge .ico,.tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 a.tag,span.tag{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:11px;
 padding:1px 8px 1px 6px;line-height:1.45;vertical-align:baseline;white-space:nowrap;box-shadow:0 1px 0 rgba(0,0,0,.18);
@@ -85,12 +85,12 @@ h1 .pills,.qhead .pills{font-size:0;margin-left:8px;vertical-align:middle;white-
 h1 .pills .pill,.qhead .pills .pill{font-size:11px;font-weight:400;margin-right:4px}
 .k-experiment{color:#333}.k-premise{color:#6a4c93}.k-question{color:#1f77b4}.k-hypothesis{color:#a23c9e}.k-step{color:#2a7f62}
 .k-result{color:#8c564b}.k-conclusion{color:#c0392b}.k-decision{color:#6b6b6b}.k-figure{color:#17818a}
-.k-artefact{color:#966d09}.k-caveat{color:#c64f00}.k-term,.k-reference,.k-page{color:#556}.k-resource{color:#5b6b2f}
+.k-artefact{color:#966d09}.k-caveat{color:#c64f00}.k-term,.k-reference,.k-page{color:#556}.k-resource{color:#5b6b2f}.k-term{color:#5f6b7a}.k-reference{color:#3d5a80}
 a.fullname,span.fullname{font-weight:700;margin-right:6px;white-space:nowrap}.fullname>.ico{width:1em;height:1em;vertical-align:-.15em;margin-right:4px}
 .fullname .tag{margin-left:2px}a.fullname:hover{text-decoration:none;filter:brightness(1.2)}
 h1 .kind .tag .ico{width:1.05em;height:1.05em;vertical-align:-.17em;margin-right:4px}
 .qblock h3{font-size:14px;margin:14px 0 4px;color:var(--fg)}
-table.resource-facts th{text-align:left;padding-right:14px;color:var(--muted);font-weight:600}table.resource-facts td.missing{color:#aa3333}table.resource-facts code{word-break:break-all}
+table.resource-facts{width:100%;margin:10px 0 14px}table.resource-facts th{text-align:left;padding-right:14px;color:var(--muted);font-weight:600;width:190px;background:var(--soft)}table.resource-facts td{white-space:normal}table.resource-facts td.missing{color:#aa3333}table.resource-facts code{word-break:break-all}
 table.status-table{display:table;width:100%}table.status-table td{white-space:normal}
 tr.st-good td:first-child{background:linear-gradient(#2e9e5b,#2e9e5b) left/4px 100% no-repeat}tr.st-bad td:first-child{background:linear-gradient(#5f2120,#5f2120) left/4px 100% no-repeat}tr.st-mid td:first-child{background:linear-gradient(#e0a030,#e0a030) left/4px 100% no-repeat}tr[class^=st-] td:first-child{padding-left:14px}
 a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decoration:none;background:#f1f3f7}
@@ -172,8 +172,8 @@ def fullname_inner(node: Node) -> str:
     """'Question' as coloured text followed by the tag [icon Q1]: the tag always looks the same, with or without
     the word in front. Pages without a number show the word and the icon."""
     word = esc(TYPE_LABELS.get(node.type, node.type))
-    if node.number:
-        return f"{word} <span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}{esc(node.number)}</span>"
+    if node.tag:
+        return f"{word} <span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}{esc(node.tag)}</span>"
     return f"{icons.svg(node.type)}{word}"
 
 
@@ -227,7 +227,7 @@ def hover_text(node: Node, note: str | None = None) -> str:
 
 def tag_inner(node: Node, from_project: str | None = None) -> str:
     project_part = f"{node.project}: " if from_project and node.project != from_project else ""
-    return f"{icons.svg(node.type)}{esc(project_part + (node.number or node.title))}"
+    return f"{icons.svg(node.type)}{esc(project_part + (node.tag or node.title))}"
 
 
 def node_link(node: Node, prefix: str, text: str | None = None, note: str | None = None,
@@ -236,9 +236,14 @@ def node_link(node: Node, prefix: str, text: str | None = None, note: str | None
 
     Link rules (the same everywhere): a numbered page is linked by its tag (a coloured button with the type's icon
     and the number, Q1, C2). Text given with the link ([[id|text]]) stays plain text, followed by the tag; only
-    the tag is the link. Pages without a number (terms, references, the experiment home) are linked by their text.
+    the tag is the link. A reference's pill holds its author and year ("Akiyama et al. 1994"), or the text given
+    with the link ([[ref-x|Lloyd 2024, p.7]]). Pages without a pill (the experiment home, pages) are linked by text.
     """
-    if node.number:
+    if node.type == "reference" and not node.number and text:
+        project_part = f"{node.project}: " if from_project and node.project != from_project else ""
+        return (f"<a class='tag t-reference' href='{esc(node_href(node, prefix))}' "
+                f"title='{esc(hover_text(node, note))}'>{icons.svg(node.type)}{esc(project_part + text)}</a>")
+    if node.tag:
         anchor = (f"<a class='tag t-{esc(node.type)}' href='{esc(node_href(node, prefix))}' "
                   f"title='{esc(hover_text(node, note))}'>{tag_inner(node, from_project)}</a>")
         return f"{esc(text)} {anchor}" if text else anchor
@@ -249,7 +254,8 @@ def node_link(node: Node, prefix: str, text: str | None = None, note: str | None
 
 TYPE_COLOURS = {"experiment": "#333", "premise": "#6a4c93", "question": "#1f77b4", "hypothesis": "#a23c9e", "step": "#2a7f62",
                 "result": "#8c564b", "conclusion": "#c0392b", "decision": "#757575", "figure": "#17818a",
-                "artefact": "#966d09", "caveat": "#c64f00", "page": "#556", "resource": "#5b6b2f"}   # as .t-<type> in CSS
+                "artefact": "#966d09", "caveat": "#c64f00", "page": "#556", "resource": "#5b6b2f",
+                "term": "#5f6b7a", "reference": "#3d5a80"}   # as .t-<type> in CSS
 
 
 # The kinds of link shown about a page (site: "About this page"; PDF: the lines under a section), in the order a
@@ -303,8 +309,8 @@ def tagline(node: Node, prefix: str, text: str | None = None, from_project: str 
             full: bool = False) -> str:
     """Tag plus one line (the title by default) as ONE link: for lists of pages. `full` writes the kind in front of
     the tag, in its colour ("Conclusion [C1]"); the tag itself always holds the icon and the number only."""
-    words = node.title if text is None else text
-    if not node.number:
+    words = node.tag_title if text is None else text
+    if not node.tag:
         return node_link(node, prefix, words, from_project=from_project)
     kind = (f"<span class='kindword k-{esc(node.type)}'>{esc(TYPE_LABELS.get(node.type, node.type))}</span> "
             if full else "")
@@ -339,11 +345,11 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
             segments.append(f"<span class='seg experiment-seg'><span class='sep'>/</span><a class='experiment' "
                             f"href='{prefix}{project}/home.html' title='{esc(home.title)}'>{esc(project)}</a></span>")
         if node is not None and node.id != "home":
-            badge = (f"<span class='tag t-{esc(node.type)}'>{tag_inner(node)}</span>" if node.number else
+            badge = (f"<span class='tag t-{esc(node.type)}'>{tag_inner(node)}</span>" if node.tag else
                      f"<span class='tag t-{esc(node.type)}'>{icons.svg(node.type)}"
                      f"{esc(TYPE_LABELS.get(node.type, node.type))}</span>")
             segments.append(f"<span class='seg here'><span class='sep'>/</span>{badge}"
-                            f"<span class='here-title' title='{esc(node.title)}'>{esc(node.title)}</span></span>")
+                            f"<span class='here-title' title='{esc(node.title)}'>{esc(node.tag_title)}</span></span>")
     if here:
         segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
     # Four entries: Map, Plan, History, PDF (Help is the kea logo). Map and History are groups whose own pages
@@ -497,12 +503,14 @@ class LinkContext:
 
 
 def term_patterns(tree: Tree, project: str) -> list[tuple[re.Pattern, Node]]:
-    """(pattern, term node) for every title and alias of the experiment's term pages, longest first."""
+    """(pattern, node) for every title and alias of the experiment's term pages, and every alias of its resource
+    pages (a dataset id such as G23/MIC), longest first."""
     entries = []
     for node in tree.nodes.values():
-        if node.type != "term" or node.project != project:
+        if node.type not in ("term", "resource") or node.project != project:
             continue
-        names = [node.title] + [str(alias) for alias in node.header.get("aliases") or []]
+        aliases = [str(alias) for alias in node.header.get("aliases") or [] if str(alias).strip()]
+        names = ([node.title] if node.type == "term" else []) + aliases
         every = str(node.header.get("link") or "first").strip().lower() == "every"
         for name in names:      # link: every matches the case as written, so a gene APP does not link "app"
             entries.append((len(name), re.compile(r"(?<![\w-])(" + re.escape(name) + r")(?![\w-])",
@@ -511,8 +519,9 @@ def term_patterns(tree: Tree, project: str) -> list[tuple[re.Pattern, Node]]:
 
 
 def link_terms(html_text: str, context: LinkContext) -> str:
-    """Link the first use of each term on the page (outside links, code, headings and tables); a term with
-    ``link: every`` in its front matter (gene names, say) is linked at every use."""
+    """Link the first use of each term in each section of the page (a ## heading starts a new one), in prose and in
+    table cells (not in links, code, headings or table headers); a term with ``link: every`` in its front matter
+    (gene names, say) is linked at every use. Resources with aliases: are linked the same way."""
     if not context.terms:
         return html_text
     tokens = re.split(r"(<[^>]+>)", html_text)
@@ -520,6 +529,8 @@ def link_terms(html_text: str, context: LinkContext) -> str:
     for index, token in enumerate(tokens):
         if token.startswith("<"):
             match = re.match(r"<(/?)([a-zA-Z0-9]+)", token)
+            if match and not match.group(1) and match.group(2).lower() in ("h1", "h2"):
+                context.linked_terms.clear()                     # a new section: link each term once more
             if match and match.group(2).lower() in SKIP_AUTOLINK_TAGS and not token.endswith("/>"):
                 skip_depth += -1 if match.group(1) else 1
                 skip_depth = max(skip_depth, 0)
@@ -531,7 +542,8 @@ def link_terms(html_text: str, context: LinkContext) -> str:
             every = str(node.header.get("link") or "first").strip().lower() == "every"
             if node.key == context.current or (node.key in context.linked_terms and not every):
                 continue
-            anchor_start = (f"<a class='term' href='{esc(node_href(node, context.prefix))}' "
+            anchor_start = (f"<a class='term{' term-resource' if node.type == 'resource' else ''}' "
+                            f"href='{esc(node_href(node, context.prefix))}' "
                             f"title='{esc(node.title)}: {esc(node.short)}'>")
             position = 0
             while position < len(pieces):

@@ -165,16 +165,19 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   panel take-home / Shows / Method / Statistics (`kea build` notes missing parts). Make figures at their printed
   size (at most 16.6 cm wide, 19 cm high, fonts 6–8 pt, with the PNG's dpi set): the PDF prints them at that size
   and the build notes figures it has to shrink below 80 %.
-- Terms (`aliases:`) are linked automatically from first use and numbered T1, T2 … in glossary order. Terms that
+- Terms (`aliases:`) are linked automatically at their first use in each section (each `##` heading starts a new one), in prose and in table cells (not table headers), and numbered T1, T2 … in glossary order. Terms that
   name entities (genes, proteins, cell types) get `group: Genes` (etc.); the glossary lists each group after the
   key terms (titles that look like gene symbols go under Genes without it).
   `link: every` links every use of a term on a page instead of the first (genes a reader looks up anywhere);
-  it matches the case as written, so a gene APP does not link "app".
+  it matches the case as written, so a gene APP does not link "app". A term page lists the pages that use it.
+  Start the text with the definition: when it opens with the `short:`, the site does not repeat it in a box.
 - **Resources** (`resource/`, numbered O1, O2 …): everything the analysis takes from outside: a database or API, an
   MCP server, a dataset on a server, an uploaded or downloaded file, software with its version. Front matter:
   `kind` (database | api | mcp_server | dataset | file | software), `url`, `version`, `retrieved` (ISO date),
   `sha256` (files), `local` (path of the local copy), `access`, `licence`, and `rrid` (Research Resource
-  Identifier) where one exists. Steps, results and figures point to them with `uses:`.
+  Identifier) where one exists. Steps, results and figures point to them with `uses:`. A resource with
+  `aliases:` (a dataset id such as G23/MIC) is linked wherever that id appears in the text or a table cell, like a
+  term. The front-matter facts are shown as a table above the text: do not repeat them in a table of your own.
 - **Tools are resources too, with RRIDs.** Every tool a step runs (language, packages, command-line tools) gets a
   `kind: software` resource with the exact version from the lock file, `part_of:` a resource for the environment
   (the lock file with its sha256), and its RRID: find it on scicrunch.org/resources (never from memory) and run
@@ -195,6 +198,9 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   datasets it reanalyses, access, licence, `cites:` its source paper), `part_of:` the server. When the analysis
   reads a local copy, compare its checksum with the deposit's and say on the page whether they match; a local
   file that is not on the server is a `kind: file` resource of its own, and the mismatch is a caveat.
+- References show on the site as a pill with the author and year (Akiyama et al. 1994), taken from the start of
+  the title ("Akiyama et al. 1994, J Neuroimmunol: …", the house style) or from `citation:`. Cite them in the text
+  as `([[ref-x]])`; `[[ref-x|Lloyd 2024, p.7]]` puts that text in the pill (a page number, say).
 - Reference pages carry `pmid:` / `doi:`, the abstract fetched from Europe PMC / PubMed (never from memory) and why
   the paper is there. Run `kea cite --write` to add the full citation (`citation:`, Nature style, from Europe
   PMC, or Crossref for DOIs Europe PMC does not index); the PDF numbers references B1, B2 … in order of first citation, shows them in the text as ordinary tags (never superscript) and lists them like a journal.
@@ -369,7 +375,7 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
 
 ## Adapting Kea on request (in flight)
 
-Kea is small (about 4,000 lines of Python, no database, static HTML), and changing it at the reader's request is
+Kea is small (about 11,500 lines of Python, no database, static HTML), and changing it at the reader's request is
 part of the job, not a detour:
 
 1. Decide where the wish belongs. If it is for this project only, use `kea.yaml` or the project's pages. If it
