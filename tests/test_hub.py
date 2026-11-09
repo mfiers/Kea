@@ -656,3 +656,40 @@ def test_site_login_folds_the_password_under_orcid(demo, monkeypatch):
     entered = plain.post("/login", data={"password": secrets["site_password"], "name": "Ann", "next": "/"},
                          follow_redirects=False)
     assert entered.status_code == 303
+
+
+def test_status_gives_the_name_menu_the_hub_and_other_projects(demo):
+    the_hub, secrets = demo
+    the_hub.add("second", "Second")
+    the_hub.add("third", "Third")
+    the_hub.set_public("third", True)
+    client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    archive = make_bundle(SITE)
+    assert client.post("/p/demo/hub/publish", content=archive, headers={**agent_headers(secrets["key"]),
+                       "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()}).status_code == 200
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "ann", "next": "/"},
+                follow_redirects=False)
+    menu = client.get("/p/demo/api/status").json()["hub"]
+    assert menu["home"].startswith("https://kea.example.org")
+    assert [project["title"] for project in menu["projects"]] == ["Third"]      # password sign-in: public ones only
+    assert all("demo" not in project["url"] for project in menu["projects"])     # not the project you are on
+
+
+def test_publish_and_seed_never_shrink_the_hubs_comment_logs(demo):
+    """Comments readers made on the hub survive every later publish and any seed (the hub's log is the authority;
+    a seed only fills an empty log)."""
+    the_hub, secrets = demo
+    client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
+    archive = make_bundle(SITE)
+    publish = lambda: client.post("/p/demo/hub/publish", content=archive, headers={
+        **agent_headers(secrets["key"]), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()})
+    assert publish().status_code == 200
+    client.post("/p/demo/login", data={"password": secrets["site_password"], "name": "ann", "next": "/"},
+                follow_redirects=False)
+    assert client.post("/p/demo/api/threads", json={"page": "x:r-a", "text": "keep me"}).status_code == 200
+    log = the_hub.feedback("demo") / "events.jsonl"
+    before = log.read_bytes()
+    seeded = client.post("/p/demo/hub/seed", headers=agent_headers(secrets["key"]), json={"events": "", "cycle": ""})
+    assert "kept" in seeded.json()["seeded"]["events"]
+    assert publish().status_code == 200 and publish().status_code == 200
+    assert log.read_bytes().startswith(before) and b"keep me" in log.read_bytes()

@@ -129,7 +129,8 @@
       + `<th>In short</th><th><button type='button' data-sort='status'>Status${arrow("status")}</button></th></tr>`
       + shown.map(row => `<tr class='${row.r}'><td><a class='tagline' href='${esc(data.prefix + row.h)}'>`
         + `<span class='tag t-${esc(row.k)}'>${data.icons[row.k] || ""}${esc(row.n)}</span>`
-        + `<span class='tl-text'>${esc(row.t)}</span></a></td><td>${esc(row.s)}</td>`
+        + `<span class='tl-text'>${esc(row.t)}</span></a>`
+        + `<span class='m-status'>${row.st ? `<span class='pill s-${esc(row.st)}'>${esc(row.st.replace(/_/g, " "))}</span>` : ""}</span></td><td>${esc(row.s)}</td>`
         + `<td>${row.st ? `<span class='pill s-${esc(row.st)}'>${esc(row.st.replace(/_/g, " "))}</span>` : ""}</td></tr>`).join("");
     table.querySelectorAll("th button").forEach(button => button.addEventListener("click", () => {
       const key = button.dataset.sort;

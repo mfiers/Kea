@@ -18,7 +18,7 @@ from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tre
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
                             prefix_for, render_markdown, detail_pills, status_pill, status_row_class, tagline, type_badge)
-from kea.docsite import icons
+from kea.docsite import icons, render
 
 CHILD_ORDER = ["experiment", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
                "artefact", "resource", "caveat", "term", "reference", "page"]
@@ -166,9 +166,10 @@ class SiteRenderer:
             chain.append(parent)
             current = parent
         trail = [(f"{(item.number + ' ') if item.number else ''}{item.title if item.id != 'home' else item.project}",
-                  f"{prefix}{item.url}") for item in reversed(chain)]
+                  f"{prefix}{item.url}") for item in reversed(chain)
+                 if not (render.SOLE_PROJECT and item.id == "home")]     # one experiment: Start is its page
         if node.id == "home":
-            return [(node.project, None)]
+            return [] if render.SOLE_PROJECT else [(node.project, None)]
         return trail + [(f"{node.number} {node.title}" if node.number else node.title, None)]
 
     # ------------------------------------------------------------------ node pages
@@ -290,6 +291,8 @@ class SiteRenderer:
             section("Sources", sources)
         if node.id == "home":
             sections.append(self.project_index_html(node.project, prefix))
+            if render.SOLE_PROJECT == node.project:
+                sections.append(getattr(self, "sole_extras", ""))
         return "".join(sections)
 
     def answer_list(self, label: str, members: list[Node], prefix: str, project: str) -> str:
@@ -309,7 +312,11 @@ class SiteRenderer:
         def because(member: Node) -> str:
             text = note(member) if note else ""
             return f"<div class='cell-note'>because {esc(text)}</div>" if text else ""
-        rows = [f"<tr class='{status_row_class(member)}'><td>{tagline(member, prefix)}</td><td>{esc(member.short)}{because(member)}</td>"
+        # the status also inline after the title (m-status): phones show the rows as cards, with the pills
+        # flowing at the end of the title line instead of a column of their own
+        rows = [f"<tr class='{status_row_class(member)}'><td>{tagline(member, prefix)}"
+                f"<span class='m-status'>{status_pill(member)}{extra(member) if extra else ''}</span></td>"
+                f"<td>{esc(member.short)}{because(member)}</td>"
                 f"<td>{status_pill(member)}{extra(member) if extra else ''}</td></tr>" for member in members]
         rows += [f"<tr><td><span class='ref-missing' title='project has no pages yet'>{esc(key)}</span></td><td></td>"
                  f"<td></td></tr>" for key in missing or []]
@@ -326,7 +333,8 @@ class SiteRenderer:
                        "after results" if item.header.get("fixed_before_results") is False else "")
             tested = ", ".join(node_link(self.tree.nodes[key], prefix) for key in item.incoming.get("Tested by", [])
                                if key in self.tree.nodes)
-            rows.append(f"<tr class='{status_row_class(item)}'><td>{tagline(item, prefix)}</td>"
+            rows.append(f"<tr class='{status_row_class(item)}'><td>{tagline(item, prefix)}"
+                        f"<span class='m-status'>{status_pill(item)}</span></td>"
                         f"<td>{esc(item.short)}<div class='cell-note'>written {esc(written) or '?'}"
                         f"{(' · tested by ' + tested) if tested else ''}</div></td>"
                         f"<td>{status_pill(item)}</td></tr>")
@@ -431,26 +439,37 @@ class SiteRenderer:
         if node.type == "question" and not questions.answer(node) and questions.evidence(self.tree, node)[2]:
             self.tree.notes.append(f"{node.key}: no answer: summary (two or three sentences: the answer, how "
                                    "sure, the main limit; shown on the question and experiment pages and in the PDF)")
+        if node.id == "home" and render.SOLE_PROJECT == node.project:
+            # the start of a one-experiment site: the project's own summary when it says something else
+            project_summary = questions.project_summary(self.tree)
+            intro, _ = questions.split_intro(node.body)
+            if project_summary and " ".join(project_summary.split()) != " ".join(intro.split()):
+                parts.append(f"<div class='project-summary'><span class='answer-label not-annotatable'>The project"
+                             f"</span>{render_markdown(project_summary, context)}</div>")
+            parts.append("<p class='help not-annotatable'>New here? <a href='../help.html'>How to read this site</a>.</p>")
         parts.append(f"<article>{render_markdown(body_text, context)}</article>")
         colour = TYPE_COLOURS.get(node.type, '#556')
         parts.append("</div>")
         if node.type == "question" and questions.answer(node):
             # the answer: field is a summary of the evidence, not part of the question: under its own rule, so the
             # question's text above stands alone
+            _, results, conclusions = questions.evidence(self.tree, node)
+            basis = " ".join(node_link(item, prefix) for item in list(conclusions) + list(results))
             parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>Answer so far</span></div>"
-                         "<p class='answer-note not-annotatable'>A summary of what the conclusions and results of this "
-                         "question say so far, written by the agent and updated after each review cycle. It is not "
-                         "part of the question, and not evidence: the pages below are.</p>"
-                         f"<div class='answer'>{render_markdown(questions.answer(node), context)}</div>")
-        parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>About this page</span></div>")
+                         f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
+                         + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
         uid = str(node.header.get("uid") or "")
-        if uid:
+        pid = ""
+        if uid:      # the permanent identifiers, on the line of the separator; a click copies the link (TOPBAR_JS)
             from kea.docsite import identity
             version = identity.version_of(node)
-            parts.append(f"<p class='pid not-annotatable'>Permanent identifier <a href='{prefix}id/{esc(uid)}' "
-                         f"title='The page, as it is now: stays the same when it is edited, renamed or moved'>"
-                         f"<code>kea:{esc(uid)}</code></a> · this version <a href='{prefix}id/{esc(uid)}@{esc(version)}' "
-                         f"title='Exactly this text: cite this to point at what you read'><code>@{esc(version)}</code></a></p>")
+            pid = (f"<span class='pid'>Permanent identifier <a class='pid-copy' href='{prefix}id/{esc(uid)}' "
+                   f"title='The page, as it is now: stays the same when it is edited, renamed or moved. Click to copy "
+                   f"the link'>kea:{esc(uid)}</a> · this version <a class='pid-copy' "
+                   f"href='{prefix}id/{esc(uid)}@{esc(version)}' title='Exactly this text: cite this to point at what "
+                   f"you read. Click to copy the link'>@{esc(version)}</a></span>")
+        parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'>{pid}<span class='sep-label'>"
+                     "About this page</span></div>")
         parts.append(self.about_html(node, prefix, context))
         self.broken += [f"{node.key}: [[{target}]]" for target in context.broken]
         title = f"{node.number} {node.title}" if node.number else node.title
@@ -654,7 +673,33 @@ class SiteRenderer:
         self.write("changes/index.html", page("History", body, prefix, None, self.tree))
         return runs
 
+    def start_extras(self, runs: list[changes.Run]) -> str:
+        """With one experiment, what the project page would show, on the experiment page: the latest run and the
+        site's own pages."""
+        html = ""
+        if runs:
+            run = runs[0]
+            html += (f"<section class='about not-annotatable'><h2>Latest run</h2><table class='nodes'><colgroup><col "
+                     f"class='c-page'><col><col class='c-status'></colgroup><tr><td><a href='../changes/{run.id}.html'>"
+                     f"{esc(run.title)}</a></td><td>{esc(run.date)}</td><td>{len(run.commits)} commit(s)</td></tr></table>"
+                     "</section>")
+        listing = getattr(self, "site_listing", None)
+        if listing:
+            html += ("<section class='about not-annotatable'><h2>About this site</h2><ul>" + "".join(
+                f"<li><a href='../{esc(href)}'>{esc(title)}</a> <span class='help'>{esc(short)}</span></li>"
+                for href, title, short in listing) + "</ul></section>")
+        return html
+
     def home_page(self, runs: list[changes.Run]) -> None:
+        if render.SOLE_PROJECT:
+            # one experiment: the site starts at its page; index.html sends readers there (comments and permanent
+            # ids belong to the experiment page, so it is not drawn twice)
+            target = f"{render.SOLE_PROJECT}/home.html"
+            self.write("index.html", "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+                       f"<meta http-equiv='refresh' content='0; url={target}'><link rel='canonical' href='{target}'>"
+                       f"<title>{esc(SETTINGS['title'])}</title><script>location.replace('{target}' + location.hash)"
+                       f"</script></head><body><p><a href='{target}'>{esc(SETTINGS['title'])}</a></p></body></html>")
+            return
         experiments = self.node_table(list(self.tree.projects.values()), "",
                                       extra=lambda home: self.review_pill(home.project, ""))
         latest = ""
@@ -977,6 +1022,8 @@ class SiteRenderer:
         self.stability = versions.Stability(self.site_releases)
         self.stability.prepare([node.source for node in self.tree.nodes.values()])
         self.under_review = self.review_counts()
+        render.SOLE_PROJECT = next(iter(self.tree.projects)) if len(self.tree.projects) == 1 else ""
+        self.sole_extras = ""
         for node in self.tree.nodes.values():
             self.node_page(node)
         for project in self.tree.projects:
@@ -989,6 +1036,11 @@ class SiteRenderer:
             self.plan_pages()
         self.site_listing = self.site_pages()
         self.home_page(runs)
+        if render.SOLE_PROJECT:        # the experiment page is the start: again, now with what the project page had
+            self.sole_extras = self.start_extras(runs)
+            broken, notes = len(self.broken), len(self.tree.notes)
+            self.node_page(self.tree.projects[render.SOLE_PROJECT])
+            del self.broken[broken:], self.tree.notes[notes:]
         self.help_page()
         if mode.MODE != "public":
             self.feedback_page()

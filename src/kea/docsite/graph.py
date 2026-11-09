@@ -163,6 +163,9 @@ def pace_rules(tree: Tree) -> None:
     for node in tree.nodes.values():
         where = _where(node)
         parent = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
+        if node.type == "question" and parent is not None and parent.type == "experiment" and not approved(parent):
+            tree.problems.append(f"{where}: written under an experiment the owner has not approved yet (pace: "
+                                 "guided): write the experiment's summary and scope, stop, and let it be reviewed")
         if node.type in ("hypothesis", "step") and parent is not None and parent.type == "question" \
                 and not approved(parent):
             tree.problems.append(f"{where}: written under question {parent.label}, which the owner has not approved "
@@ -178,7 +181,7 @@ def pace_rules(tree: Tree) -> None:
                                      "reviewed yet (pace: guided): write the results, stop, and conclude after review")
 
 
-WAITING_TYPES = ("question", "hypothesis", "step", "result")
+WAITING_TYPES = ("experiment", "question", "hypothesis", "step", "result")
 
 
 def waiting(node: Node) -> bool:
@@ -190,6 +193,8 @@ def waiting(node: Node) -> bool:
         return node.status == "planned"
     if node.type == "question":
         return node.status not in ("dropped", "answered")
+    if node.type == "experiment":
+        return node.status == "open"
     return node.status != "deprecated"                       # a result
 
 
@@ -269,6 +274,25 @@ def next_steps(tree: Tree, project: str) -> list[str]:
         else:
             lines.append(f"{label}: nothing waiting on the route; follow the comments and caveats.")
     return lines
+
+
+def projects(tree: Tree, doc: Path) -> None:
+    """Two or more experiments need the project's own summary (doc/_summary.md: the site starts at the project
+    page); with one, a summary that repeats the experiment's is noted (the site starts at the experiment)."""
+    from kea.docsite import questions
+    summary = doc / "_summary.md"
+    if len(tree.projects) >= 2 and not summary.exists():
+        tree.problems.append(f"doc/_summary.md: the project has {len(tree.projects)} experiments but no summary of its "
+                             "own (what the project asks across them, and what it found so far)")
+    if len(tree.projects) == 1 and summary.exists():
+        home = next(iter(tree.projects.values()))
+        intro, _ = questions.split_intro(home.body)
+        own = summary.read_text(encoding="utf-8")
+        if own.startswith("---\n"):
+            own = own.split("\n---", 1)[-1]
+        if " ".join(own.split()) == " ".join(intro.split()):
+            tree.notes.append("doc/_summary.md repeats the experiment's summary (with one experiment the site starts "
+                              "at the experiment page): delete it, or say what the project is about beyond it")
 
 
 def _tested_by_result(tree: Tree, hypothesis: Node) -> bool:
@@ -386,6 +410,7 @@ def recheck(tree: Tree, ledger: dict, key: str, because: str, run: str = "") -> 
 def apply(tree: Tree, doc: Path, write_baseline: bool) -> None:
     """Structure checks, the baseline (when asked) and the compromised pages, all on the tree."""
     structure(tree)
+    projects(tree, doc)
     from kea.config import load_settings
     tree.pace = str(load_settings(doc.parent).get("pace") or "free")
     if tree.pace == "guided":

@@ -7,6 +7,7 @@ of CLAUDE.md, the kea targets of the Makefile, and .gitignore lines. Prints what
 from __future__ import annotations
 
 import argparse
+import re
 import secrets
 from pathlib import Path
 
@@ -34,6 +35,32 @@ def _append_once(path: Path, marker: str, text: str, done: list[str]) -> None:
     path.write_text(current + ("\n" if current and not current.endswith("\n") else "") + ("\n" if current else "")
                     + text)
     done.append(f"appended {path}")
+
+
+def new_experiment(argv: list[str]) -> int:
+    """kea new experiment <name> --title "…": a further experiment of this project (doc/<name>/experiment/home.md)."""
+    from kea.config import PROJECT_ROOT
+    parser = argparse.ArgumentParser(prog="kea new experiment", description=new_experiment.__doc__.split("\n")[0])
+    parser.add_argument("name", help="short folder name, lower case (e.g. donor-recall)")
+    parser.add_argument("--title", required=True, help="the experiment's main question")
+    args = parser.parse_args(argv)
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,40}", args.name):
+        parser.error("name: lower-case letters, digits and '-' (2 to 41 characters)")
+    doc = PROJECT_ROOT / "doc"
+    target = doc / args.name / "experiment" / "home.md"
+    if target.exists():
+        parser.error(f"{target} exists already")
+    target.parent.mkdir(parents=True)
+    target.write_text((TEMPLATES / "home.md").read_text().replace("{question}", args.title.replace('"', "'")),
+                      encoding="utf-8")
+    print(f"created  {target.relative_to(PROJECT_ROOT)}")
+    others = [path.name for path in doc.iterdir() if path.is_dir() and path.name != args.name
+              and (path / "experiment" / "home.md").exists()]
+    if others and not (doc / "_summary.md").exists():
+        print("The project now has more than one experiment: write doc/_summary.md (the project's summary, across "
+              "the experiments); the site's start becomes the project page again.")
+    print("Write its summary and scope; with pace: guided it waits for the owner's approval before questions go under it.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

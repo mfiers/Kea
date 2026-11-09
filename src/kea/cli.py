@@ -2,6 +2,8 @@
 
     kea init [--title T] [--author A] [--port N]
                                       set up doc/, kea.yaml, .env, Makefile targets and the CLAUDE.md section
+    kea new experiment <name> --title "…"
+                                      add an experiment to the project (doc/<name>/experiment/home.md)
     kea build [--strict]              build the site (report/site/ by default)
     kea serve [--host H --port P]     serve it with comments (password in .env: SITE_PASSWORD)
     kea list | show | reply | status | cycle | watch | apply-suggestion | tags …
@@ -48,6 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     if command == "rrid":
         from kea.docsite import rrid
         return rrid.main(rest)
+    if command == "new":
+        if rest[:1] != ["experiment"]:
+            print("usage: kea new experiment <name> --title \"…\"")
+            return 2
+        from kea import init
+        return init.new_experiment(rest[1:])
     if command == "drop":
         from kea.docsite import graph
         return graph.drop_main(rest)

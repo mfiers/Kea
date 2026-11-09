@@ -287,3 +287,9 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 @media (max-width:760px){.fb-propose textarea{font-size:16px}}
 .pill.fb-pp-propose{background:#e0f2f1;color:#00564d;border-color:#9fd6cf}
 .fb-dpill.fb-d-revise{color:#7a4a00;border-color:#e6c27a}.fb-dpill.fb-d-revise.fb-pending{background:#fff3c4;border:2px dashed #7a4a00}
+/* the pencil after the page kind ("Question Q1"): the whole-page editor, shown on hover (always on touch screens) */
+.fb-kind-pencil{border:0;background:none;padding:0 0 0 6px;cursor:pointer;color:#7a8394;opacity:0;transition:opacity .15s;vertical-align:-2px}
+.fb-kind-pencil svg{width:15px;height:15px}
+.kindrow .kind:hover .fb-kind-pencil,.fb-kind-pencil:focus-visible{opacity:1}.fb-kind-pencil:hover{color:#1d2330}
+@media (hover:none){.fb-kind-pencil{opacity:.5}}
+.fb-readonly .fb-kind-pencil{display:none}

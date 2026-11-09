@@ -236,6 +236,7 @@ class SiteSpec:
     login_url: Callable[[Request, str], str | None] | None = None  # kea hub: "Sign in with ORCID" for this next
     public: Callable[[], bool] | None = None   # kea hub: True = pages readable without a login (kea hub public)
     sso_url: Callable[[Request, str], str | None] | None = None   # kea hub: ask the hub for its ORCID session
+    hub_menu: Callable[[dict | None], dict] | None = None   # kea hub: {home, projects} for the reader's name menu
 
 
 def make_app(site_dir: Path, events_path: Path, password: str, cycle_path: Path | None = None,
@@ -291,7 +292,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "unplanned": len(cycle.needs_planning(threads, current)),
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
                              "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
-                             "can_steer": may_steer(request), **signed_in(request)})
+                             "can_steer": may_steer(request), **signed_in(request),
+                             "hub": spec.hub_menu(request.scope.get("kea_account")) if spec.hub_menu else None})
 
     def signed_in(request: Request) -> dict:
         """Who the reader is for the menu bar: signed in (account or site password) and where to sign out."""

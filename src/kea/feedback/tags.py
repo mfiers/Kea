@@ -48,6 +48,11 @@ def _propose(name: str, types: list[str], label: str, help_text: str, instructio
 # What a reader may propose on each page type: the next step along Kea's reasoning route
 # (experiment → question → hypothesis → step → result → conclusion, with premises, caveats and decisions).
 PROPOSALS: list[dict] = [
+    _propose("propose-experiment", ["experiment"], "an experiment",
+             "Another experiment for this project: what it would ask, and why it is not a question of this one",
+             "a new experiment for this project (kea new experiment <name> --title …; its summary and scope; with "
+             "the second experiment also doc/_summary.md, the project's own summary). Under pace: guided it waits "
+             "for approval before questions go under it."),
     _propose("propose-question", ["experiment", "conclusion"], "a question",
              "A question this experiment should ask (or one this conclusion raises)",
              "a question (page type question, under the experiment; from a conclusion, link the conclusion in the text)."),

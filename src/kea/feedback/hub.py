@@ -403,6 +403,7 @@ class HubApp:
             login_url=lambda request, next_url: self.login_url(name, next_url),
             public=lambda: hub.is_public(name),
             sso_url=lambda request, next_url: self.check_url(name, next_url),
+            hub_menu=lambda account: self.hub_menu(name, account),
             states_context=lambda: hub.meta(name).get("states") or {"labels": {}, "items": {}})
         app = server.make_site_app(spec)
         self.sites[name] = (stamp, app)
@@ -568,6 +569,19 @@ class HubApp:
         return {"name": name, "title": config.get("title") or name, "url": self.hub.site_url(name) + "/",
                 "public": bool(config.get("public")), "published": self.hub.published_on(name), "role": role,
                 "pending": pending}
+
+    def hub_menu(self, current: str, account: dict | None) -> dict:
+        """For the name menu on a project site: the hub's front page and the reader's other projects (an ORCID
+        account: those with a role; anyone: the public ones)."""
+        projects = []
+        for name in self.hub.names():
+            if name == current:
+                continue
+            role = self.accounts.role(str(account["orcid"]), name) if account else ""
+            if accounts.rank(role) >= accounts.rank("auditor") or self.hub.is_public(name):
+                row = self.project_row(name, role)
+                projects.append({"title": row["title"], "url": row["url"], "role": accounts.role_label(role) if role else ""})
+        return {"home": self.apex_url().rstrip("/") + "/", "projects": projects}
 
     def landing(self, request: Request) -> HTMLResponse:
         """https://<domain>/: the reader's projects when signed in on the hub, else the page for visitors."""

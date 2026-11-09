@@ -229,7 +229,8 @@
     const slot = document.querySelector(".topbar .user");
     if (!slot) return;
     const name = status && status.signed_in ? (status.you || (status.account ? status.orcid : "") || "Signed in") : "";
-    const key = status === null ? "anonymous" : name + "|" + (status && status.sign_out);
+    const hub = status && status.hub;                 // on a Kea hub: its front page and the reader's other projects
+    const key = status === null ? "anonymous" : name + "|" + (status && status.sign_out) + "|" + JSON.stringify(hub || null);
     if (key === userKey) return;
     userKey = key;
     const help = el("a", { href: slot.dataset.help, title: "How to read this site, and about Kea" }, "Help");
@@ -243,6 +244,12 @@
       el("div", { class: "who" }, status.account ? `Signed in with ORCID ${status.orcid}` : "Signed in with the site password"),
       el("a", { href: slot.dataset.comments + "?mine=1", role: "menuitem" }, "My comments"),
       el("a", { href: slot.dataset.help, role: "menuitem" }, "Help"),
+      ...(hub ? [el("div", { class: "sep-line" }),
+        el("a", { href: hub.home, role: "menuitem", title: "The hub's front page: your projects and roles" }, "Kea hub"),
+        ...(hub.projects.length ? [el("div", { class: "group" }, "Other projects")] : []),
+        ...hub.projects.map(project => el("a", { href: project.url, role: "menuitem", class: "project",
+          title: project.role ? "Your role: " + project.role : "Public project" },
+          project.title, project.role ? el("span", { class: "role" }, project.role) : null))] : []),
       status.sign_out ? el("div", { class: "sep-line" }) : null,
       status.sign_out ? el("a", { href: status.sign_out, role: "menuitem" }, "Sign out") : null);
     const button = el("button", { class: "user-name", type: "button", title: name, "aria-haspopup": "true",

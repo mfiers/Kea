@@ -63,7 +63,8 @@ def project_summary(tree: Tree) -> str:
     """The project's executive summary (Markdown): doc/_summary.md, else the only experiment's summary, else ''."""
     source = DOC / "_summary.md"
     if source.exists():
-        _, text = split_front_matter(source.read_text(encoding="utf-8"), source)
+        raw = source.read_text(encoding="utf-8")
+        text = split_front_matter(raw, source)[1] if raw.startswith("---\n") else raw   # front matter optional
         return text.strip()
     if len(tree.projects) == 1:
         home = next(iter(tree.projects.values()))

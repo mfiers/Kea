@@ -107,7 +107,7 @@ def test_guided_pace_one_reviewed_step_at_a_time(tmp_path):
     assert "s-a.md: step is done but was not approved" in problems
     assert "c-a.md: drawn from result(s) R1 that the owner has not reviewed" in problems
     approve = "\napproved: {by: Mark, date: 2026-11-09, how: chat}"
-    for relative in ("question/q-a.md", "step/s-a.md", "result/r-a.md"):
+    for relative in ("experiment/home.md", "question/q-a.md", "step/s-a.md", "result/r-a.md"):
         path = doc / "p" / relative
         front, body = path.read_text().split("\n---\n", 1)
         path.write_text(front + approve + "\n---\n" + body)
@@ -167,3 +167,12 @@ def test_page_verdicts_approve_revise_drop():
     assert known["approve"]["scope"] == known["revise"]["scope"] == known["drop"]["scope"] == "page"
     assert known["revise"].get("needs_text") and "harvest itself" in known["approve"]["instruction"]
     assert "kea drop" in known["drop"]["instruction"] and known["reject"].get("hidden")
+
+
+def test_one_or_more_experiments_and_the_project_summary(tmp_path):
+    doc = _doc(tmp_path)
+    (doc / "_summary.md").write_text("Text.\n")                             # the same as the experiment's summary
+    assert any("repeats the experiment's summary" in note for note in nodes.load_tree(doc).notes)
+    _page(doc, "q/experiment/home.md", "id: home\ntype: experiment\ntitle: Second\nshort: Another.\nstatus: open")
+    (doc / "_summary.md").unlink()
+    assert any("2 experiments but no summary" in problem for problem in nodes.load_tree(doc).problems)

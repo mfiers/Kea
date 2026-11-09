@@ -18,6 +18,7 @@ def test_experiment_type_and_legacy_goal(tmp_path):
     doc = tmp_path / "doc"
     doc.mkdir()
     (doc / "_schema.yaml").write_text(SCHEMA)
+    (doc / "_summary.md").write_text("Two experiments.\n")
     _page(doc, "new/experiment/home.md", "id: home\ntype: experiment\ntitle: New\nshort: A new one.\nstatus: open")
     _page(doc, "old/goal/home.md", "id: home\ntype: goal\ntitle: Old\nshort: An old one.\nstatus: open")
     tree = nodes.load_tree(doc)

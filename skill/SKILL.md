@@ -39,6 +39,17 @@ When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start
 Then **stop**: ask the owner to read the questions and premises on the site and approve them (see "Pace"). Do not
 write hypotheses, plan steps or analyse anything yet.
 
+## One experiment, or more
+
+With one experiment the site starts at its page (`index.html` sends readers there; no project level in the menu
+bar; the project's title stays). `doc/_summary.md` is optional then, shown above the experiment's text only when
+it says more than the experiment's own summary. To add an experiment (when the owner asks, or approves a reader's
+"Propose ▸ an experiment"): `kea new experiment <name> --title "…"`, write its summary and scope, and in the same
+step `doc/_summary.md`, the project's summary across the experiments (`kea check` requires it from two
+experiments on); the site's start becomes the project page again, and no existing address changes. Under
+`pace: guided` a new experiment waits for approval (`approved:` on its home page) before questions go under it;
+when the owner gave the outline for the first experiment in chat, record that approval on its home page.
+
 ## Pace: one step along the route, then stop
 
 Kea's route: experiment → questions (and premises) → hypotheses and planned steps → results → conclusions. Unless

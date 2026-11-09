@@ -522,6 +522,15 @@
       if (key === "title") node.after(button);
       else node.append(button);
     }
+    // the kind above the title ("Question Q1"): a pencil on hover opens the editor of the whole page
+    const kind = container.querySelector(".node-content .kindrow .kind");
+    if (kind && !kind.dataset.inline) {
+      kind.dataset.inline = "1";
+      const button = el("button", { class: "fb-kind-pencil " + NOT, title: "Edit the whole page: title, summary and text",
+        onclick: event => { event.preventDefault(); openEditor(null); } });
+      button.innerHTML = PENCIL;
+      kind.append(button);
+    }
   }
   function editInPlace(node, key) {
     if (node.parentElement.querySelector(".fb-inline-form")) return;
