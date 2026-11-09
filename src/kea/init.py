@@ -50,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     done: list[str] = []
     author_line = f"author: {args.author}\n" if args.author else "# author: Your Name   # title page of the PDF\n"
     _write_new(root / "kea.yaml", f"title: {title}\nheading: {title}\n{author_line}port: {args.port}\nhost: 127.0.0.1\n"
-                                  "site_dir: report/site\nfeedback_dir: data/feedback\n", done)
+                                  "site_dir: report/site\nfeedback_dir: data/feedback\n"
+                                  "pace: guided   # one step along the route at a time, each reviewed before the next; "
+                                  "free = no gate\n", done)
     _write_new(root / "doc" / "_schema.yaml", (TEMPLATES / "_schema.yaml").read_text(), done)
     for folder in ("_changes", "_cycles"):
         (root / "doc" / folder).mkdir(parents=True, exist_ok=True)

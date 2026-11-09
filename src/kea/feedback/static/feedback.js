@@ -24,7 +24,7 @@
   const BASE = ASSET_BASE.replace(/_feedback\/$/, "");      // the site root (also under a hub prefix /p/<name>/)
   const API = BASE + "api/threads";
   let editable = false;
-  let readOnly = false;                          // a signed-in reader with the role "reader": sees comments, writes none
+  let readOnly = false;                          // a signed-in auditor (hub role): sees comments, writes none
   const CONTEXT = 40;
   const NOT = "not-annotatable";
   const STATUS_TEXT = {
@@ -186,6 +186,28 @@
   function tagsOf(group, scope) {
     return vocab.tags.filter(tag => tag.group === group && (scope === "page" || (tag.scope || "any") !== "page"));
   }
+  /* Proposals (tags.py PROPOSALS): the next step of the reasoning for this page's type, written by the reader. */
+  const pageType = () => { const node = container && container.querySelector(".node-content"); return node ? node.dataset.type || "" : ""; };
+  function proposals() { return vocab.tags.filter(tag => tag.group === "propose" && (tag.types || []).includes(pageType())); }
+  /* A small form for one proposal: the reader's text, Send and Cancel; selection = the quoted text or null. */
+  function proposalForm(tag, selection, done, heading) {
+    const area = el("textarea", { rows: "4", class: "fb-propose-text", placeholder: tag.help || "" });
+    const status = el("span", { class: "fb-help" });
+    const box = el("div", { class: "fb-propose " + NOT },
+      el("div", { class: "fb-sel-label" }, heading || ("Propose " + tag.label + (selection ? " · on the selected text" : " · whole page"))),
+      selection ? el("blockquote", { class: "fb-quote" }, selection.quote) : null,
+      area,
+      el("div", { class: "fb-propose-actions" },
+        el("button", { onclick: async () => {
+          const text = area.value.trim();
+          if (!text) { status.textContent = "Write your proposal first."; area.focus(); return; }
+          const thread = await tagThread(selection, [tag.name], text);
+          if (thread) { done(); toast(heading ? "Saved: the revision is asked." : "Proposal saved: it goes into the next plan.", () => retag(thread.thread_id, [])); }
+        } }, "Send"),
+        el("button", { class: "fb-secondary", onclick: () => done() }, "Cancel"), status));
+    setTimeout(() => area.focus(), 0);
+    return box;
+  }
   function toast(message, undo) {
     document.querySelectorAll(".fb-toast").forEach(node => node.remove());
     const box = el("div", { class: "fb-toast " + NOT }, message);
@@ -226,6 +248,8 @@
           } }, "✎ Edit")),
       el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Next run"),
         el("div", { class: "fb-sel-row fb-sel-next" })),
+      el("div", { class: "fb-sel-group fb-sel-propose" }, el("div", { class: "fb-sel-label" }, "Propose"),
+        el("div", { class: "fb-sel-row fb-pr-row" })),
       el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Manuscript"),
         el("div", { class: "fb-sel-row fb-ms-row" })),
       el("div", { class: "fb-sel-hint" }, "One click saves a tag · Esc closes"));
@@ -264,6 +288,18 @@
       onmousedown: event => event.preventDefault(), onclick: () => quick(tag.name) }, tag.label || tag.name);
     selectBtn.querySelector(".fb-sel-next").replaceChildren(...tagsOf("review").map(chip));
     selectBtn.querySelector(".fb-ms-row").replaceChildren(...tagsOf("manuscript").map(chip));
+    const offered = proposals();
+    selectBtn.querySelector(".fb-sel-propose").hidden = !offered.length;
+    selectBtn.querySelector(".fb-pr-row").replaceChildren(...offered.map(tag => el("button", {
+      class: "fb-qchip fb-tag-propose", title: tag.help || "", onmousedown: event => event.preventDefault(),
+      onclick: () => {
+        const selection = pendingSelection;
+        window.getSelection().removeAllRanges();
+        selectBtn.hidden = true;
+        const holder = el("div", { class: "fb-propose-float " + NOT });
+        holder.append(proposalForm(tag, selection, () => holder.remove()));
+        document.body.append(holder);
+      } }, tag.label)));
     selectBtn.dataset.filled = "1";
   }
   /* What readers said about the page as a whole, as read-only pills next to the title: confirmed (yellow when the page
@@ -284,17 +320,24 @@
     const add = (cls, text, title) => pills.append(el("span", { class: "pill fb-page-pill " + cls, title: title || "" }, text));
     if (openThread("confirm")) add("fb-pp-ok", "✓ confirm · next plan", "A reader confirmed this page; it is recorded in the next plan");
     if (openThread("unconfirm")) add("fb-pp-stale", "confirmation withdrawn · next plan");
-    const rejected = openThread("reject");
-    if (rejected) add("fb-pp-remove", "✕ rejected · next plan", "Rejected by " + rejected.author + (rejected.text ? ": " + rejected.text : ""));
+    const rejected = openThread("drop") || openThread("reject");
+    if (rejected) add("fb-pp-remove", "✕ drop asked", "Asked by " + rejected.author + (rejected.text ? ": " + rejected.text : ""));
+    const approval = openThread("approve");
+    if (approval) add("fb-pp-ok", "✓ approve · next harvest", "Approved by " + approval.author);
+    const revision = openThread("revise");
+    if (revision) add("fb-pp-next", "↻ revise asked", "Asked by " + revision.author + ": " + (revision.text || ""));
     const section = pageSection();
     if (section) add("fb-pp-ms", "manuscript: " + tagInfo(section.tags[0]).label, "The whole page goes in this part of the manuscript");
     const open = [...new Set(pageLevel().filter(thread => thread.status !== "marked")
       .flatMap(thread => thread.tags).filter(name => tagInfo(name).group === "review"))];
     for (const name of open) add("fb-pp-next", tagInfo(name).label, "Asked for the next run");
+    const proposed = [...new Set(pageLevel().filter(thread => thread.status !== "marked")
+      .flatMap(thread => thread.tags).filter(name => tagInfo(name).group === "propose"))];
+    for (const name of proposed) add("fb-pp-propose", "proposed: " + tagInfo(name).label, "A reader proposed this; it goes into the next plan");
   }
 
   /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
-     across the site). Comment · Edit | Confirm · Reject | Next run ▸ · Manuscript ▸. Confirm and Reject are definitive
+     across the site). Comment · Edit | Approve or Confirm · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
      requests for the next plan; they stay highlighted while pending, and Confirm stays on once the page records it. */
   const DOCK_KEY = "kea-dock-open";
   function dockOpen() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch (error) { return true; } }
@@ -317,10 +360,12 @@
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
       const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
-      const reject = pill("fb-d-reject", "✕ Reject", "", () => {});
+      const revise = pill("fb-d-revise", "↻ Revise ▸", "Rewrite this page: say what to change; this branch is reworked", () => toggleDockPop(revise, "revise"));
+      const reject = pill("fb-d-reject", "✕ Drop", "", () => {});
       const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
       const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
-      items.append(el("span", { class: "fb-dock-gap" }), confirm, reject, el("span", { class: "fb-dock-gap" }), next, manuscript);
+      const propose = pill("fb-d-propose", "Propose ▸", "Propose the next step of the reasoning: a question, hypothesis, step, conclusion, caveat …", () => toggleDockPop(propose, "propose"));
+      items.append(el("span", { class: "fb-dock-gap" }), confirm, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
       onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
@@ -345,33 +390,46 @@
     if (!dockEl) return;
     const edit = dockEl.querySelector(".fb-d-edit");
     if (edit) edit.hidden = !editable;
+    const propose = dockEl.querySelector(".fb-d-propose");
+    if (propose) propose.hidden = !proposals().length;
     const confirm = dockEl.querySelector(".fb-d-confirm"), reject = dockEl.querySelector(".fb-d-reject");
     if (!confirm) return;
-    const asked = openThread("confirm"), unasked = openThread("unconfirm"), rejected = openThread("reject");
-    const done = pageConfirmed();
+    const content = container && container.querySelector(".node-content");
+    const waitingPage = !!(content && content.dataset.waiting);           // pace: guided, not yet approved
+    const dropAlso = content ? content.dataset.drop || "" : "";
+    const asked = openThread(waitingPage ? "approve" : "confirm"), unasked = openThread("unconfirm");
+    const dropped = openThread("drop") || openThread("reject"), revising = openThread("revise");
+    const done = !waitingPage && pageConfirmed();
+    const when = waitingPage ? "at the next harvest" : "in the next plan";
+    const word = waitingPage ? "Approve" : "Confirm";
     confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked ? " fb-pending" : unasked ? " fb-pending-off" : "");
-    confirm.textContent = asked ? "✓ Confirm · next plan" : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ Confirm";
-    confirm.title = asked ? "Confirmation goes into the next plan; click to take it back"
+    confirm.textContent = asked ? `✓ ${word} · ${waitingPage ? "next harvest" : "next plan"}` : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ " + word;
+    confirm.title = asked ? `Goes in ${when}; click to take it back`
       : unasked ? "The confirmation is withdrawn in the next plan; click to keep it"
       : done ? "This page is confirmed; click to withdraw the confirmation (in the next plan)"
-      : "Keep this page as it is; the confirmation goes into the next plan and is recorded on the page";
+      : waitingPage ? "Go ahead: the next step may build on this page (applied at the next harvest)"
+      : "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
     confirm.onclick = async () => {
-      if (asked) return withdraw(asked, "confirmation taken back");
+      if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
       if (unasked) return withdraw(unasked, "withdrawal taken back");
       if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
-      if (rejected) await withdraw(rejected, "rejection replaced by a confirmation");
-      await tagThread(null, ["confirm"]);
+      if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());
+      await tagThread(null, [waitingPage ? "approve" : "confirm"]);
     };
-    reject.className = "fb-dpill fb-d-reject" + (rejected ? " fb-pending" : "");
-    reject.textContent = rejected ? "✕ Reject · next plan" : "✕ Reject";
-    reject.title = rejected ? "This page is removed in the next plan; click to take the rejection back"
-      : "Remove this page: it goes into the next plan and the page is removed there";
+    const revise = dockEl.querySelector(".fb-d-revise");
+    revise.className = "fb-dpill fb-d-revise" + (revising ? " fb-pending" : "");
+    revise.textContent = revising ? "↻ Revise · " + (waitingPage ? "next harvest" : "next plan") : "↻ Revise ▸";
+    reject.className = "fb-dpill fb-d-reject" + (dropped ? " fb-pending" : "");
+    reject.textContent = dropped ? "✕ Drop · " + (waitingPage ? "next harvest" : "next plan") : "✕ Drop";
+    reject.title = dropped ? "This page is dropped " + when + "; click to take it back"
+      : "Remove this page" + (dropAlso ? " and the pages that rest only on it (" + dropAlso + ")" : "") + "; done " + when;
     reject.onclick = async () => {
-      if (rejected) return withdraw(rejected, "rejection taken back");
-      const why = prompt("Reject this page? It is removed in the next plan. Why (optional):");
+      if (dropped) return withdraw(dropped, "drop taken back");
+      const also = dropAlso ? `\n\nThis also removes the pages that rest only on it: ${dropAlso}.` : "";
+      const why = prompt(`Drop this page? It is removed ${when}.${also}\n\nWhy (optional):`);
       if (why === null) return;
-      if (asked) await withdraw(asked, "confirmation replaced by a rejection");
-      await tagThread(null, ["reject"], why.trim());
+      if (asked) await withdraw(asked, (waitingPage ? "approval" : "confirmation") + " replaced by a drop");
+      await tagThread(null, ["drop"], why.trim());
     };
     const nextCount = new Set(pageLevel().filter(thread => thread.status !== "marked").flatMap(thread => thread.tags)
       .filter(name => tagInfo(name).group === "review")).size;
@@ -392,6 +450,39 @@
     const chip = (tag, active, onclick) => el("button", { class: "fb-qchip fb-tag-" + tag.group + (active ? " fb-on" : ""),
       title: tag.help || "", "aria-pressed": String(!!active), onclick }, (active ? "✓ " : "") + (tag.label || tag.name));
     let chips;
+    if (dockPopGroup === "revise") {
+      const revising = openThread("revise");
+      const tag = tagInfo("revise");
+      dockPop.replaceChildren(revising
+        ? el("div", { class: "fb-propose" }, el("div", { class: "fb-sel-label" }, "Revise · asked"),
+            el("div", {}, revising.text || ""),
+            el("div", { class: "fb-propose-actions" }, el("button", { class: "fb-secondary", onclick: async () => {
+              dockPop.hidden = true; await withdraw(revising, "revision taken back"); } }, "Take it back")))
+        : proposalForm({ ...tag, label: "", help: "What should change, and why? The page is rewritten; pages that rest on it are rechecked." },
+            null, () => { dockPop.hidden = true; }, "Revise this page"));
+      dockPop.hidden = false;
+      const rect = dockPopAnchor.getBoundingClientRect();
+      const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
+      dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
+      dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+      return;
+    }
+    if (dockPopGroup === "propose") {
+      const place = () => {
+        const rect = dockPopAnchor.getBoundingClientRect();
+        const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
+        dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
+        dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+      };
+      const options = proposals().map(tag => el("button", { class: "fb-qchip fb-tag-propose", title: tag.help || "",
+        onclick: () => { dockPop.replaceChildren(proposalForm(tag, null, () => { dockPop.hidden = true; })); place(); } }, tag.label));
+      dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, "Propose · whole page"),
+        options.length ? el("div", { class: "fb-sel-row" }, ...options)
+          : el("div", { class: "fb-help" }, "Nothing to propose on this kind of page; comment instead."));
+      dockPop.hidden = false;
+      place();
+      return;
+    }
     if (dockPopGroup === "review") {
       const asked = new Map();
       for (const thread of pageLevel()) if (thread.status !== "marked") for (const name of thread.tags) asked.set(name, thread);

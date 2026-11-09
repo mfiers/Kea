@@ -80,6 +80,11 @@ def open_threads(keys: set[str]) -> list[str]:
 
 def gaps_for_question(tree: Tree, question: Node, hypotheses, results, conclusions) -> list[str]:
     gaps = []
+    for node in [question] + list(hypotheses) + list(results) + list(conclusions):
+        if node.recheck:
+            gaps.append(f"{node.number or node.label}: RECHECK ({'; '.join(node.recheck)}): read it against what "
+                        "changed; update it if it is even slightly affected; then kea recheck "
+                        f"{node.project}:{node.id} --because \"…\"")
     if conclusions and not questions.answer(question):
         gaps.append(f"{question.number} has conclusions but no `answer:` summary")
     if not hypotheses:
@@ -115,6 +120,20 @@ def gaps_for_question(tree: Tree, question: Node, hypotheses, results, conclusio
     return gaps
 
 
+PACE_NOTE = ("pace: guided — do this one step, then stop: tell the owner what to review on the site and wait. "
+             "Go further only when the owner says so in this conversation.")
+
+
+def pace_lines(tree: Tree, project: str, question_number: str = "") -> list[str]:
+    from kea.docsite import graph
+    if tree.pace != "guided":
+        return []
+    found = graph.next_steps(tree, project)
+    if question_number:
+        found = [item for item in found if item.startswith(question_number + ":")] or found
+    return [f"- {item}" for item in found] + ["", PACE_NOTE]
+
+
 def question_context(tree: Tree, question: Node) -> str:
     hypotheses, results, conclusions = questions.evidence(tree, question)
     project = question.project
@@ -139,6 +158,8 @@ def question_context(tree: Tree, question: Node) -> str:
         ("Open reader comments on these pages", open_threads(keys | {node.key for node in caveats})),
         ("Gaps", [f"- {gap}" for gap in gaps_for_question(tree, question, hypotheses, results, conclusions)]),
     ]
+    if tree.pace == "guided":
+        sections.insert(0, ("Next step on the route", pace_lines(tree, question.project, question.number)))
     for heading, lines in sections:
         out += [f"## {heading}", ""] + (lines or ["- none"]) + [""]
     return "\n".join(out)
@@ -165,8 +186,12 @@ def experiment_context(tree: Tree, project: str) -> str:
                             [line(node) for node in handled]),
                            ("Decisions in force", [line(node) for node in decisions]),
                            ("Premises", [line(node) for node in of_type(tree, project, "premise")]),
+                           ("To recheck after an upstream change (kea recheck --list)",
+                            [line(tree.nodes[key], f" — {'; '.join(why)}") for key, why in tree.compromised.items()
+                             if key in keys]),
                            ("Open reader comments", open_threads(keys)),
-                           ("Gaps", [f"- {gap}" for gap in gaps])]:
+                           ("Gaps", [f"- {gap}" for gap in gaps]),
+                           *([("Next step on the route", pace_lines(tree, project))] if tree.pace == "guided" else [])]:
         out += ["", f"## {heading}", ""] + (lines or ["- none"])
     return "\n".join(out) + "\n"
 

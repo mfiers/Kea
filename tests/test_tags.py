@@ -99,3 +99,27 @@ def test_verdicts_only_on_whole_pages_and_untagging_withdraws(tmp_path):
     assert withdrawn["status"] == "resolved" and withdrawn["tags"] == []
     kept = client.post(f"/api/threads/{rejection['thread_id']}/tags", json={"tags": []}).json()["thread"]
     assert kept["status"] == "open"                    # it has text: still a comment to answer
+
+
+def test_proposals_by_page_type_need_their_text(tmp_path):
+    from kea.feedback import tags as tag_module
+    known = tag_module.vocabulary({})
+    offered = {tag["name"]: tag["types"] for tag in known["tags"] if tag["group"] == "propose"}
+    assert "propose-question" in offered and "experiment" in offered["propose-question"]
+    assert "propose-hypothesis" in offered and offered["propose-hypothesis"] == ["question"]
+    for page_type in ("experiment", "premise", "question", "hypothesis", "step", "result", "conclusion", "decision",
+                      "caveat", "figure"):
+        assert any(page_type in types for types in offered.values()), page_type   # every reasoning type has some
+    site = tmp_path / "site"
+    (site / "_feedback").mkdir(parents=True)
+    (site / "_feedback" / "tags.json").write_text(json.dumps(known))
+    client = TestClient(server.make_app(site, tmp_path / "events.jsonl", "pw-for-tests", tmp_path / "cycle.jsonl"))
+    client.post("/login", data={"password": "pw-for-tests", "name": "ann", "next": "/"}, follow_redirects=False)
+    empty = client.post("/api/threads", json={"page": "p:q-a", "tags": ["propose-hypothesis"]})
+    assert empty.status_code == 400 and "write your proposal" in empty.json()["error"]
+    made = client.post("/api/threads", json={"page": "p:q-a", "tags": ["propose-hypothesis"],
+                                              "text": "Higher in the treated donors; at least 1.5-fold in both cohorts"})
+    assert made.status_code == 200 and made.json()["thread"]["status"] == "open"         # a task for the next plan
+    quoted = client.post("/api/threads", json={"page": "p:q-a", "quote": "in the brain", "tags": ["propose-step"],
+                                                "text": "Run it per region"})
+    assert quoted.status_code == 200                                                      # also on selected text

@@ -31,7 +31,70 @@ NAME = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_TAGS = 12
 
 GROUPS = {"review": "Suggestions for the next run", "verdict": "Your verdict on this page",
-          "manuscript": "For the manuscript", "own": "Own tags"}
+          "propose": "Propose the next step of the reasoning", "manuscript": "For the manuscript", "own": "Own tags"}
+
+
+def _propose(name: str, types: list[str], label: str, help_text: str, instruction: str) -> dict:
+    """A proposal: the reader writes the next step of the reasoning (a question on an experiment, a hypothesis or
+    a step on a question, …), on the whole page or on selected text. The text is required; ``types`` are the page
+    types whose menu offers it."""
+    return {"name": name, "group": "propose", "task": True, "types": types, "label": label, "help": help_text,
+            "needs_text": True,
+            "instruction": "A reader proposes " + instruction + " Take it into the next plan: write it as its own "
+                           "page with the right relations (or merge it into an existing page, or say why not), keep "
+                           "the reader's wording where it holds, and name the reader in the reply."}
+
+
+# What a reader may propose on each page type: the next step along Kea's reasoning route
+# (experiment → question → hypothesis → step → result → conclusion, with premises, caveats and decisions).
+PROPOSALS: list[dict] = [
+    _propose("propose-question", ["experiment", "conclusion"], "a question",
+             "A question this experiment should ask (or one this conclusion raises)",
+             "a question (page type question, under the experiment; from a conclusion, link the conclusion in the text)."),
+    _propose("propose-premise", ["experiment", "question"], "a premise",
+             "Something the analysis takes as given and that a reader should be able to question",
+             "a premise: something taken as given (type premise, status assumed; link the pages that rely on it)."),
+    _propose("question-premise", ["premise"], "why it may not hold",
+             "Why this premise may not hold, and what would show it",
+             "a reason this premise may not hold. Set its status to questioned while you check it; then support it "
+             "(supported_by), revise it (every page relying on it gets rechecked) or keep it with the reasons."),
+    _propose("propose-hypothesis", ["question"], "a hypothesis",
+             "What you expect, and what result would count for or against it",
+             "a hypothesis (type hypothesis under this question, with prediction: and criterion:, and "
+             "fixed_before_results: true when no result is in yet)."),
+    _propose("propose-step", ["question", "hypothesis", "caveat"], "a step",
+             "An analysis that would answer the question, test the hypothesis or address the caveat",
+             "an analysis step (type step, status planned; tests: the hypothesis, or addressed_by: on the caveat)."),
+    _propose("alternative-hypothesis", ["hypothesis"], "a competing hypothesis",
+             "Another explanation that predicts something different",
+             "a competing hypothesis (its own hypothesis page under the same question, with what it predicts "
+             "differently, so one test can tell them apart)."),
+    _propose("propose-control", ["step", "result"], "a control or check",
+             "A negative control, permutation, robustness check or replication",
+             "a control or check of this analysis (a planned step whose result supports or opposes this one)."),
+    _propose("propose-change", ["step", "figure"], "a different method",
+             "Another method, parameter or presentation, and why",
+             "a change of method, parameter or presentation, with the reason. Record the choice as a decision page "
+             "when it changes results; results made with the old choice get rechecked."),
+    _propose("propose-conclusion", ["result"], "a conclusion",
+             "What this result means, no stronger than the design allows",
+             "a conclusion from this result (type conclusion, supported_by this result with because:, certainty:)."),
+    _propose("propose-caveat", ["result", "conclusion", "premise", "step"], "a caveat",
+             "A limit: a confounder, a bias, a small sample, a measurement that may not mean what it seems",
+             "a caveat (type caveat with kind: and limits: this page)."),
+    _propose("alternative-explanation", ["result", "conclusion"], "another explanation",
+             "Another explanation of the same finding",
+             "another explanation of this finding: write it as a caveat (kind: internal or construct) or as a "
+             "competing hypothesis with a step that would tell them apart."),
+    _propose("propose-certainty", ["conclusion"], "a certainty",
+             "How certain this conclusion is in your view (high, moderate, low, very low), and why",
+             "a certainty for this conclusion: weigh it against the evidence and caveats; change certainty: and "
+             "certainty_because: or say why not."),
+    _propose("propose-option", ["decision"], "another option",
+             "An option this decision did not consider, with its trade-off",
+             "another option for this decision, with its trade-off: add it to the decision page and say whether it "
+             "changes the choice (a changed choice gets every page made with it rechecked)."),
+]
 
 DEFAULT_TAGS: list[dict] = [
     {"name": "explain", "group": "review", "task": True, "label": "explain",
@@ -66,13 +129,36 @@ DEFAULT_TAGS: list[dict] = [
                     "(`by:` the reader's name, `orcid:` their ORCID iD when the thread has one, `date:` the thread's date, "
                     "`version:` the page's version id from its About line, else the thread's page commit) and change "
                     "nothing else. From then on, change the page's claim (title, summary, status, numbers) only "
-                    "through a plan item that names the confirmation."},
+                    "through a plan item that names the confirmation. On a page that waits for approval (a proposed "
+                    "question, a planned step, a new result; pace in the skill), apply it at the harvest itself: "
+                    "also write `approved:` (by, orcid, date, how: site), so the next step can start."},
     {"name": "unconfirm", "group": "verdict", "task": True, "scope": "page", "label": "withdraw confirmation",
      "hidden": True, "help": "Withdraw an earlier confirmation",
      "instruction": "The reader withdraws the confirmation of this page: remove `confirmed:` from its front matter "
                     "in the next plan."},
-    {"name": "reject", "group": "verdict", "task": True, "scope": "page", "label": "reject",
-     "help": "This page should go: it is removed in the next plan",
+    {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
+     "help": "Go ahead: the next step may build on this page",
+     "instruction": "The reader approves this page (pace: guided): the next step may build on it. Apply it at the "
+                    "harvest itself, not at Implement: write `approved:` into its front matter (`by:` the reader's "
+                    "name, `orcid:` their ORCID iD when the thread has one, `date:` the thread's date, `how: site`) "
+                    "and change nothing else. Then the next step is open; do it only when the owner asks."},
+    {"name": "revise", "group": "verdict", "task": True, "scope": "page", "label": "revise", "needs_text": True,
+     "help": "Rewrite this page (say what to change): this branch is reworked",
+     "instruction": "The reader asks to revise this page; their text says what to change. A page that waits for "
+                    "approval: rewrite it at the harvest itself; it waits for approval again. A settled page: make it "
+                    "a plan item and rewrite it at Implement; remove `approved:` and `confirmed:` (the claim "
+                    "changed; under pace: guided it waits for approval again). Every page downstream then gets a "
+                    "recheck mark: work through kea recheck --list. Say in the reply what changed."},
+    {"name": "drop", "group": "verdict", "task": True, "scope": "page", "label": "drop",
+     "help": "Remove this page, and the pages that rest only on it",
+     "instruction": "The reader drops this page and every page that rests only on it: `kea drop <id>` lists them. "
+                    "A page that waits for approval: drop at the harvest itself; a settled page: a plan item, done at "
+                    "Implement. Keep the record: a question gets status dropped, a step dropped, a result, "
+                    "conclusion or figure deprecated (with the reason in the text), a decision superseded; delete "
+                    "the other pages. Remove or update the links to them; pages that rested partly on them get a "
+                    "recheck mark: recheck them. Say in the reply what was dropped."},
+    {"name": "reject", "group": "verdict", "task": True, "scope": "page", "label": "reject", "hidden": True,
+     "help": "This page should go (before Kea 1.19; now Drop)",
      "instruction": "The reader rejects this page; it goes in the next plan. Results, conclusions and figures are "
                     "not deleted: set their status to deprecated with the reason; other pages are deleted. Update "
                     "or remove the relations that point to it, and say in the reply what depended on it."},
@@ -85,7 +171,7 @@ DEFAULT_TAGS: list[dict] = [
      "help": "In the supplementary material"},
     {"name": "not-in-manuscript", "group": "manuscript", "task": False, "label": "not in manuscript",
      "help": "Keep this out of the manuscript"},
-]
+] + PROPOSALS
 
 
 class TagError(ValueError):

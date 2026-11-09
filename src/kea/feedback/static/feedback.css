@@ -241,7 +241,7 @@ html.fb-panel-open .fb-dock{right:406px}@media (max-width:820px){html.fb-panel-o
 /* a reader (role "reader"): comments visible, nothing to write */
 .fb-readonly .fb-new, .fb-readonly .fb-thread > textarea, .fb-readonly .fb-thread > .fb-actions, .fb-readonly .fb-more,
 .fb-readonly .fb-name, .fb-readonly .fb-x, .fb-readonly .fb-select-bar, .fb-readonly .fb-dock-gap,
-.fb-readonly .fb-d-edit, .fb-readonly .fb-d-confirm, .fb-readonly .fb-d-reject, .fb-readonly .fb-d-next,
+.fb-readonly .fb-d-edit, .fb-readonly .fb-d-confirm, .fb-readonly .fb-d-reject, .fb-readonly .fb-d-next, .fb-readonly .fb-d-propose, .fb-readonly .fb-d-revise, .fb-readonly .fb-sel-propose,
 .fb-readonly .fb-d-ms, .fb-readonly .fb-inline-pencil, .fb-readonly .fb-sec-holder { display: none !important; }
 /* a public site read without a login: one "Sign in to comment" button in the dock's place */
 .fb-dock-anon .fb-d-signin { text-decoration: none; }
@@ -273,3 +273,17 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
   .fb-editor .fb-actions button{padding:9px 16px;font-size:14px}
   .fb-panel{width:100vw;border-left:0}
 }
+/* Proposals (tags.py PROPOSALS): the next step of the reasoning, by page type; teal, apart from the other tags */
+.fb-tag-propose,.fb-qchip.fb-tag-propose,.fb-panel button.fb-chip.fb-tag-propose{background:#e0f2f1;color:#00564d;border-color:#9fd6cf}
+.fb-dpill.fb-d-propose{color:#00564d;border-color:#9fd6cf}
+.fb-propose{display:flex;flex-direction:column;gap:6px;min-width:min(340px,86vw)}
+.fb-propose textarea{font:14px/1.45 system-ui,sans-serif;padding:7px 9px;border:1px solid #c9ced8;border-radius:6px;resize:vertical}
+.fb-propose .fb-quote{margin:0;max-height:5em;overflow:auto}
+.fb-propose-actions{display:flex;align-items:center;gap:8px}
+.fb-propose-actions button{padding:5px 13px;border:0;border-radius:6px;background:#2d3748;color:#fff;font:600 13px system-ui,sans-serif;cursor:pointer}
+.fb-propose-actions button.fb-secondary{background:#e8ebf0;color:#1d2330}
+.fb-propose-float{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:62;background:#fff;border:1px solid #c9ced8;
+  border-radius:10px;box-shadow:0 6px 24px #1d233040;padding:12px 14px;max-width:92vw}
+@media (max-width:760px){.fb-propose textarea{font-size:16px}}
+.pill.fb-pp-propose{background:#e0f2f1;color:#00564d;border-color:#9fd6cf}
+.fb-dpill.fb-d-revise{color:#7a4a00;border-color:#e6c27a}.fb-dpill.fb-d-revise.fb-pending{background:#fff3c4;border:2px dashed #7a4a00}

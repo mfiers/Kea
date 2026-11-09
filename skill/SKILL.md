@@ -36,11 +36,39 @@ When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start
 5. **Watch.** Start `kea watch --deadline 3d` in the background at once, and respond when it exits (see Review
    cycle). Tell the user it is running, and until when.
 
-Then work on the first question (below).
+Then **stop**: ask the owner to read the questions and premises on the site and approve them (see "Pace"). Do not
+write hypotheses, plan steps or analyse anything yet.
+
+## Pace: one step along the route, then stop
+
+Kea's route: experiment → questions (and premises) → hypotheses and planned steps → results → conclusions. Unless
+the owner explicitly asks you in this conversation to go further ("go ahead and run it", "do the whole question"),
+do **only the next step** for the page you are working from, write it as pages, build and publish the site, and
+**stop**: tell the owner which pages to read and what to approve, with the links. Never plan ahead or run ahead
+because the next step seems obvious; the owner reading each step is the point.
+
+| You are at | Do | Do not |
+| --- | --- | --- |
+| an experiment | propose questions (and premises): question pages, status open | write hypotheses, steps or code |
+| an approved question | propose hypotheses (prediction, criterion, fixed_before_results: true) and planned steps (status planned, with decisions) | run anything, write code beyond a sketch on the step page |
+| approved planned steps | run them reproducibly (scripts, Makefile targets) and write result pages and figures | conclude, set hypothesis outcomes, update the answer |
+| reviewed results | write conclusions (supported_by with because:, certainty), hypothesis outcomes, caveats, the answer | start the next question |
+
+**Approval** is recorded on the page: `approved: {by: <name>, date: <ISO date>, how: chat}` when the owner approves
+in this conversation (name the pages they approved; "looks good" about one question approves that question only),
+or a **Confirm** on the site: at a harvest, a Confirm on a page that waits for approval is applied at once (write
+`approved:` with `how: site` and the reader's name and ORCID iD; it changes no claim), not deferred to Implement.
+With `pace: guided` in `kea.yaml` (the default of `kea init`) `kea check` enforces this: hypotheses or steps under an
+unapproved question, a step in progress or done without approval, and conclusions from unreviewed results are
+problems. `kea context` starts with "Next step on the route": what to do now, or what waits for the owner.
+`pace: free` turns the gate off (only when the owner asks for it); even then, stop between steps unless told not to.
 
 ## Working on a question (each analysis run)
 
-The tree holds what earlier runs established. Read it before adding to it:
+The tree holds what earlier runs established. Read it before adding to it. The steps below are the whole route
+for one question; under the pace rule (above) one run does only the step that is next, then stops for review:
+step 3 (with the step pages of step 4) is one stop, running the steps and writing results (4–5) the next, and
+concluding (6–8) the one after.
 
 1. **Choose.** `kea context <experiment>` lists every question with its state, the open caveats, the decisions in
    force, open comments and gaps. If the user did not name a question, propose one from this list.
@@ -205,6 +233,36 @@ Every page is written as a careful paper would be. The wording must not claim mo
 - Before a release, reread every `answer:`, conclusion and executive summary for words stronger than the evidence,
   and fix them in the same commit.
 
+## The graph as a whole, and rechecks
+
+`kea check` and every `kea build` check the reasoning graph as a whole, not only each link (docsite/graph.py).
+Problems (the strict build fails): a conclusion that rests on no result or figure (directly or through other
+conclusions); conclusions supporting each other in a loop; a conclusion that `relies_on` a hypothesis or question;
+a live conclusion on deprecated evidence; a confirmatory conclusion on exploratory results only; a hypothesis with
+an outcome that no result tests. Notes: an answered question nothing answers, a result without `made_by`, high
+certainty on exploratory evidence or under an open caveat, a supported premise with nothing behind it.
+
+**Rechecks.** Every page depends on what is upstream of it (evidence, the step, artefact, decision and resources it
+was made with, what it relies on, the caveats that limit it; a hypothesis on its tests, a question on what answers
+it). `doc/_checks.yaml` (commit it) holds the fingerprint of each upstream page when the page was last checked.
+When an upstream page changes in substance, the page and everything downstream get a red **recheck** pill and a
+gap in `kea context`. Then, for each (`kea recheck --list`): read it against what changed; if it is even slightly
+affected, update it (numbers from the re-run, wording, status, certainty, caveats); then record the check:
+`kea recheck <id> --because "unaffected: …"` or `"updated: …"`. Recheck the page that changed directly first:
+pages marked "via X" clear with it. `kea cycle release` refuses while pages wait for a recheck
+(`--allow-recheck "why"` only when the owner agrees, and say so in the run entry). Never clear a recheck without
+reading the page.
+
+## Proposals from readers
+
+Readers can propose the next step of the reasoning for the page type (tags of group `propose`, with text): a
+question or premise on the experiment, a hypothesis, step or premise on a question, a step or competing
+hypothesis on a hypothesis, a control or another method on a step, a conclusion, caveat, control or other
+explanation on a result, a caveat, other explanation, follow-up question or certainty on a conclusion, a reason a
+premise may not hold, another option on a decision, a step that addresses a caveat. They are harvested like
+comments; `kea show` prints what each asks. Write each as its own page with the right relations (or merge it,
+or say why not), keep the reader's wording where it holds, and name the reader in the reply.
+
 ## Builds
 
 `kea build` (review, with comments), `kea build --mode local` (no comments, data links into the project folder,
@@ -275,13 +333,15 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    (`kea list --unplanned`; also suggested edits and direct edit commits) into `doc/_cycles/cycle-NNN.md`, with one
    `### N. title` item per change, the threads it answers, the kind of change and the proposed version (front
    matter `version:`). Reply to each thread with its item (`kea reply <thread> "…" --status planned`), commit, run
-   `kea cycle plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest), `make site`
+   `kea cycle plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest; before it,
+   apply Approve, Revise and Drop on pages that wait for approval, see Tags), `make site`
    (and `kea publish`), and watch again. The plan then stands until the next harvest; comments go on, and the plan
    page counts those made since.
 3. **Implement (exit 20):** a PI pressed Implement (only possible after a harvest); comments made after the
    harvest are not in the plan and stay for the next cycle. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
    `kea apply-suggestion <thread>`, then check every number against its source and commit with the reader as
-   co-author. Never implement before Implement unless the owner asks in chat.
+   co-author. After the changes, work through `kea recheck --list` (see "The graph as a whole") before the
+   release. Never implement before Implement unless the owner asks in chat.
 4. **Release:**
    - Reply to each thread with its commit (`--status page-changed --commit <sha>`).
    - Set the plan's `status: implemented` and `run:`.
@@ -293,7 +353,7 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    Version rules: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages,
    PATCH for wording only. Before 1.0 a major change counts as minor.
 
-**Tags.** Readers tag selected text or a whole page with one click, next to commenting. Suggestions for the next run (explain, expand, shorten, delete, challenge, source, or a project's own) are open items like comments: `kea show` prints each tag's instruction; follow it, plan it and answer it as usual. For `challenge`, start a separate reviewer (a subagent that sees the page, its sources and caveats, not your reasoning), answer its points, then strengthen, weaken or withdraw the claim, and summarise the exchange in the reply. The page verdicts are definitive: `confirm` means write `confirmed: {by, date, version}` into the page's front matter in the next plan and change nothing else (from then on, change a confirmed page's claim only through a plan item that names the confirmation); `unconfirm` means remove that field; `reject` means the page goes in the next plan (deprecate results, conclusions and figures with the reason instead of deleting them; delete other pages; fix the relations that point to it). Manuscript tags (introduction, methods, results, discussion, conclusions, supplement, not-in-manuscript) give the thread the status `marked`: no work, not in plans, never set a status on them. `kea tags [names…]` lists marked fragments per section with file and lines, the input for a manuscript. Change the vocabulary under `tags:` in kea.yaml.
+**Tags.** Readers tag selected text or a whole page with one click, next to commenting. Suggestions for the next run (explain, expand, shorten, delete, challenge, source, or a project's own) are open items like comments: `kea show` prints each tag's instruction; follow it, plan it and answer it as usual. For `challenge`, start a separate reviewer (a subagent that sees the page, its sources and caveats, not your reasoning), answer its points, then strengthen, weaken or withdraw the claim, and summarise the exchange in the reply. The page verdicts are definitive, and `kea show` prints what each asks. On a page that waits for approval (pace): `approve`, `revise` (with the reader's text) and `drop` are applied at the harvest itself, so the step-by-step route never waits for an Implement: `approve` writes `approved: {by, orcid, date, how: site}`; `revise` rewrites the page, which then waits for approval again; `drop` removes it and what rests only on it. On a settled page they go into the plan and are done at Implement: `confirm` writes `confirmed: {by, date, version}` and changes nothing else (from then on, change a confirmed page's claim only through a plan item that names the confirmation); `unconfirm` removes that field; `revise` reworks the branch (rewrite the page, remove `approved:`/`confirmed:`, then recheck every page downstream with `kea recheck`); `drop` removes the page and every page that rests only on it (`kea drop <id>` lists them; a question or step gets status dropped, results, conclusions and figures deprecated with the reason, a decision superseded, other pages are deleted; fix the links, recheck what rested partly on them). `reject` (before 1.19) reads as `drop`. Manuscript tags (introduction, methods, results, discussion, conclusions, supplement, not-in-manuscript) give the thread the status `marked`: no work, not in plans, never set a status on them. `kea tags [names…]` lists marked fragments per section with file and lines, the input for a manuscript. Change the vocabulary under `tags:` in kea.yaml.
 
 ## Adapting Kea on request (in flight)
 

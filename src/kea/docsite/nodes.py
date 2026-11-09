@@ -85,6 +85,8 @@ class Node:
     relations: dict[str, list[str]] = field(default_factory=dict)   # relation -> keys (project:id)
     reasons: dict[str, str] = field(default_factory=dict)           # target key -> why the link holds (because:)
     incoming: dict[str, list[str]] = field(default_factory=dict)    # relation -> keys of nodes pointing here
+    recheck: list[str] = field(default_factory=list)                # why to recheck it (graph.py), [] if not
+    waiting: bool = False                                           # waits for the owner's approval (pace: guided)
 
     @property
     def key(self) -> str:
@@ -108,6 +110,8 @@ class Tree:
     schema: dict
     problems: list[str] = field(default_factory=list)   # errors: broken links, schema violations
     notes: list[str] = field(default_factory=list)      # warnings: links to projects without pages yet
+    compromised: dict[str, list[str]] = field(default_factory=dict)   # key -> why to recheck it (graph.py)
+    pace: str = "free"                                   # kea.yaml pace: guided = one step at a time (graph.py)
 
     def resolve(self, target: str, project: str) -> Node | None:
         """A node from a link target 'id' (same project) or 'project:id'."""
@@ -182,8 +186,9 @@ def _relations(raw: dict, project: str) -> tuple[dict[str, list[str]], dict[str,
     return relations, reasons, problems
 
 
-def load_tree(doc: Path = DOC) -> Tree:
-    """Read every node of every project, number them, add reverse edges, and validate."""
+def load_tree(doc: Path = DOC, baseline: bool = False) -> Tree:
+    """Read every node of every project, number them, add reverse edges, and validate (also the graph as a whole and
+    the pages to recheck, docsite/graph.py; baseline=True also records new links in doc/_checks.yaml)."""
     schema = with_defaults(yaml.safe_load((doc / "_schema.yaml").read_text()) or {})
     nodes: dict[str, Node] = {}
     problems: list[str] = []
@@ -229,6 +234,8 @@ def load_tree(doc: Path = DOC) -> Tree:
     tree.problems.extend(id_problems)
     tree.notes.extend(id_notes)
     _reverse_edges(tree)
+    from kea.docsite import graph
+    graph.apply(tree, doc, baseline)
     return tree
 
 

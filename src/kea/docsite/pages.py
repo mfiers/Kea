@@ -395,7 +395,9 @@ class SiteRenderer:
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
         parts = [crumbs(self.trail(node, prefix), prefix),
-                 f"<div class='node-content' style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
+                 f"<div class='node-content' data-type='{esc(node.type)}'"
+                 f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
+                 f" style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
                  f"<span class='pills'>{pills}</span></div>"
@@ -426,16 +428,21 @@ class SiteRenderer:
                 f"<dt class='not-annotatable'>{label}</dt><dd>{render_markdown(str(node.header[name]), context)}</dd>"
                 for name, label in (("prediction", "Prediction"), ("criterion", "Counts as support if"))
                 if node.header.get(name)) + "</dl>")
-        if node.type == "question" and questions.answer(node):
-            # the question's own answer: field is its text, so it stays with the content; the evidence moves below
-            parts.append(f"<div class='answer'><b class='answer-label not-annotatable'>Answer so far</b>"
-                         f"{render_markdown(questions.answer(node), context)}</div>")
-        elif node.type == "question" and questions.evidence(self.tree, node)[2]:
+        if node.type == "question" and not questions.answer(node) and questions.evidence(self.tree, node)[2]:
             self.tree.notes.append(f"{node.key}: no answer: summary (two or three sentences: the answer, how "
                                    "sure, the main limit; shown on the question and experiment pages and in the PDF)")
         parts.append(f"<article>{render_markdown(body_text, context)}</article>")
         colour = TYPE_COLOURS.get(node.type, '#556')
-        parts.append(f"</div><div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>About this page</span></div>")
+        parts.append("</div>")
+        if node.type == "question" and questions.answer(node):
+            # the answer: field is a summary of the evidence, not part of the question: under its own rule, so the
+            # question's text above stands alone
+            parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>Answer so far</span></div>"
+                         "<p class='answer-note not-annotatable'>A summary of what the conclusions and results of this "
+                         "question say so far, written by the agent and updated after each review cycle. It is not "
+                         "part of the question, and not evidence: the pages below are.</p>"
+                         f"<div class='answer'>{render_markdown(questions.answer(node), context)}</div>")
+        parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>About this page</span></div>")
         uid = str(node.header.get("uid") or "")
         if uid:
             from kea.docsite import identity
@@ -720,6 +727,7 @@ class SiteRenderer:
                 "results and hypotheses.</li>"
                 "<li>The menu bar shows where you are (the kea head, which leads home / project / experiment / page) and has the "
                 f"menu:<ul>{menu}</ul></li></ul>"
+                + self.route_html(legend) +
                 "<h2>Reading a page</h2><ul>"
                 "<li>The coloured bar on the left and the kind above the title say what sort of page it is "
                 "(table below). The page's own content (title, summary in the framed line, and text) is set in a "
@@ -752,30 +760,101 @@ class SiteRenderer:
                      "source) and the manuscript section the passage belongs in.</li>"
                      "<li><b>The buttons at the bottom right</b> act on the whole page: Comment (opens the comment "
                      "panel, whole-page comment on top), Edit (title, summary and text; or the raw Markdown), "
-                     "<b>Confirm</b> (keep the page as it is) and <b>Reject</b> (remove it), <b>Next run ▸</b> and "
-                     "<b>Manuscript ▸</b>. Confirm and Reject are definitive requests: they go into the next plan. "
-                     "The kea head above the buttons folds them away.</li>"
+                     "the page verdicts (below), <b>Propose ▸</b>, <b>Next run ▸</b> and <b>Manuscript ▸</b>. The kea "
+                     "head above the buttons folds them away.</li>"
+                     "<li><b>The page verdicts.</b> On a page that waits for approval (a pill says so: a new question, "
+                     "a planned hypothesis or step, a new result): <b>Approve</b> (go ahead: the next step may build on "
+                     "it), <b>Revise ▸</b> (say what to change: it is rewritten and waits for approval again) or "
+                     "<b>Drop</b> (remove it). These take effect at the next harvest. On a settled page: "
+                     "<b>Confirm</b> (your stamp of approval: keep it as it is; recorded on the page), <b>Revise ▸</b> "
+                     "(rework this branch: the page is rewritten, and every page resting on it is rechecked) or "
+                     "<b>Drop</b> (remove it, with every page that rests only on it; the button lists them). These go "
+                     "into the next plan. Dropped results and conclusions are kept on record as deprecated.</li>"
+                     "<li><b>Propose ▸</b> (next to the verdicts, and in the bar over selected text) offers "
+                     "the next step of the reasoning for the kind of page you are on: on the experiment a question or "
+                     "a premise; on a question a hypothesis, a step or a premise; on a hypothesis a step or a "
+                     "competing hypothesis; on a step a control or a different method; on a result a conclusion, a "
+                     "caveat, a control or another explanation; on a conclusion a caveat, another explanation, a "
+                     "follow-up question or a certainty; on a premise why it may not hold; on a decision another "
+                     "option; on a caveat a step that addresses it. You write the proposal; it goes into the next "
+                     "plan like a comment, and the agent writes it as its own page or says why not.</li>"
                      "<li>The pencils in the left margin edit the title or summary in place; the pencil after a "
                      "section heading edits that section. Every edit is saved as a suggestion, shown as a diff, and "
                      "the agent folds it into the plan.</li>"
                      "<li>Sign in with the site password and your name, or with ORCID where the site offers it (your "
                      "comments then carry your ORCID iD). On a public site anyone can read the pages; "
                      "<b>Sign in to comment</b> shows the comments and lets you add yours.</li></ul>"
-                     "<h2>Review cycles and the plan</h2><ul>"
-                     "<li>Comments, edits and tags wait until a reader who may steer presses <b>Harvest comments</b> "
-                     "on the <a href='plan.html'>plan</a> page; the agent then folds them into the plan, which stands "
-                     "until the next harvest. The plan page counts the comments made since; <b>Harvest again</b> adds "
-                     "them. <b>Implement the plan</b> pauses comments while the agent implements it, answers every "
-                     "comment in it and releases a new version (<a href='history.html'>Review cycles</a>); comments "
-                     "left out of the plan stay for the next cycle.</li>"
-                     "<li>The plan page shows the agent's session: <i>watching</i> (with the time since its last "
-                     "heartbeat), <i>working</i> on the plan, <i>ended</i>, or <i>stopped unexpectedly</i>; readers who "
-                     "may steer then also see a red banner on every page. A blue banner offers a new version of the "
+                     "<h2>How a comment becomes a change</h2><ol class='route-steps'>"
+                     "<li><b>You comment</b>, tag, edit or propose. Nothing else happens yet: the agent does not read "
+                     "comments one by one, so a long review round costs nothing until it is harvested.</li>"
+                     "<li><b>A PI harvests</b> (Harvest comments, on the <a href='plan.html'>plan</a> page; PI is the "
+                     "role that steers the review, or whoever has the iteration password). The agent reads every "
+                     "comment, groups them into numbered plan items (what will change, on which pages, and the "
+                     "version it will make), and replies to each comment with its item: <i>in the plan</i>.</li>"
+                     "<li><b>The plan stands.</b> Comments go on; the plan page counts those made since the harvest. "
+                     "<b>Harvest again</b> adds them; you can comment on the plan itself.</li>"
+                     "<li><b>A PI presses Implement.</b> Comments pause. The agent changes the pages item by item, "
+                     "checks every number against its source file, rechecks every page downstream of a change "
+                     "(below), commits each change, and answers each comment with its commit: <i>page changed</i>, "
+                     "<i>answered</i>, or <i>won't fix</i> with the reason.</li>"
+                     "<li><b>Release.</b> A new version (major when a conclusion changes direction or is withdrawn, "
+                     "minor for new results or pages, patch for wording). Open pages reload and comments reopen; "
+                     "comments left out of the plan stay for the next cycle. <a href='history.html'>Review cycles</a> "
+                     "links each comment to its plan item, commit and pages.</li></ol>"
+                     "<h2>The plan page</h2><ul>"
+                     "<li>It shows the agent's session: <i>watching</i> (with the time since its last "
+                     "heartbeat), <i>working</i> on the plan, <i>ended</i>, or <i>stopped unexpectedly</i>; PIs then "
+                     "also see a red banner on every page. A blue banner offers a new version of the "
                      "site; an amber one says the plan is being implemented.</li></ul>")
         body += ("<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
                  "commentable pages. More help, the page types in full and how to install it: "
                  "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
         self.write("help.html", page("Help", body, "", None, self.tree))
+
+    def drop_labels(self, node) -> str:
+        """The other pages a Drop of this page would remove (graph.drop_set), for the page menu's confirmation."""
+        from kea.docsite import graph
+        return ", ".join(self.tree.nodes[key].label for key in graph.drop_set(self.tree, node.key)[1:])
+
+    @staticmethod
+    def route_html(legend) -> str:
+        """The help page's overview of the reasoning route: the main line from experiment to conclusion, what feeds
+        into it from the side, what Kea checks on every build, and what happens when a page upstream changes."""
+        arrow = lambda word: f"<span class='route-arrow'><span>{esc(word)}</span>→</span>"
+        line = "".join([legend("experiment"), arrow("asks"), legend("question"), arrow("expects"), legend("hypothesis"),
+                        arrow("tested by"), legend("step"), arrow("makes"), legend("result"), arrow("supports or opposes"),
+                        legend("conclusion"), arrow("answers the"), legend("question")])
+        side = ("<table class='not-annotatable route-side'>"
+                f"<tr><td>{legend('premise')}</td><td>what the steps, hypotheses and conclusions take as given; a reader "
+                "can question it</td></tr>"
+                f"<tr><td>{legend('decision')}</td><td>a choice the steps and results apply (a threshold, a method), "
+                "with its reason</td></tr>"
+                f"<tr><td>{legend('caveat')}</td><td>what limits a result, conclusion or premise; open until a step "
+                "addresses it</td></tr>"
+                f"<tr><td>{legend('figure')} {legend('artefact')} {legend('resource')}</td><td>what a step makes or "
+                "uses: figures, data files, and the outside sources with their versions</td></tr></table>")
+        return ("<h2>The reasoning route</h2><p>Every analysis here follows one route, and every page is one stop on "
+                "it. A question comes first; what we expect is written down, with what would count as support, "
+                "<i>before</i> the test runs; a step does the work and makes results; conclusions are drawn from "
+                "results only, each link saying why it holds, with a certainty.</p>"
+                f"<div class='route not-annotatable'>{line}</div>"
+                f"<p>Feeding into it from the side:</p>{side}"
+                "<p><b>What Kea checks on every build</b> (the site is not released while one fails): a conclusion "
+                "rests on at least one result or figure, not on a hypothesis or a question; no conclusions support "
+                "each other in a loop; a conclusion resting on deprecated evidence must be rechecked; a "
+                "confirmatory conclusion cannot rest on exploratory results only; a hypothesis with an outcome "
+                "names the result that tested it; a hypothesis fixed before its results states its prediction and "
+                "its criterion; every link connects the right kinds of page.</p>"
+                "<p><b>When a page upstream changes</b> (a premise is revised, a result is redone, a decision "
+                "changes), every page that rests on it, directly or further down, gets the red <span class='pill "
+                "s-recheck'>recheck</span> pill: it may be affected. The agent reads each against what changed, "
+                "updates it when it is even slightly affected, and records the check and its finding; a version "
+                "is not released while pages wait for a recheck.</p>" +
+                "<p><b>One step at a time.</b> The agent takes one step along the route and then stops: it proposes "
+                "questions, and waits; for an approved question it proposes hypotheses and planned steps, and "
+                "waits; it runs approved steps and writes the results, and waits; it concludes from reviewed "
+                "results. You approve a step with <b>Confirm</b> on its pages (or the owner says so in the agent's "
+                "chat); until then nothing is built on it.</p>")
 
     def site_pages(self) -> list[tuple[str, str, str]]:
         """Site-wide pages from doc/_site/*.md (title, short in front matter) into site/<name>.html.

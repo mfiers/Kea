@@ -1,0 +1,35 @@
+# Kea's recheck ledger (docsite/graph.py): per page, the fingerprint of each page upstream of it when it
+# was last checked against it. Written by kea build / kea check (baseline) and kea recheck; commit it.
+roadmap:h-schema-gate:
+  upstream:
+    roadmap:s-graph-drives-agent: becb76c5ffa0
+    roadmap:w-form-not-substance: d13dae4c58c5
+    roadmap:w-gate-editable: f3da0a647690
+roadmap:q-enforce:
+  upstream:
+    roadmap:p-small-kernel: f17ec54ba670
+    roadmap:p-structure-implicit: 22366f9d02e7
+roadmap:q-order:
+  upstream:
+    roadmap:p-small-kernel: f17ec54ba670
+roadmap:s-code-nodes:
+  upstream:
+    roadmap:s-stable-ids: e795d42e2ea0
+roadmap:s-federated-claims:
+  upstream:
+    roadmap:w-hash-pins-version: 2599d6a11d09
+roadmap:s-graph-drives-agent:
+  upstream:
+    roadmap:h-schema-gate: 73975b45eb8f
+roadmap:s-paper-compiler:
+  upstream:
+    roadmap:s-stable-ids: e795d42e2ea0
+    roadmap:s-tags: 4acbdb062b10
+roadmap:s-plugins:
+  upstream:
+    roadmap:p-small-kernel: f17ec54ba670
+roadmap:s-stable-ids:
+  upstream:
+    roadmap:p-small-kernel: f17ec54ba670
+    roadmap:w-hash-pins-version: 2599d6a11d09
+    roadmap:w-purge-breaks-links: 5a98bd626d26

@@ -77,7 +77,7 @@ a.tag:hover{text-decoration:none;filter:brightness(1.12);box-shadow:0 1px 3px rg
 a.tagline{color:var(--fg);display:inline}a.tagline:hover{text-decoration:none;background:#eef3fb}
 a.tagline .tag{margin-right:6px}a.tagline .kindword{font-weight:700;margin-right:3px}a.tagline .tl-text{border-bottom:1px dotted #8a94a6}
 .qhead{display:block;line-height:1.5}
-.qblock{margin:6px 0 18px}.qblock .answer{margin:4px 0 6px}.qblock ul{margin:4px 0}
+.qblock{margin:6px 0 18px}.qblock .answer{margin:4px 0 6px}.answer-note{font-size:13px;color:var(--muted);margin:14px 0 6px;font-style:italic}.answer-note+.answer{font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif;font-size:16.5px;line-height:1.6;background:var(--soft);border-radius:6px;padding:4px 16px}.qblock ul{margin:4px 0}
 article h2{position:relative}
 h1 .kind{display:block;font-size:15px;font-weight:700;letter-spacing:.02em;margin-bottom:2px}
 h1 .kind .ico{width:15px;height:15px;vertical-align:-2px;margin-right:5px}
@@ -99,7 +99,7 @@ a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decorati
 .cert-high{border-color:var(--ok);color:var(--ok)}.cert-moderate{border-color:#5b6475;color:#3b4252}.cert-low,.cert-very_low{border-color:var(--amber);color:var(--amber)}.prediction{margin:10px 0 4px;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--kc);border-radius:4px;background:#fbfbfd}.prediction dt{font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-top:4px}.prediction dd{margin:0 0 4px 0;font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif;font-size:16px}.s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
 .s-exploratory,.s-in_progress,.s-planned,.s-open,.s-inconclusive,.s-assumed,.s-questioned,.s-under_review{border-color:var(--amber);color:var(--amber)}
 .s-addressed{border-color:var(--ok);color:var(--ok)}
-.s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting,.s-harvest-requested{border-color:var(--accent);color:var(--accent)}.s-harvested{border-color:#2e9e5b;color:#1e6e3e}
+.s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting,.s-harvest-requested{border-color:var(--accent);color:var(--accent)}.s-harvested{border-color:#2e9e5b;color:#1e6e3e}.pill.s-waiting{background:#fff3c4;border-color:#b08800;color:#6b5000;font-weight:600}.pill.s-approved{border-color:#2e9e5b;color:#1e6e3e}.pill.s-recheck{background:#fdecea;border-color:#b3261e;color:#8c1d18;font-weight:600}.route{display:flex;flex-wrap:wrap;align-items:center;gap:6px 4px;margin:10px 0 14px;padding:12px 14px;background:var(--soft);border-radius:8px}.route-arrow{display:inline-flex;flex-direction:column;align-items:center;font-size:18px;color:var(--muted);line-height:1;padding:0 4px}.route-arrow span{font:600 10.5px system-ui,sans-serif;letter-spacing:.03em;color:var(--muted);margin-bottom:2px}.route-side td{white-space:normal}ol.route-steps li{margin:4px 0}
 .stab-flux{border-color:#f0a020;color:#8a5a00;background:#fff7e6}.stab-steady{color:var(--muted)}
 .stab-settled{border-color:var(--ok);color:var(--ok);background:#eefaf2}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px;vertical-align:middle;background:#c5cad3}
@@ -184,6 +184,16 @@ def status_pill(node: Node) -> str:
         html += (" " if html else "") + ("<span class='pill s-exploratory' title='Exploratory: the analysis was chosen "
                                          "after earlier results were seen; it suggests, and needs new data to confirm'>"
                                          "exploratory</span>")
+    if node.waiting:                 # pace: guided, the owner has not approved it yet (graph.py)
+        html += (" " if html else "") + ("<span class='pill s-waiting' title='Waiting for approval: the next step "
+                                         "builds on this page only after the owner approves it (Approve in the page "
+                                         "menu)'>waiting for approval</span>")
+    elif node.header.get("approved"):
+        html += (" " if html else "") + "<span class='pill s-approved' title='Approved by the owner'>approved</span>"
+    if node.recheck:                 # an upstream page changed; the agent has not yet rechecked this one (graph.py)
+        html += (" " if html else "") + (f"<span class='pill s-recheck' title='To recheck: {esc('; '.join(node.recheck))}. "
+                                         "A page it rests on changed after it was last checked; until Claude rechecks "
+                                         "it, treat it as possibly affected'>recheck</span>")
     return html
 
 
@@ -280,6 +290,8 @@ def status_row_class(node: Node) -> str:
     status = str(node.status or "")
     if status in BAD_STATUSES:
         return "st-bad"
+    if node.recheck:
+        return "st-mid"
     if analysis_of(node) == "exploratory":          # supported, but only by an analysis chosen after the fact
         return "st-mid"
     return "st-good" if status in GOOD_STATUSES else "st-mid" if status else ""

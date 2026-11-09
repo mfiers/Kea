@@ -448,11 +448,16 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         return JSONResponse({"threads": items, "you": reader_name(request), "tags": tags.site_vocabulary(site_dir),
                              "can_write": account.get("role") != "auditor", "account": bool(account)})
 
-    def tag_fields(body: dict, on_text: bool = False) -> dict:
-        """The tags of a request, checked against the site's tag list, and whether they are all mark tags."""
+    def tag_fields(body: dict, on_text: bool = False, new: bool = False) -> dict:
+        """The tags of a request, checked against the site's tag list, and whether they are all mark tags. A new
+        thread with a proposal (needs_text) needs its text: the proposal itself."""
         try:
             known = tags.site_vocabulary(site_dir)
             names = tags.check(body.get("tags"), known, on_text)
+            if new and not str(body.get("text") or "").strip():
+                wordless = [tag["label"] for tag in known["tags"] if tag["name"] in names and tag.get("needs_text")]
+                if wordless:
+                    raise tags.TagError(f"write your proposal ({', '.join(wordless)})")
         except tags.TagError as error:
             raise store.FeedbackError(str(error)) from error
         return {"tags": names, "mark": tags.is_mark(names, known)}
@@ -490,7 +495,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
     async def create_thread(request: Request) -> Response:
         try:
             body = await _body(request)
-            fields = tag_fields(body, on_text=bool(str(body.get("quote") or "").strip()))
+            fields = tag_fields(body, on_text=bool(str(body.get("quote") or "").strip()), new=True)
             # marks (manuscript tags) ask for no work, so they are taken also while comments are paused
             if not fields["mark"] and (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked

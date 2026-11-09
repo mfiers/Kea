@@ -9,6 +9,9 @@
   (`SITE_PASSWORD` in `.env`, never printed or committed). With a Kea hub (`remote:` in kea.yaml,
   `KEA_REMOTE_KEY` in .env): `kea publish` after every build; ask the owner before data files go up
   (`kea publish --files`).
+- Pace: one step along the route, then stop for the owner's review (experiment → questions → hypotheses and
+  planned steps → results → conclusions); go further only when the owner says so in chat. Approval goes on the
+  page (`approved:`, or a Confirm on the site); `kea context` names the next step.
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
   the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.
@@ -17,6 +20,8 @@
   --commit …` (it ends the harvest). Exit 20 (Implement) → `kea cycle start`, implement, run entry, replies with
   commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a
   plan item before Implement unless the owner asks in chat.
+- After any change, `kea recheck --list`: read every page downstream of a changed page against the change,
+  update it if it is even slightly affected, then `kea recheck <id> --because "…"`; releases wait for this.
 - Versions: MAJOR = a conclusion changes direction or is withdrawn; MINOR = new results or pages; PATCH = wording
   only; before 1.0 a major change counts as minor.
 - Figure captions: title, take-home, then per panel take-home / Shows / Method / Statistics, written by the figure

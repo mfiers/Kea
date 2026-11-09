@@ -11,7 +11,10 @@
     kea rrid                          check every resource's RRID against the SciCrunch resolver
     kea context <question|experiment> what to take into account before working on it (premises, decisions,
                                       caveats, evidence so far, open comments, gaps)
-    kea check                         validate doc/ against doc/_schema.yaml without building
+    kea check                         validate doc/ against doc/_schema.yaml and the graph rules without building
+    kea recheck --list | <id> … --because "…"
+                                      pages to recheck after an upstream change; record that one was checked
+    kea drop <id>                     what a Drop of that page removes (it and what rests only on it)
     kea lease status|take|release     one agent per project (take it at the start of a session)
     kea publish [--files]             send the built site to the project's Kea hub (kea.yaml remote:)
     kea hub init|add|list|passwords|rotate-key|remove|serve
@@ -45,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     if command == "rrid":
         from kea.docsite import rrid
         return rrid.main(rest)
+    if command == "drop":
+        from kea.docsite import graph
+        return graph.drop_main(rest)
+    if command == "recheck":
+        from kea.docsite import graph
+        return graph.main(rest)
     if command == "context":
         from kea.docsite import context
         return context.main(rest)
@@ -59,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         return server.main(rest)
     if command == "check":
         from kea.docsite.nodes import load_tree
-        tree = load_tree()
+        tree = load_tree(baseline=True)
         if "--fix" in rest:                       # write a permanent id (uid:) into every page without one
             from kea.docsite import identity
             changed = identity.add_missing(tree)

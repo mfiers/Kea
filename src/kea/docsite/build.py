@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a local build must lie inside the project folder (its data links point into it)")
     if site.is_relative_to(PROJECT_ROOT / "data") or site == PROJECT_ROOT or site in PROJECT_ROOT.parents:
         parser.error(f"refusing to build into {site}: it is the project, a parent of it, or inside data/")
-    tree = load_tree()
+    tree = load_tree(baseline=True)
     summary, problems = build_site(tree, site, args.mode, args.with_changelog, not args.no_pdf)
     for problem in problems:
         print(f"PROBLEM {problem}")

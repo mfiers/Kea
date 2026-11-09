@@ -5,4 +5,4 @@ artefacts, terms, references) become a static site with code and data pages, a c
 relations graph and semantic versions; readers comment and suggest edits; an agent folds the comments into a
 plan, implements it when a reader presses Implement, and releases a new version.
 """
-__version__ = "1.18.0"
+__version__ = "1.19.0"

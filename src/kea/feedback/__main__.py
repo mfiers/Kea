@@ -327,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
     cycle_parser.add_argument("--experiment", action="append", default=[], metavar="NAME=X.Y.Z",
                               help="release: also tag an experiment version (repeatable)")
     cycle_parser.add_argument("--no-tag", action="store_true", help="release: record only, do not create git tags")
+    cycle_parser.add_argument("--allow-recheck", default="", metavar="WHY",
+                              help="release although pages are still to recheck (say why here and in the run entry)")
     watch_parser = sub.add_parser("watch")
     watch_parser.add_argument("--deadline", type=parse_deadline, default=None,
                               help="epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time")
@@ -438,6 +440,13 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             if problem:
                 print(problem, file=sys.stderr)
                 return 1
+            if not args.allow_recheck:            # pages an upstream change may have affected (docsite/graph.py)
+                from kea.docsite.nodes import load_tree
+                waiting = load_tree().compromised
+                if waiting:
+                    print(f"{len(waiting)} page(s) to recheck after an upstream change before a release "
+                          "(kea recheck --list); --allow-recheck \"why\" releases anyway", file=sys.stderr)
+                    return 1
         try:
             current = client.append_cycle(kind, AUTHOR, run=args.run, commit=args.commit,
                                           version=args.version if args.action == "release" else "")
