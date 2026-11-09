@@ -7,17 +7,17 @@ Usage:
     kea show <thread>   one thread in full
     kea reply <thread> "text" [--status answered|page-changed|wont-fix] [--commit <sha>] [--note ..]
     kea status <thread> <status> [--commit <sha>] [--note ..]
-    kea list --unplanned        threads with activity after the last plan update
+    kea list --unplanned        threads not in the plan (activity after the moment the last harvest covers)
     kea cycle status|plan-updated|start|release [--run R --commit C]
         release also needs --version X.Y.Z --kind major|minor|patch --reason "…" [--experiment NAME=X.Y.Z …]
         and writes annotated git tags (vX.Y.Z, NAME/vX.Y.Z) on the release commit
-    kea watch --deadline <when> [--interval 5 --slow-interval 60 --quiet-after 3600 --settle 120 --report-every 3600]
-        waits (fast polling while readers are active, slow after an hour of quiet; comments are reported once a
-        burst has settled); exit 10 = comments to fold into the plan (while collecting, or on the plan while
-        frozen), 20 = a reader pressed "Implement the plan", 30 = deadline reached. <when> is epoch seconds, a
-        duration from now (90m, 12h, 3d) or an ISO date/time (2026-11-09T18:00, local time). Prints a status line
-        every --report-every seconds and writes only its heartbeat (data/feedback/watch_heartbeat.json, shown on
-        the plan page).
+    kea watch --deadline <when> [--interval 5 --slow-interval 60 --quiet-after 3600 --report-every 3600]
+        waits until a steerer asks for something (fast polling while readers are active, slow after an hour of
+        quiet); comments alone never wake it. Exit 10 = "Harvest comments" pressed: fold every comment not yet in
+        the plan into it and run `kea cycle plan-updated`, 20 = "Implement the plan" pressed, 30 = deadline
+        reached. <when> is epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time
+        (2026-11-09T18:00, local time). Prints a status line every --report-every seconds and writes only its
+        heartbeat (data/feedback/watch_heartbeat.json, shown on the plan page).
     kea watch --status  is a watcher running, when did it last look, what is it waiting for (exit 0 if alive, 1 if not)
     kea lease status|take|release [--force]
         one agent per project (feedback.agent): every command that writes (reply, status, cycle, watch,
@@ -64,14 +64,13 @@ def last_reader_activity(events_path: Path) -> float:
 
 
 def watch(args: argparse.Namespace) -> int:
-    """Wait for something to do; adaptive polling; writes nothing but its heartbeat.
+    """Wait for a steerer's request; adaptive polling; writes nothing but its heartbeat.
 
     Polls every --interval seconds while a reader was active in the last --quiet-after seconds, else every
-    --slow-interval. Comments to plan are reported only after --settle seconds without new reader activity,
-    so a burst of comments is folded in one pass. An Implement request is reported at once.
-    Exit 10 = comments to fold into the plan (also while frozen: comments on the plan), 20 = implement requested,
-    30 = deadline reached. Writes only the heartbeat file (unless --no-heartbeat) and a status line every
-    --report-every seconds, so whoever started it can see it is alive.
+    --slow-interval. Comments do not wake it (since 1.18): a long review round costs no agent time until someone
+    presses Harvest. Exit 10 = harvest requested, 20 = implement requested, 30 = deadline reached. Writes only the
+    heartbeat file (unless --no-heartbeat) and a status line every --report-every seconds, so whoever started it
+    can see it is alive.
     """
     started = last_report = time.time()
     polls = 0
@@ -105,20 +104,20 @@ def watch(args: argparse.Namespace) -> int:
         if time.time() - last_report >= args.report_every:
             last_report = time.time()
             print(f"watching: {time.strftime('%Y-%m-%d %H:%M')}, cycle {current.cycle} {current.state}, "
-                  f"{len(cycle.needs_planning(store.threads(args.events), current))} thread(s) waiting to be "
-                  f"planned (reported after {args.settle:.0f} s of quiet), {polls} polls so far, deadline "
+                  f"{len(cycle.needs_planning(store.threads(args.events), current))} thread(s) not in the plan "
+                  f"(harvested when a steerer asks), {polls} polls so far, deadline "
                   f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(args.deadline))}", flush=True)
         if current.state == "implement-requested":
             print(f"implement requested by {current.by} at {current.since} (cycle {current.cycle})")
             return leave("implementing", 20)
-        quiet_for = time.time() - last_reader_activity(args.events)
-        if current.state in cycle.PLAN_OPEN_STATES and quiet_for >= args.settle:
+        if current.state == "harvest-requested":
             waiting = cycle.needs_planning(store.threads(args.events), current)
             edits = cycle.direct_edits(current.plan_updated_at) if args.cycle_log == cycle.default_path() else []
-            if waiting or edits:
-                print(f"{len(waiting)} thread(s) and {len(edits)} direct edit commit(s) to fold into the plan of "
-                      f"cycle {current.cycle}")
-                return leave("planning", 10)
+            print(f"harvest requested by {current.by} at {current.since}: {len(waiting)} thread(s) and {len(edits)} "
+                  f"direct edit commit(s) to fold into the plan of cycle {current.cycle}; finish with "
+                  f"`kea cycle plan-updated --commit <sha>` (also when nothing was new)")
+            return leave("planning", 10)
+        quiet_for = time.time() - last_reader_activity(args.events)
         if time.time() >= args.deadline:
             print("deadline reached", flush=True)
             return leave("deadline", DEADLINE_EXIT)
@@ -338,8 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     watch_parser.add_argument("--quiet-after", type=float, default=3600, help="seconds without reader activity")
     watch_parser.add_argument("--no-heartbeat", dest="heartbeat", action="store_false",
                               help="do not write data/feedback/watch_heartbeat.json (shown on the plan page)")
-    watch_parser.add_argument("--settle", type=float, default=120,
-                              help="report comments only after this many seconds without new reader activity")
+    watch_parser.add_argument("--settle", type=float, default=120, help=argparse.SUPPRESS)   # unused since 1.18
     watch_parser.add_argument("--cycle-log", type=Path, default=cycle.default_path())
     show_parser = sub.add_parser("show")
     show_parser.add_argument("thread_id")

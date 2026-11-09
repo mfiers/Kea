@@ -42,7 +42,7 @@ def test_marks_are_not_open_and_turn_open_with_a_task_tag(tmp_path):
         store.append_event({"type": "create", "page": "p:a", "author": "ann"}, events)
 
 
-def test_server_takes_tags_checks_them_and_allows_marks_while_frozen(tmp_path):
+def test_server_takes_tags_checks_them_and_allows_marks_while_paused(tmp_path):
     site = tmp_path / "site"
     (site / "_feedback").mkdir(parents=True)
     (site / "index.html").write_text("<main>hi</main>")
@@ -56,7 +56,9 @@ def test_server_takes_tags_checks_them_and_allows_marks_while_frozen(tmp_path):
     assert refused.status_code == 400 and "unknown tag" in refused.json()["error"]
     task = client.post("/api/threads", json={"page": "p:a", "quote": "x", "tags": ["challenge"]}).json()["thread"]
     assert task["status"] == "open"
-    cycle.append("frozen", "ann", log)
+    cycle.append("harvest-requested", "ann", log)
+    cycle.append("plan-updated", "claude", log)
+    cycle.append("implement-requested", "ann", log)
     mark = client.post("/api/threads", json={"page": "p:a", "quote": "y", "tags": ["results"]})
     assert mark.status_code == 200 and mark.json()["thread"]["status"] == "marked"
     assert client.post("/api/threads", json={"page": "p:a", "text": "a comment"}).status_code == 423

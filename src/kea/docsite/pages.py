@@ -762,14 +762,16 @@ class SiteRenderer:
                      "comments then carry your ORCID iD). On a public site anyone can read the pages; "
                      "<b>Sign in to comment</b> shows the comments and lets you add yours.</li></ul>"
                      "<h2>Review cycles and the plan</h2><ul>"
-                     "<li>Comments, edits and tags are collected into the <a href='plan.html'>plan</a>. A reader who may "
-                     "steer presses <b>Freeze for review</b> (comments then only on the plan) and, when every comment "
-                     "is in it, <b>Implement</b>; the agent implements the plan, answers every comment and releases "
-                     "a new version (<a href='history.html'>Review cycles</a>).</li>"
+                     "<li>Comments, edits and tags wait until a reader who may steer presses <b>Harvest comments</b> "
+                     "on the <a href='plan.html'>plan</a> page; the agent then folds them into the plan, which stands "
+                     "until the next harvest. The plan page counts the comments made since; <b>Harvest again</b> adds "
+                     "them. <b>Implement the plan</b> pauses comments while the agent implements it, answers every "
+                     "comment in it and releases a new version (<a href='history.html'>Review cycles</a>); comments "
+                     "left out of the plan stay for the next cycle.</li>"
                      "<li>The plan page shows the agent's session: <i>watching</i> (with the time since its last "
                      "heartbeat), <i>working</i> on the plan, <i>ended</i>, or <i>stopped unexpectedly</i>; readers who "
                      "may steer then also see a red banner on every page. A blue banner offers a new version of the "
-                     "site; an amber one says the site is frozen or being implemented.</li></ul>")
+                     "site; an amber one says the plan is being implemented.</li></ul>")
         body += ("<h2>About Kea</h2><p>This site is built with Kea, a tool for documenting an analysis as typed, "
                  "commentable pages. More help, the page types in full and how to install it: "
                  "<a href='https://mfiers.github.io/Kea/#reading'>mfiers.github.io/Kea</a>.</p>")
@@ -842,8 +844,9 @@ class SiteRenderer:
             return html_body
 
         prefix = prefix_for("plan.html")
-        state_text = {"collecting": "phase 1, comments everywhere; Claude folds them into this plan",
-                      "frozen": "phase 2, frozen for review: comments only on this plan",
+        state_text = {"collecting": "collecting comments; Claude folds them into this plan when someone presses Harvest",
+                      "harvest-requested": "harvest requested: Claude is folding the comments into this plan",
+                      "harvested": "harvested: the plan stands until the next harvest; comments go on everywhere",
                       "implement-requested": "implementation requested",
                       "implementing": "being implemented"}.get(current.state, current.state)
         body = (crumbs([("Plan", None)], prefix)
@@ -864,12 +867,11 @@ class SiteRenderer:
         items = "".join(f"<li><a href='cycle-{number:03d}.html'>{esc(header.get('title', number))}</a> "
                         f"<span class='pill s-{esc(header.get('status', ''))}'>{esc(header.get('status', ''))}</span></li>"
                         for number, (header, _, _) in sorted(plans.items(), reverse=True))
-        body = (crumbs([("Plans", None)], prefix) + "<h1>Review cycles</h1><div class='short'>Each cycle has two "
-                "phases. Phase 1: readers comment anywhere and Claude folds the comments into one plan for the whole "
-                "site, grouped by experiment. Phase 2: a reader presses “Freeze for review”; comments are then possible "
-                "only on the plan, and the plan shows whether every comment is in it. Then “Implement the plan” "
-                "(Claude implements, writes the change log and releases a new version; comments reopen) or "
-                "“Unfreeze”.</div>"
+        body = (crumbs([("Plans", None)], prefix) + "<h1>Review cycles</h1><div class='short'>Readers comment "
+                "anywhere. A steerer presses “Harvest comments”: Claude folds every comment into one plan for the whole "
+                "site, grouped by experiment, and the plan stands until the next harvest; the plan page counts the "
+                "comments made since. Then “Implement the plan”: Claude implements it, writes the change log and "
+                "releases a new version; comments not in the plan stay for the next cycle.</div>"
                 f"<ul>{items or '<li class=help>no plans yet</li>'}</ul>")
         self.write("cycles/index.html", page("Review cycles", body, prefix, None, self.tree))
 

@@ -1,18 +1,23 @@
-"""Review cycles in two phases: comment everywhere → freeze (comments only on the plan) → implement → release.
+"""Review cycles: comment everywhere → a reader harvests the comments into a plan → implement → release.
 
 State is an append-only log, ``data/feedback/cycle.jsonl`` (one JSON event per line, never edited); the current
-state is the replay of all events. Transitions (cycle 1 item 8, 2026-11-05):
+state is the replay of all events. Transitions (since Kea 1.18, 2026-11-09):
 
-    collecting ──(reader presses "Freeze for review")──► frozen            comments only on the plan
-    frozen ──(reader presses "Unfreeze")──► collecting
-    frozen ──(reader presses "Implement the plan"; only when every comment is in the plan)──► implement-requested
-    implement-requested ──(reader cancels)──► frozen                       no comments at all
-    implement-requested ──(Claude starts)──► implementing                  no comments at all
+    collecting ──(steerer presses "Harvest comments")──► harvest-requested     comments everywhere
+    harvest-requested ──(Claude folds the comments: plan-updated)──► harvested  the plan stands until the next harvest
+    harvested ──(steerer presses "Harvest comments" again)──► harvest-requested
+    harvested ──(steerer presses "Implement the plan")──► implement-requested   no comments
+    implement-requested / harvest-requested ──(steerer cancels)──► the state before
+    implement-requested ──(Claude starts)──► implementing                       no comments
     implementing ──(Claude releases: run id + commit)──► collecting, next cycle number
 
-Before 2026-11-05 a reader could request implementation directly from collecting (and cancel back to it); old
-logs still replay the same way. ``plan-updated`` events record when Claude last folded the comments into the
-plan (doc/_cycles/<cycle>.md): threads touched after that moment still need planning.
+Claude is woken only by a harvest or an Implement, never by a comment: a long review round costs no agent time
+until a steerer asks for the plan. Comments made after a harvest are counted on the plan page ("not in the plan");
+on Implement they stay for the next cycle.
+
+Older logs replay too: ``frozen`` (Freeze for review, before 1.18) reads as harvested, ``unfrozen`` as collecting.
+``plan-updated`` records when Claude last folded the comments into the plan (doc/_cycles/<cycle>.md); threads with
+activity after the harvest request it answered still need planning.
 
 Input: nothing (the log is created on first write). Output: the log; :func:`state` for server, CLI and builder.
 """
@@ -30,17 +35,17 @@ from typing import Any
 from kea.config import FEEDBACK_DIR, PROJECT_ROOT
 from kea.feedback.store import FeedbackError, now_iso
 
-EVENT_TYPES = ("plan-updated", "frozen", "unfrozen", "implement-requested", "cancelled", "implementing", "released")
-FROZEN_STATES = ("frozen", "implement-requested", "implementing")     # comments refused (except on the plan, below)
-PLAN_OPEN_STATES = ("collecting", "frozen")                           # comments on the plan page accepted
+EVENT_TYPES = ("plan-updated", "harvest-requested", "implement-requested", "cancelled", "implementing", "released")
+LEGACY_EVENTS = ("frozen", "unfrozen")                                 # replayed, no longer written
+PAUSED_STATES = ("implement-requested", "implementing")               # comments refused everywhere
+FROZEN_STATES = PAUSED_STATES                                          # the old name
 PLAN_PAGE_PREFIX = "plan/"
 ALLOWED = {  # event type -> states in which it may happen
-    "plan-updated": ("collecting", "frozen"),
-    "frozen": ("collecting",),
-    "unfrozen": ("frozen",),
-    "implement-requested": ("frozen",),
-    "cancelled": ("implement-requested",),
-    "implementing": ("implement-requested", "frozen", "collecting"),   # Claude may also start when asked in chat
+    "plan-updated": ("collecting", "harvest-requested", "harvested"),  # also when the owner asks in chat
+    "harvest-requested": ("collecting", "harvested"),
+    "implement-requested": ("harvested",),
+    "cancelled": ("implement-requested", "harvest-requested"),
+    "implementing": ("implement-requested", "harvested", "harvest-requested", "collecting"),   # or asked in chat
     "released": ("implementing",),
 }
 _lock = threading.Lock()
@@ -57,19 +62,20 @@ class CycleState:
     since: str = ""                   # time of the last transition
     by: str = ""                      # who made the last transition
     plan_updated_at: str = ""         # last plan-updated event in this cycle
+    harvested_until: str = ""         # activity up to this moment is in the plan (the harvest request it answered)
+    harvest_requested_at: str = ""    # the pending harvest request
     plan_commit: str = ""
     last_release: dict | None = None  # {cycle, run, commit, at}
-    requested_from: str = ""          # state before implement-requested (cancel returns there)
+    requested_from: str = ""          # state before a request (cancel returns there)
 
     @property
     def frozen(self) -> bool:
-        return self.state in FROZEN_STATES
+        """Comments paused (Implement requested or running)."""
+        return self.state in PAUSED_STATES
 
     def accepts_comments_on(self, page_key: str) -> bool:
         """Whether a new comment, reply or status change on this page key is accepted now."""
-        if self.state == "collecting":
-            return True
-        return self.state in PLAN_OPEN_STATES and page_key.startswith(PLAN_PAGE_PREFIX)
+        return self.state not in PAUSED_STATES
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -87,29 +93,41 @@ def load_events(path: Path | None = None) -> list[dict[str, Any]]:
 def fold(events: list[dict[str, Any]]) -> CycleState:
     current = CycleState()
     for event in events:
-        kind = event.get("type")
+        kind, at = event.get("type"), event.get("at", "")
         if kind == "plan-updated":
-            current.plan_updated_at, current.plan_commit = event.get("at", ""), event.get("commit", "")
+            current.plan_updated_at, current.plan_commit = at, event.get("commit", "")
+            # a harvest covers what was there when it was asked for (later comments may not have been read)
+            current.harvested_until = current.harvest_requested_at or at
+            current.harvest_requested_at = ""
+            if current.state in ("collecting", "harvest-requested"):
+                current.state = "harvested"
             continue
-        current.since, current.by = event.get("at", ""), event.get("by", "")
-        if kind == "implement-requested":
+        current.since, current.by = at, event.get("by", "")
+        if kind in ("implement-requested", "harvest-requested"):
             current.requested_from = current.state
-            current.state = "implement-requested"
-        elif kind == "frozen":
-            current.state = "frozen"
+            current.state = kind
+            if kind == "harvest-requested":
+                current.harvest_requested_at = at
+        elif kind == "frozen":                           # before 1.18: Freeze for review
+            current.state = "harvested"
         elif kind == "unfrozen":
             current.state = "collecting"
         elif kind == "cancelled":
-            current.state = current.requested_from or "collecting"   # old logs: back to collecting
+            if current.state == "harvest-requested":
+                current.harvest_requested_at = ""
+            current.state = current.requested_from or "collecting"
+            if current.state == "frozen":                # a request made while frozen (before 1.18)
+                current.state = "harvested"
         elif kind == "implementing":
             current.state = "implementing"
         elif kind == "released":
             current.last_release = {"cycle": current.cycle, "run": event.get("run", ""),
-                                    "commit": event.get("commit", ""), "at": event.get("at", ""),
+                                    "commit": event.get("commit", ""), "at": at,
                                     "version": event.get("version", "")}
             current.cycle += 1
             current.state = "collecting"
-            current.plan_updated_at, current.plan_commit = "", ""
+            current.plan_updated_at = current.plan_commit = current.harvested_until = ""
+            current.harvest_requested_at = ""
     return current
 
 
@@ -252,9 +270,31 @@ def read_heartbeat(path: Path | None = None) -> str:
 
 
 def needs_planning(threads: list, current: CycleState) -> list:
-    """Threads needing attention with activity after the last plan update of this cycle."""
-    return [thread for thread in threads if needs_attention(thread)
-            and (not current.plan_updated_at or last_activity(thread) > current.plan_updated_at)]
+    """Threads not in the plan: needing attention, with activity after the moment the last harvest covers."""
+    cutoff = current.harvested_until or current.plan_updated_at
+    if not cutoff:
+        return [thread for thread in threads if needs_attention(thread)]
+    if not current.harvested_until:              # a plan updated without a harvest (asked in chat): as before 1.18
+        return [thread for thread in threads if needs_attention(thread) and last_activity(thread) > cutoff]
+    # after a harvest: what readers did from the moment of the request on (one-second timestamps: the same second
+    # counts as later, so nothing is missed); Claude's own replies and status changes do not count
+    return [thread for thread in threads if needs_attention(thread) and reader_activity(thread) >= cutoff
+            and not claude_activity(thread) > reader_activity(thread)]
+
+
+def claude_activity(thread) -> str:
+    """Claude's last reply or status change on the thread ('' if none)."""
+    times = [reply.created_at for reply in thread.replies if reply.author == "claude"]
+    if thread.status_by == "claude":
+        times.append(thread.status_at)
+    return max((time for time in times if time), default="")
+
+
+def reader_activity(thread) -> str:
+    times = [thread.created_at] + [reply.created_at for reply in thread.replies if reply.author != "claude"]
+    if thread.status_by and thread.status_by != "claude":
+        times.append(thread.status_at)
+    return max(time for time in times if time)
 
 
 AGENT_TRAILER = re.compile(r"^Run:\s*\S+", flags=re.M)   # every agent commit names its run (see the skill)

@@ -2,10 +2,10 @@
  *
  * - Polls the server every POLL_MS. Without a server (file:// or plain hosting) it does nothing.
  * - When a new site build has been released, offers a reload (and reloads by itself if nothing is being typed).
- * - Two phases (cycle 1 item 8): while collecting, comments everywhere; after "Freeze for review", comments only
- *   on the plan; then "Implement the plan" (enabled only when every comment is in the plan) or "Unfreeze".
- *   While frozen, requested or implementing, a banner shows on every page and the comment controls are hidden
- *   where comments are not accepted (the server refuses them with 423 anyway).
+ * - The cycle (feedback/cycle.py, since 1.18): comments everywhere; a steerer presses "Harvest comments" and
+ *   Claude folds them into the plan, which then stands until the next harvest; the plan page counts the comments
+ *   made since; "Implement the plan" (after a harvest) pauses comments until the release (a banner on every page,
+ *   comment controls hidden; the server refuses them with 423 anyway).
  * - On the plan page (#fb-plan-actions) shows the buttons and a live indicator: are all comments in the plan,
  *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
  *   since the last heartbeat. When the session stopped unexpectedly ("gone"), readers who may steer get a banner
@@ -57,7 +57,7 @@
   }
   window.addEventListener("resize", bannerOffset);
 
-  // Freeze, Unfreeze, Implement and Cancel need the iteration password (a second password besides the site's);
+  // Harvest, Implement and Cancel need the iteration password (a second password besides the site's);
   // the server answers 403 {need_steer: true} until it has been entered once (a cookie remembers it).
   function askSteerPassword() {
     return new Promise(resolve => {
@@ -65,8 +65,8 @@
       const error = el("p", { class: "fb-steer-error" });
       const dialog = el("dialog", { class: "fb-steer not-annotatable" },
         el("p", {}, el("strong", {}, "Iteration password")),
-        el("p", { class: "fb-steer-help" }, "Starting or stopping a review round and asking Claude to implement the " +
-          "plan need the iteration password (not the site password). Ask the site owner for it."),
+        el("p", { class: "fb-steer-help" }, "Harvesting the comments into the plan and asking Claude to implement it " +
+          "need the iteration password (not the site password). Ask the site owner for it."),
         input, error,
         el("div", { class: "fb-steer-buttons" },
           el("button", { class: "fb-secondary", onclick: () => { dialog.close(); resolve(false); } }, "Cancel"),
@@ -110,7 +110,7 @@
     const watcher = status.watcher || { state: "none" };
     const last = watcher.seen_at ? `last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)})` : "";
     const until = deadlineText(watcher);
-    const doing = { planning: "folding new comments into the plan", implementing: "implementing the plan" }[watcher.exit] || watcher.exit;
+    const doing = { planning: "harvesting the comments into the plan", implementing: "implementing the plan" }[watcher.exit] || watcher.exit;
     const parts = {
       none: ["○", "Claude's watcher has not run on this site yet."],
       watching: ["●", `Claude is watching: ${last}.` + (until ? ` Session until ${until}.` : "")],
@@ -126,13 +126,14 @@
 
   function indicator(status) {
     const waiting = status.unplanned || 0;
-    const watching = status.watcher ? status.watcher.state === "watching" : false;
+    const harvested = !!status.cycle.plan_updated_at;
     if (waiting === 0) {
-      return el("div", { class: "fb-indicator fb-ok" }, el("b", {}, "All comments are in this plan."));
+      return el("div", { class: "fb-indicator fb-ok" }, el("b", {}, harvested ? "Every comment is in this plan." : "No comments yet."));
     }
     return el("div", { class: "fb-indicator fb-wait" },
-      el("b", {}, `${waiting} comment(s) are not in the plan yet. `),
-      watching ? "Claude adds them about two minutes after the last comment." : "");
+      el("b", {}, `${waiting} comment(s) not in the plan. `),
+      harvested ? `Made after the harvest of ${when(status.cycle.harvested_until || status.cycle.plan_updated_at)}: Harvest again to add them, or they stay for the next cycle.`
+        : "Claude adds them when someone presses Harvest.");
   }
 
   function planActions(status) {
@@ -141,23 +142,29 @@
     const state = status.cycle.state;
     const items = Number(box.dataset.items || 0);
     const waiting = status.unplanned || 0;
+    const watching = status.watcher && ["watching", "working"].includes(status.watcher.state);
+    const harvest = (label, title, main) => el("button", { class: main ? "fb-implement" : "fb-secondary",
+      onclick: () => post("harvest"), title }, label);
     box.replaceChildren(sessionLine(status));
     if (state === "collecting") {
       box.append(indicator(status),
-        el("button", { class: "fb-implement", onclick: () => post("freeze"),
-          title: "Comments only on this plan until Implement or Unfreeze" }, "Freeze for review"),
-        el("span", { class: "fb-help" }, " Phase 1 of 2: comments everywhere; Claude folds them into this plan. "
-          + "Freeze when you are done commenting: then only this plan can be commented on."));
-    } else if (state === "frozen") {
-      const ready = waiting === 0 && items > 0;
+        harvest("Harvest comments", "Claude folds every comment not yet in the plan into it", waiting > 0),
+        el("span", { class: "fb-help" }, " Comment anywhere; Claude reads nothing until someone presses Harvest. "
+          + "After the harvest the plan stands, and you can Implement it." + (watching ? "" : " No Claude session is watching now: the harvest waits for the next one.")));
+    } else if (state === "harvest-requested") {
+      box.append(indicator(status),
+        el("button", { class: "fb-secondary", onclick: () => post("cancel") }, "Cancel the harvest"),
+        el("span", { class: "fb-help" }, ` Harvest asked by ${status.cycle.by} (${when(status.cycle.since)}); Claude is folding the comments into this plan.`
+          + (watching ? "" : " No Claude session is watching now: the harvest waits for the next one.")));
+    } else if (state === "harvested") {
       box.append(indicator(status),
         el("button", { class: "fb-implement", onclick: () => {
-          if (confirm("Ask Claude to implement this plan now? No comments are possible until the new version is released.")) post("implement");
-        }, ...(ready ? {} : { disabled: "disabled" }) }, "Implement the plan"),
-        el("button", { class: "fb-secondary", onclick: () => post("unfreeze") }, "Unfreeze"),
-        el("span", { class: "fb-help" }, ` Phase 2 of 2: frozen by ${status.cycle.by} (${when(status.cycle.since)}); comments only on this plan. `
-          + (ready ? "Implement, or Unfreeze to comment everywhere again."
-             : items ? "Implement is possible once every comment is in the plan." : "Nothing to implement yet.")));
+          const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next cycle.` : "";
+          if (confirm("Ask Claude to implement this plan now? Comments are paused until the new version is released." + left)) post("implement");
+        }, ...(items ? {} : { disabled: "disabled" }) }, "Implement the plan"),
+        harvest(waiting ? `Harvest again (${waiting})` : "Harvest again", "Fold the comments made since the last harvest into the plan"),
+        el("span", { class: "fb-help" }, ` Harvested ${when(status.cycle.plan_updated_at)}; the plan stands until the next harvest. `
+          + (items ? "" : "Nothing to implement yet.")));
     } else if (state === "implement-requested") {
       box.append(el("button", { class: "fb-secondary", onclick: () => post("cancel") }, "Cancel the request"),
         el("span", { class: "fb-help" }, ` Requested by ${status.cycle.by} (${when(status.cycle.since)}); Claude has not started yet.`));
@@ -185,15 +192,11 @@
   function apply(status) {
     const cycle = status.cycle;
     const onPlan = !!document.getElementById("fb-plan-actions");
-    const commentsHere = cycle.state === "collecting" || (cycle.state === "frozen" && onPlan);
+    const commentsHere = !["implement-requested", "implementing"].includes(cycle.state);
     document.body.classList.toggle("fb-frozen", !commentsHere);
     const newBuild = status.build && status.build.build_id && BUILD && status.build.build_id !== BUILD;
     if (goneBanner(status)) {
       /* shown: more urgent than the cycle banners for whoever can restart the session */
-    } else if (cycle.state === "frozen") {
-      showBanner("frozen", el("b", {}, "Frozen for review. "),
-        `${cycle.by} froze the site (${when(cycle.since)}); comments are open only on the plan. `,
-        el("a", { href: PREFIX + "plan.html" }, "Go to the plan"), ".");
     } else if (cycle.state === "implement-requested") {
       showBanner("frozen", el("b", {}, "Comments are paused. "),
         `${cycle.by} asked Claude to implement the plan (${when(cycle.since)}). `,
@@ -210,7 +213,6 @@
     } else {
       hideBanner();
     }
-    if (newBuild && cycle.state === "frozen" && onPlan && !typing()) { location.reload(); return; }
     const pill = document.getElementById("fb-plan-state");
     if (pill && pill.textContent !== "implemented") {
       pill.textContent = cycle.state;

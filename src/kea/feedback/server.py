@@ -10,32 +10,30 @@ What it does:
       of every comment from it;
     * stores comments through feedback.store (append-only data/feedback/events.jsonl).
 
-Review cycle (feedback.cycle): while the site is frozen for review, new comments, replies and status changes
-are accepted only on the plan pages (plan/…); while implementation is requested or running, nowhere. Refusals
-are HTTP 423.
+Review cycle (feedback.cycle): comments everywhere until a steerer asks Claude to implement the plan; while
+implementation is requested or running, new comments, replies and status changes are refused (HTTP 423).
 
 API (JSON):
     GET  /api/threads?page=<path>   threads of one page (all pages without ?page=)
     POST /api/threads               {page, page_title, page_commit, quote, prefix, suffix, start, end, text, tags}
                                     (text optional with tags; tags checked against the site's _feedback/tags.json)
     POST /api/threads/<id>/reply    {text}
-    POST /api/threads/<id>/tags     {tags}: replace the thread's tags (marks may change while frozen)
+    POST /api/threads/<id>/tags     {tags}: replace the thread's tags (marks may change while comments are paused)
     GET  /id/<uid>                  redirect to the page with that permanent id (/id/<uid>.json: its public facts)
     POST /api/threads/<id>/status   {status, note}   (readers may set resolved or open)
     GET  /api/status                cycle state, site build id, comment counts (polled by every page)
     GET  /api/source?page=<key>     the Markdown source of a documentation page (for the editor)
     POST /api/suggest               {page, page_title, text, new_text}: a suggested edit, stored as a thread with the
                                     diff; files are never written by the server
-    POST /api/cycle/freeze          a reader freezes the site for review (comments only on the plan)
-    POST /api/cycle/unfreeze        back to comments everywhere
-    POST /api/cycle/implement       a reader asks Claude to implement the plan (only from frozen, and only when
-                                    every comment is in the plan: 409 otherwise)
-    POST /api/cycle/cancel          a reader withdraws that request (before Claude has started; back to frozen)
+    POST /api/cycle/harvest         a steerer asks Claude to fold the comments not yet in the plan into it
+    POST /api/cycle/implement       a steerer asks Claude to implement the plan (only after a harvest; comments
+                                    made since stay for the next cycle)
+    POST /api/cycle/cancel          a steerer withdraws a request Claude has not started on
     POST /api/steer                 {password}: the iteration password; when one is set (SITE_STEER_PASSWORD, or the
                                     hub's per-project one) the four cycle actions need it (403 {need_steer} without)
 
 Two passwords: the site password makes a reader a commenter; the iteration password (optional locally, always on
-the hub) also lets them freeze, unfreeze, ask Claude to implement the plan, or cancel that request.
+the hub) also lets them harvest the comments into the plan, ask Claude to implement it, or cancel a request.
 All paths are relative to the site root, so the same app serves a project under a prefix (kea hub: /p/<name>/).
 
 Usage: kea serve [--host <ip>] [--port <port>]   (defaults from kea.yaml)
@@ -258,9 +256,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         current = cycle.state(cycle_path)
         if current.accepts_comments_on(page_key):
             return None
-        message = ("the site is frozen for review: comments are open only on the plan"
-                   if current.state == "frozen" else
-                   f"comments are paused while the plan is implemented ({current.state})")
+        message = f"comments are paused while the plan is implemented ({current.state})"
         return JSONResponse({"error": message}, status_code=423)
 
     def page_of_thread(thread_id: str) -> str:
@@ -328,15 +324,10 @@ def make_site_app(spec: SiteSpec) -> Starlette:
             return JSONResponse({"error": "this needs the iteration password", "need_steer": True}, status_code=403)
         try:
             name = _author(request)
-            kind = {"freeze": "frozen", "unfreeze": "unfrozen", "implement": "implement-requested",
+            kind = {"harvest": "harvest-requested", "implement": "implement-requested",
                     "cancel": "cancelled"}.get(action)
             if kind is None:
                 raise store.FeedbackError("unknown action")
-            if kind == "implement-requested":
-                waiting = cycle.needs_planning(store.threads(events_path), cycle.state(cycle_path))
-                if waiting:
-                    raise store.FeedbackError(f"{len(waiting)} comment(s) are not in the plan yet; "
-                                              "wait until Claude has added them")
             current = cycle.append(kind, name, cycle_path)
         except store.FeedbackError as error:
             return JSONResponse({"error": str(error)}, status_code=409)
@@ -485,7 +476,7 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         try:
             body = await _body(request)
             fields = tag_fields(body, on_text=bool(str(body.get("quote") or "").strip()))
-            # marks (manuscript tags) ask for no work, so they are taken also while the cycle is frozen
+            # marks (manuscript tags) ask for no work, so they are taken also while comments are paused
             if not fields["mark"] and (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked
             event = await append(request, {**{key: body.get(key) for key in (
@@ -676,7 +667,7 @@ def main(argv: list[str] | None = None) -> int:
 
     steer = "" if args.no_password else os.environ.get("SITE_STEER_PASSWORD", "")
     if not steer and not args.no_password:
-        print("note: no SITE_STEER_PASSWORD in .env: every signed-in reader may freeze the site and ask Claude to "
+        print("note: no SITE_STEER_PASSWORD in .env: every signed-in reader may harvest comments and ask Claude to "
               "implement the plan")
     uvicorn.run(make_app(args.site, args.events, password, args.cycle, steer_password=steer), host=args.host,
                 port=args.port, log_level="warning")

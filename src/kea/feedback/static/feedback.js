@@ -323,10 +323,20 @@
       items.append(el("span", { class: "fb-dock-gap" }), confirm, reject, el("span", { class: "fb-dock-gap" }), next, manuscript);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
-      onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open)); setDockOpen(open); dockPop.hidden = true; } },
+      onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
+        if (!window.matchMedia("(max-width: 760px)").matches) setDockOpen(open); dockPop.hidden = true; } },
       el("img", { src: BASE + "_assets/kea-badge-96.png", alt: "Kea", width: "46", height: "46" }));
-    items.hidden = !dockOpen();
+    const fold = () => { if (items.hidden) return; items.hidden = true; head.setAttribute("aria-expanded", "false"); dockPop.hidden = true; };
+    // phones: the buttons cover the text, so the dock starts folded and folds again on a scroll or a tap elsewhere
+    // (the stored choice holds on wide screens only)
+    const small = window.matchMedia("(max-width: 760px)").matches;
+    items.hidden = small || !dockOpen();
     head.setAttribute("aria-expanded", String(!items.hidden));
+    if (small) {
+      let lastY = window.scrollY;
+      window.addEventListener("scroll", () => { if (Math.abs(window.scrollY - lastY) > 40 && dockPop.hidden) fold(); lastY = window.scrollY; }, { passive: true });
+      document.addEventListener("pointerdown", event => { if (!dock.contains(event.target) && !dockPop.contains(event.target)) fold(); });
+    }
     dock.append(head, items);                  // the head on top of the column; folded, it drops to the corner
     return dock;
   }
@@ -729,9 +739,9 @@
           : "Suggest an edit of one section"), " ",
           el("code", {}, source.path), section && section.selection === undefined
             ? el("span", {}, " · section “" + section.title.replace(/edit section$/, "").trim() + "”") : null,
-          el("span", { class: "fb-help" }, " · version " + source.commit),
+          el("span", { class: "fb-help fb-ed-version" }, " · version " + source.commit),
           modeButtons.length ? el("span", { class: "fb-ed-modes" }, ...modeButtons) : null),
-        el("p", { class: "fb-help" }, "Your edit is saved as a comment with the changes shown as a diff; the page itself is "
+        el("p", { class: "fb-help fb-ed-about" }, "Your edit is saved as a comment with the changes shown as a diff; the page itself is "
           + "not changed. Claude takes it into the plan of the review cycle, merges it, checks every number against its "
           + "source file and commits it with you as co-author."),
         el("div", { class: "fb-editor-panes" }, el("div", { class: "fb-ed-left" }, textPane, rawPane), preview),

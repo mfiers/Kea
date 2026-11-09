@@ -83,10 +83,10 @@ def test_agent_api_lease_publish_and_events(demo):
     assert created.status_code == 200
     thread_id = created.json()["thread"]["thread_id"]
     # cycle actions need the iteration password
-    assert client.post("/p/demo/api/cycle/freeze").json()["need_steer"] is True
+    assert client.post("/p/demo/api/cycle/harvest").json()["need_steer"] is True
     assert client.post("/p/demo/api/steer", json={"password": "nope"}).status_code == 403
     assert client.post("/p/demo/api/steer", json={"password": secrets["iteration_password"]}).status_code == 200
-    assert client.post("/p/demo/api/cycle/freeze").status_code == 200
+    assert client.post("/p/demo/api/cycle/harvest").status_code == 200
     # the agent replies through the API, written as claude; readers cannot pose as claude
     reply = client.post("/p/demo/hub/events", headers=agent_headers(key),
                         json={"log": "events", "event": {"type": "reply", "thread_id": thread_id, "text": "because",
@@ -343,9 +343,9 @@ def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
     assert menu["signed_in"] and menu["account"] and menu["orcid"] == orcid and menu["sign_out"] == "/auth/logout"
     created = site.post("/api/threads", json={"page": "x:r-a", "text": "A question"}).json()["thread"]
     assert created["author"] == "Josiah Carberry" and created["author_id"] == orcid
-    assert site.post("/api/cycle/freeze", json={}).status_code == 403                        # commenter may not steer
+    assert site.post("/api/cycle/harvest", json={}).status_code == 403                        # commenter may not steer
     assert hub.main(["--dir", str(the_hub.folder), "users", "role", orcid, "steerer", "--project", "demo"]) == 0
-    assert site.post("/api/cycle/freeze", json={}).status_code == 200
+    assert site.post("/api/cycle/harvest", json={}).status_code == 200
     # the demo session does not open the other project; a write from another origin is refused
     other_site = TestClient(app, base_url="https://other.keahub.example")
     other_site.cookies.set(accounts.SITE_COOKIE, site.cookies.get(accounts.SITE_COOKIE))
@@ -358,7 +358,7 @@ def test_orcid_sign_in_approval_roles_and_isolation(demo, monkeypatch):
     assert listed.status_code == 200 and listed.json()["can_write"] is False and listed.json()["threads"]
     refused = site.post("/api/threads", json={"page": "x:r-a", "text": "more"})
     assert refused.status_code == 403 and refused.json()["read_only"] is True
-    assert site.post("/api/cycle/freeze", json={}).status_code == 403
+    assert site.post("/api/cycle/harvest", json={}).status_code == 403
     assert hub.main(["--dir", str(the_hub.folder), "users", "block", orcid]) == 0
     assert site.get("/api/threads").status_code == 401
 

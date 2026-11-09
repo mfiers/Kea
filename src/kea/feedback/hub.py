@@ -12,7 +12,7 @@ On the hub machine (behind an https reverse proxy; the hub itself listens on loc
     kea hub remove <name>                   moves the project to <dir>/removed/ (nothing is deleted)
     kea hub serve [--host 127.0.0.1 --port 8300] [--log events|requests]
                                             --log events: one line per publish, lease change, sign-in, refused key,
-                                            unknown site and reader action (comment, tag, freeze, implement);
+                                            unknown site and reader action (comment, tag, harvest, implement);
                                             --log requests: also every request. Query strings are never logged.
 The hub folder is taken from --dir, else KEA_HUB_DIR, else ~/kea-hub.
 
@@ -21,7 +21,7 @@ then `kea publish` sends the built site and `kea watch`, `kea list`, `kea reply`
 (feedback.backend).
 
 Readers: https://kea.example.org/p/<name>/ ; the site password makes them commenters (any name they like), the
-iteration password also lets them freeze the site, unfreeze it, and ask Claude to implement the plan.
+iteration password also lets them harvest the comments into the plan and ask Claude to implement it.
 
 Addresses: with hub.yaml `project_domain: keahub.eu` every project is served at https://<name>.keahub.eu/ (one
 wildcard certificate at the proxy); https://keahub.eu/p/<name>/<page> redirects there, the agent API stays at
@@ -842,7 +842,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"project {args.name}: {url}/p/{args.name}/\n\n"
               f"  project key (for the project's .env, KEA_REMOTE_KEY=…; shown once):\n    {secrets_out['key']}\n"
               f"  site password (readers; they comment under any name):\n    {secrets_out['site_password']}\n"
-              f"  iteration password (also freeze / implement):\n    {secrets_out['iteration_password']}\n\n"
+              f"  iteration password (also harvest / implement):\n    {secrets_out['iteration_password']}\n\n"
               f"In the project's kea.yaml:\n  remote:\n    url: {url}\n    project: {args.name}\n"
               "The hub stores only hashes: write these down now.")
         return 0

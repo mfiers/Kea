@@ -99,7 +99,7 @@ a.term{color:inherit;border-bottom:1px dotted #8a94a6}a.term:hover{text-decorati
 .cert-high{border-color:var(--ok);color:var(--ok)}.cert-moderate{border-color:#5b6475;color:#3b4252}.cert-low,.cert-very_low{border-color:var(--amber);color:var(--amber)}.prediction{margin:10px 0 4px;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--kc);border-radius:4px;background:#fbfbfd}.prediction dt{font:700 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b7488;margin-top:4px}.prediction dd{margin:0 0 4px 0;font-family:Charter,'Bitstream Charter','Sitka Text',Cambria,Georgia,serif;font-size:16px}.s-not_supported,.s-deprecated,.s-dropped,.s-superseded{border-color:var(--warn);color:var(--warn)}
 .s-exploratory,.s-in_progress,.s-planned,.s-open,.s-inconclusive,.s-assumed,.s-questioned,.s-under_review{border-color:var(--amber);color:var(--amber)}
 .s-addressed{border-color:var(--ok);color:var(--ok)}
-.s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting{border-color:var(--accent);color:var(--accent)}
+.s-frozen,.s-implement-requested,.s-implementing{border-color:#c0392b;color:#c0392b}.s-collecting,.s-harvest-requested{border-color:var(--accent);color:var(--accent)}.s-harvested{border-color:#2e9e5b;color:#1e6e3e}
 .stab-flux{border-color:#f0a020;color:#8a5a00;background:#fff7e6}.stab-steady{color:var(--muted)}
 .stab-settled{border-color:var(--ok);color:var(--ok);background:#eefaf2}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px;vertical-align:middle;background:#c5cad3}
@@ -137,6 +137,14 @@ details.tree summary{cursor:pointer}details.tree{margin-left:14px}ul.tree{list-s
 .code-table{border:0;display:table}.code-table td{border:0;padding:0 6px}
 .hll{background:#fff3b0}
 @media (max-width:640px){main{padding:10px 14px 50px}.thumb{grid-template-columns:1fr}h1{font-size:21px}}
+/* small screens: each row of a page table becomes a card (page and status on one line, the summary under it) */
+@media (max-width:640px){
+table.nodes,table.nodes tbody{display:block;border:0;margin:8px 0 4px}table.nodes colgroup,table.nodes tr:has(th){display:none}
+table.nodes tr{display:grid;grid-template-columns:1fr auto;gap:2px 10px;border:1px solid var(--line);border-left:4px solid var(--line);border-radius:7px;padding:7px 10px;margin:0 0 7px;background:#fff}
+table.nodes td{display:block;border:0;padding:0;background:none!important}
+table.nodes td:nth-child(2){grid-column:1/-1;grid-row:2;font-size:14px;color:#3b4252}table.nodes td:nth-child(2):empty{display:none}
+table.nodes td:last-child{text-align:right;white-space:nowrap}
+table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-left-color:#5f2120}table.nodes tr.st-mid{border-left-color:#e0a030}}
 """
 
 
@@ -326,7 +334,7 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
     # Four entries: Map, Plan, History, PDF (Help is the kea logo). Map and History are groups whose own pages
     # unfold next to them in the bar while the reader is on one of them (TOPBAR_JS marks the current link):
     #   Map: Relations, Objects (lists of all pages by type; under it Data and Code)
-    #   Plan: the plan of the current review cycle, on its own (what readers act on: freeze, implement)
+    #   Plan: the plan of the current review cycle, on its own (what readers act on: harvest, implement)
     #   History: what changed per session (the group's own page), Review cycles, Comments
     # Map, Relations and Objects open the current experiment's pages, the only experiment's on a site with one.
     experiments = list(tree.projects) if tree else []

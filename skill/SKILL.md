@@ -1,6 +1,6 @@
 ---
 name: kea
-description: Set up and run a Kea site for a data analysis, and run the analysis through it. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, resources, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs two-phase review cycles (collect → freeze → implement → release). Use when the user says "use Kea", wants an explained, commentable project site, wants to review or discuss an analysis with others, asks to set up kea in a project, or works on a question in a project that has kea.yaml (read its context with kea context first).
+description: Set up and run a Kea site for a data analysis, and run the analysis through it. Typed Markdown pages in doc/ (questions, premises, hypotheses, steps, results, conclusions, caveats, figures, artefacts, resources, terms, references) become a static site with code and data pages, a relations graph, change logs per agent run and semantic versions; readers comment or suggest edits; the agent runs review cycles (collect → harvest into a plan → implement → release). Use when the user says "use Kea", wants an explained, commentable project site, wants to review or discuss an analysis with others, asks to set up kea in a project, or works on a question in a project that has kea.yaml (read its context with kea context first).
 ---
 # Kea
 
@@ -246,7 +246,7 @@ A hub (`kea hub serve`, behind an https reverse proxy) hosts many projects at `h
 their comments; the agent works locally and talks to the hub only over https.
 
 1. **The owner** runs `kea hub add <project>` on the hub and gives you the project key; it prints a site password
-   (readers comment under any name) and an iteration password (also freeze, unfreeze, Implement). Put
+   (readers comment under any name) and an iteration password (also Harvest and Implement). Put
    `KEA_REMOTE_KEY=<key>` in `.env` (never print or commit it) and in `kea.yaml`:
    `remote: {url: https://<hub>, project: <project>}`.
 2. **Data files: ask first, in one batch.** Run `kea publish --files`: it lists every data file the site links to,
@@ -269,17 +269,20 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
 ## Review cycle
 
 1. **Watch:** `kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) in the background (token-free;
-   fast polling while readers are active; reports a burst once it has settled; a status line every hour; check it
-   with `kea watch --status`). Exit 30: deadline reached, start it again if the owner still wants it. Exit 10: fold the new comments (and suggested edits, and direct edit
-   commits) into `doc/_cycles/cycle-NNN.md`, with one `### N. title` item per change, the threads it answers, the
-   kind of change and the proposed version (front matter `version:`). Commit, then run `kea cycle plan-updated
-   --commit <sha>`. Reply to each thread with its item (`kea reply <thread> "…" --status planned`), run
-   `make site`, and watch again.
-2. **Freeze / Implement:** readers freeze (comments only on the plan) and press Implement once every comment is
-   in the plan. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
+   comments alone never wake it; a status line every hour; check it with `kea watch --status`). Exit 30: deadline
+   reached, start it again if the owner still wants it.
+2. **Harvest (exit 10):** a steerer pressed *Harvest comments*. Fold every comment not yet in the plan
+   (`kea list --unplanned`; also suggested edits and direct edit commits) into `doc/_cycles/cycle-NNN.md`, with one
+   `### N. title` item per change, the threads it answers, the kind of change and the proposed version (front
+   matter `version:`). Reply to each thread with its item (`kea reply <thread> "…" --status planned`), commit, run
+   `kea cycle plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest), `make site`
+   (and `kea publish`), and watch again. The plan then stands until the next harvest; comments go on, and the plan
+   page counts those made since.
+3. **Implement (exit 20):** a steerer pressed Implement (only possible after a harvest); comments made after the
+   harvest are not in the plan and stay for the next cycle. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
    `kea apply-suggestion <thread>`, then check every number against its source and commit with the reader as
    co-author. Never implement before Implement unless the owner asks in chat.
-3. **Release:**
+4. **Release:**
    - Reply to each thread with its commit (`--status page-changed --commit <sha>`).
    - Set the plan's `status: implemented` and `run:`.
    - Write the run entry and commit.

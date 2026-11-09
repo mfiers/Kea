@@ -24,10 +24,12 @@ comments, review cycles run by an agent, and semantic versions.
     - a shared password with a free-form name;
     - an append-only log in `data/feedback/events.jsonl`.
 - **Review cycles**:
-    1. Readers comment; the agent (`kea watch`, adaptive polling) folds the comments into one plan.
-    2. A reader presses *Freeze for review*; then only the plan takes comments.
-    3. *Implement*, or *Unfreeze*. On Implement, the agent implements, writes the change log, answers every
-       thread with its commit and releases a semantic version (`kea cycle release`, git tags).
+    1. Readers comment anywhere; the agent waits (`kea watch`, adaptive polling, no tokens spent on comments).
+    2. A steerer presses *Harvest comments*; the agent folds every comment into one plan, which then stands until
+       the next harvest. The plan page counts the comments made since (*Harvest again* adds them).
+    3. *Implement the plan*: comments pause; the agent implements, writes the change log, answers every thread in
+       the plan with its commit and releases a semantic version (`kea cycle release`, git tags). Comments left out
+       of the plan stay for the next cycle.
     4. A History page shows comments → plan items → commits → pages per version.
 - **Executive summaries** at three levels: the project (`doc/_summary.md`), each experiment (its home page's text
   before the first `##` heading) and each question (front-matter `answer:`, two or three sentences). The experiment
@@ -49,7 +51,7 @@ asks for it. In the project where Kea was built, these all came from reader requ
 same session, most within minutes:
 - the menu bar;
 - comment states per version;
-- a "freeze" phase;
+- a review phase (since replaced by the harvest);
 - static builds for public hosting;
 - the in-page editor;
 - the History page.
@@ -65,14 +67,14 @@ Kea does.
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.17.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.18.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.17.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.18.0"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.17.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.18.0 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again).
@@ -83,7 +85,7 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.17.0 kea --help
   for the PDF (see [PDF](#pdf)).
 - The agent skill is separate: copy `skill/SKILL.md` to `~/.claude/skills/kea/SKILL.md` (Claude Code), from the
   same tag:
-  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.17.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
+  `mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.18.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md`
 
 ## Use in a project
 
@@ -94,8 +96,8 @@ by hand is possible, but keeping pages, hypotheses, change logs and cycles consi
 reference, the agent runs:
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.17.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.17.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.18.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.18.0
 kea init --title "My project" --experiment first-experiment
 make site && make serve                                       # the password is in .env
 kea serve --install-service --host <ip> --port 8210 --enable   # optional: keep it running (systemd user unit)
@@ -120,9 +122,9 @@ kea hub serve --host 127.0.0.1 --port 8300       # behind the proxy, e.g. Caddy:
 
 The hub watches each project's agent session through the heartbeats of `kea watch`. A watcher that stops on purpose (to plan comments, to implement, or at its deadline) says so in a last heartbeat; one that falls silent without saying why, while its deadline is still ahead, counts as stopped unexpectedly (a crash, a closed terminal, a sleeping machine or a lost network). The plan page shows the session's state and the time since the last heartbeat; readers who may steer also get a banner on every page. With `notify_url: https://ntfy.sh/<your-topic>` in `hub.yaml` the hub also posts a message when a session stops unexpectedly and when it is back (a plain-text POST with Title and Click headers; any webhook works). `kea hub list` shows each project's session.
 
-To see what the hub does, add `--log events` to `kea hub serve`: one line on stderr per publish, lease change, sign-in, refused key, unknown site and reader action (comment, tag, freeze, implement). `--log requests` adds every request. Query strings are never logged, because sign-in codes travel in them.
+To see what the hub does, add `--log events` to `kea hub serve`: one line on stderr per publish, lease change, sign-in, refused key, unknown site and reader action (comment, tag, harvest, implement). `--log requests` adds every request. Query strings are never logged, because sign-in codes travel in them.
 
-Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [steerer] [--project name]` (`kea hub users` lists who asked). A reader signs in once: every other project site of the hub then lets them in without a click (it asks the hub, which hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all of them; comments and verdicts carry the reader's ORCID iD. Roles: reader (reads the site and its comments, writes nothing), commenter, steerer (also freeze, implement), owner; the project passwords keep working.
+Optional: sign-in with ORCID instead of shared passwords. Register a client at orcid.org (Developer tools; redirect URI `https://example.org/auth/orcid/callback`), give the hub `KEA_ORCID_CLIENT_ID` and `KEA_ORCID_CLIENT_SECRET` in its environment, and approve readers with `kea hub users approve <orcid> [steerer] [--project name]` (`kea hub users` lists who asked). A reader signs in once: every other project site of the hub then lets them in without a click (it asks the hub, which hands its session over with a one-time code, so no cookie is shared between project subdomains), and Sign out on any site signs out of all of them; comments and verdicts carry the reader's ORCID iD. Roles: reader (reads the site and its comments, writes nothing), commenter, steerer (also harvest, implement), owner; the project passwords keep working.
 
 Optional: a public project. `kea hub public <name> on` makes its pages, PDF and `/id/` links readable without a login; the comments, the review cycle and uploaded data files still need a sign-in, and visitors see a "Sign in to comment" button. `kea hub public <name> off` closes it again; `kea hub list` shows which projects are public.
 
@@ -142,7 +144,7 @@ kea publish                          # after every build
 ```
 
 - **Readers** open `https://kea.example.org/p/trajectories/`. The site password lets them comment under any name;
-  the iteration password also lets them freeze the site and ask Claude to implement the plan.
+  the iteration password also lets them harvest the comments into the plan and ask Claude to implement it.
 - **The agent** publishes the built site (with the Markdown for the editor), and `kea watch`, `list`, `reply`
   and `cycle` read and write the hub's record. The local `data/feedback/*.jsonl` stay an exact mirror.
 - **Data** stays home unless chosen: files that may hold identifiers or that kea cannot inspect are flagged, and
@@ -164,8 +166,8 @@ status|plan-updated|start|release | watch | apply-suggestion`
 conclusions, results and hypotheses, the premises, the decisions in force, every caveat on these pages and on the
 method, open comments and gaps. `kea context <experiment>` lists the open work of an experiment.
 
-`kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when there are comments to plan, 20
-when a reader pressed Implement and 30 at the deadline; it prints a status line every hour (`--report-every`).
+`kea watch --deadline 3d` (or 12h, an ISO date/time, epoch seconds) exits 10 when a steerer pressed Harvest, 20
+when a steerer pressed Implement and 30 at the deadline (comments alone never wake it); it prints a status line every hour (`--report-every`).
 `kea watch --status` says whether a watcher is running and when it last looked.
 
 ## PDF

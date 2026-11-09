@@ -20,7 +20,7 @@ session straight back (a one-time code, as above) or returns without one (the si
 kea_sso_tried keeps it from asking again for an hour). Sign out on any site signs out of the hub and of every site:
 sessions issued before users.json signed_out_at stop working.
 
-Roles: reader < commenter < steerer (freeze, implement) < owner. A user's role in a project is roles[<project>],
+Roles: reader < commenter < steerer (harvest, implement) < owner. A user's role in a project is roles[<project>],
 else roles["*"]; approving gives roles["*"] = commenter unless told otherwise. The project passwords keep working
 next to accounts.
 
