@@ -296,3 +296,17 @@ def test_references_get_an_author_year_pill_and_terms_link_in_tables_and_per_sec
     assert "term-resource" in html and ">G23/MIC</a>" in html  # a resource alias, linked in a table cell
     from kea.docsite.pages import repeats_body
     assert repeats_body(tree.nodes["proj:t-acc"]) and not repeats_body(tree.nodes["proj:r-a"])
+
+
+def test_help_is_one_text_on_the_site_github_and_hub():
+    """The reader's help (kea/help/*.md) is copied verbatim into README.md (make web), and the site's help page
+    renders the same files with the route and the coloured page types."""
+    from pathlib import Path
+    from kea import help as kea_help
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    assert kea_help.readme_sync(readme) == readme, "README.md is out of date with src/kea/help/: run make web"
+    for name in kea_help.NAMES:
+        assert f"<!-- help:{name} -->" in readme
+    rendered = kea_help.render(tag=kea_help.plain_tag, route="<div class='route'></div>")
+    assert "<!-- KINDS -->" not in rendered and "<!-- ROUTE -->" not in rendered and "class='route'" in rendered
+    assert rendered.count("class='tag'") >= 14 and "id='why-small-pages'".replace("'", '"') in rendered

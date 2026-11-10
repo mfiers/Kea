@@ -4,8 +4,10 @@ What it does: renders two self-contained HTML pages (no external resources; the 
 serves at /kea-head.png) from plain data that hub.HubApp collects:
 
     visitor_page(hub_title, sign_in_url, public_rows)
-        what Kea and the hub are, a large "Sign in with ORCID" button (when the hub has an ORCID client) and the
-        public projects as a table.
+        what Kea and the hub are, a large "Sign in with ORCID" button (when the hub has an ORCID client), the
+        public projects as a table, and the reader's help (kea/help/*.md, the same text as on every site and GitHub).
+    help_page(hub_title, domain, signed_in)
+        the reader's help on its own (/help), readable without an account.
     reader_page(hub_title, person, rows, public_rows, sign_out_url)
         the reader's name and ORCID iD, a table of the projects they can open (their role there and what it may do,
         public or private, last published), the projects waiting for approval, the public projects where they have
@@ -23,6 +25,22 @@ import html
 from kea.feedback import accounts
 
 LOGO = "/kea-head.png"
+GITHUB = "https://github.com/mfiers/Kea"
+
+
+def help_section(heading: str = "How to read a Kea site") -> str:
+    """The reader's help (kea/help/*.md, verbatim: the same text as every site's Help, GitHub and the PDF)."""
+    from kea import help as kea_help
+    toc = " ".join(f"<a href='#{kea_help.slug(title)}'>{_esc(title)}</a>" for title in help_titles())
+    return (f"<section class='help' id='help'><h2>{_esc(heading)}</h2><p class='toc'>{toc}</p>"
+            + kea_help.render(tag=kea_help.plain_tag, shift=1) + "</section>")
+
+
+def help_titles() -> list[str]:
+    """The ## headings of the help files, for the contents line."""
+    import re
+    from kea import help as kea_help
+    return [match for name in kea_help.NAMES for match in re.findall(r"^## (.+)$", kea_help.text(name), flags=re.M)]
 
 STYLE = """
 :root{--navy:#1d2330;--fg:#1d2330;--muted:#5a6270;--line:#e1e4ea;--bg:#f6f7f9;--accent:#1f5fa8;--orcid:#a6ce39}
@@ -38,9 +56,18 @@ a{color:var(--accent)}
 .topbar .right a{color:#fff}
 .topbar .who{color:#d5dbe6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 main{max-width:920px;margin:0 auto;padding:28px 18px 48px}
-.hero{display:flex;gap:28px;align-items:center;padding:18px 0 26px;border-bottom:1px solid var(--line);margin-bottom:26px}
-.hero img{width:128px;height:128px;flex:0 0 auto}
-.hero h1{font-size:30px;margin:0 0 8px;letter-spacing:-.01em}
+.hero{display:flex;gap:28px;align-items:flex-start;padding:18px 0 26px;border-bottom:1px solid var(--line);margin-bottom:26px}
+.hero img{width:120px;height:120px;flex:0 0 auto;margin-top:2px}
+.hero h1{font-size:30px;line-height:1.15;margin:0 0 10px;letter-spacing:-.01em}
+.hero .links{font-size:14px;margin:12px 0 0;color:var(--muted)}
+.help{margin-top:34px;padding-top:6px;border-top:1px solid var(--line)}
+.help h2{font-size:20px;margin:30px 0 8px}.help h3{font-size:16px;margin:22px 0 6px}
+.help p,.help li{max-width:75ch}.help li{margin:3px 0}
+.help code{background:#eef0f4;padding:1px 4px;border-radius:4px;font-size:13px}
+.help table td:first-child{white-space:nowrap}
+.tag{display:inline-flex;align-items:center;gap:4px;color:#fff;font:700 12px system-ui,sans-serif;border-radius:11px;padding:1px 8px 1px 6px;white-space:nowrap}
+.tag .ico{width:13px;height:13px}
+.toc{font-size:14px;color:var(--muted)}.toc a{margin-right:12px;white-space:nowrap}
 .hero p{margin:0 0 10px;max-width:60ch;color:#333a47}
 .orcid-button{display:inline-flex;align-items:center;gap:12px;margin:10px 0 6px;padding:13px 22px;border-radius:9px;
 background:var(--orcid);color:var(--navy);font-weight:700;font-size:17px;text-decoration:none;box-shadow:0 1px 3px #0002}
@@ -86,8 +113,9 @@ def _page(title: str, hub_title: str, domain: str, right: str, body: str) -> str
             f"<header class='topbar'><a class='brand' href='/'><img src='{LOGO}' alt=''>{_esc(hub_title)}</a>"
             f"<span class='domain'>{_esc(domain)}</span><span class='version' title='This hub runs Kea {_esc(__version__)}'>"
             f"Kea {_esc(__version__)}</span><span class='right'>{right}</span></header>"
-            f"<main>{body}<footer>Kea: typed, versioned documentation sites for data analyses, reviewed by comments."
-            f"</footer></main></body></html>")
+            f"<main>{body}<footer>Kea: typed, versioned documentation sites for data analyses, reviewed by comments. "
+            f"<a href='{GITHUB}'>Kea on GitHub</a> · <a href='{GITHUB}#readme'>documentation</a> · "
+            f"<a href='/help'>help</a></footer></main></body></html>")
 
 
 def _orcid_button(url: str) -> str:
@@ -122,20 +150,29 @@ def visitor_page(hub_title: str, domain: str, sign_in_url: str | None, public_ro
         sign_in = (f"{_orcid_button(sign_in_url)}<p class='note'>One sign-in opens every project on this hub you "
                    "have a role in. A new ORCID iD waits for approval by the hub's administrator before it opens a "
                    "private project.</p>")
-        right = f"<a href='{_esc(sign_in_url)}'>Sign in</a>"
+        right = f"<a href='#help'>Help</a><a href='{GITHUB}'>GitHub</a><a href='{_esc(sign_in_url)}'>Sign in</a>"
     else:
         sign_in = ("<p class='note'>This hub has no ORCID sign-in; every project asks for its own password. Open "
                    "the link to your project.</p>")
-        right = ""
+        right = f"<a href='#help'>Help</a><a href='{GITHUB}'>GitHub</a>"
     body = (f"<section class='hero'><img src='{LOGO}' alt='Kea, a mountain parrot'><div>"
             f"<h1>{_esc(hub_title)}</h1>"
             "<p>Kea turns a data analysis into a documentation site: questions, premises, hypotheses, results and "
             "conclusions as typed, versioned pages, each linked to the code and data behind it.</p>"
             "<p>This hub hosts the sites of several research projects. Readers comment on any sentence; the project's "
             "agent folds the comments into a plan and works through it in review cycles.</p>"
-            f"{sign_in}</div></section>"
-            "<h2>Public projects</h2>" + public_table(public_rows))
+            f"{sign_in}<p class='links'><a href='#help'>How to read a Kea site</a> · "
+            f"<a href='{GITHUB}'>Kea on GitHub</a></p></div></section>"
+            "<h2>Public projects</h2>" + public_table(public_rows) + help_section())
     return _page(hub_title, hub_title, domain, right, body)
+
+
+def help_page(hub_title: str, domain: str, signed_in: bool) -> str:
+    """https://<domain>/help: the reader's help on its own, readable without an account."""
+    right = (f"<a href='/'>{'Your projects' if signed_in else 'Projects'}</a><a href='{GITHUB}'>GitHub</a>")
+    body = ("<h1 class='page'>How to read a Kea site</h1><p class='person'>The same text as every site's Help page and "
+            f"<a href='{GITHUB}#readme'>Kea's documentation on GitHub</a>.</p>" + help_section("Contents"))
+    return _page(f"Help · {hub_title}", hub_title, domain, right, body)
 
 
 def reader_page(hub_title: str, domain: str, person: dict, rows: list[dict], public_rows: list[dict],
@@ -144,7 +181,8 @@ def reader_page(hub_title: str, domain: str, person: dict, rows: list[dict], pub
     orcid = person.get("orcid", "")
     name = person.get("name") or orcid
     status = person.get("status", "")
-    right = (f"<span class='who'>{_esc(name)}</span><a href='{_esc(sign_out_url)}'>Sign out</a>")
+    right = (f"<a href='/help'>Help</a><a href='{GITHUB}'>GitHub</a><span class='who'>{_esc(name)}</span>"
+             f"<a href='{_esc(sign_out_url)}'>Sign out</a>")
     parts = [f"<h1 class='page'>{_esc(name)}</h1>",
              f"<p class='person'>ORCID iD <a href='https://orcid.org/{_esc(orcid)}'>{_esc(orcid)}</a>"
              f" · <a href='{_esc(sign_out_url)}'>Sign out</a> (of this hub and every project site)</p>"]

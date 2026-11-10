@@ -1,13 +1,15 @@
 """Build Kea's web page (docs/index.html, served at https://mfiers.github.io/Kea/) from README.md.
 
-README.md is the single source: the web page mirrors what GitHub shows. This script
+README.md is the source of the web page, so it mirrors what GitHub shows; README's help sections are themselves
+copied verbatim from src/kea/help/*.md (the text every Kea site, the hub and the PDF show). This script
+- copies the help files into README.md between its `<!-- help:NAME -->` and `<!-- /help -->` markers;
 - renders README.md with Python-Markdown (tables, fenced code, heading ids);
 - turns the logo line into the page's hero image (docs/logo.png);
 - colours the page-type table that follows the `<!-- KINDS -->` marker with Kea's own tags and icons;
 - rewrites links to repository files (skill/SKILL.md, src/…) to GitHub, and links to `#…` stay on the page;
 - adds a copy button to every code block.
 
-Input: README.md. Output: docs/index.html (overwritten; it is generated, never edited by hand).
+Input: README.md, src/kea/help/*.md. Output: README.md (help sections), docs/index.html (overwritten; it is generated, never edited by hand).
 Run: `make web` (or `uv run python src/build_web.py`).
 """
 from __future__ import annotations
@@ -18,9 +20,7 @@ from pathlib import Path
 
 import markdown
 
-from kea.docsite import icons
-from kea.docsite.nodes import TYPE_LABELS
-from kea.docsite.render import TYPE_COLOURS
+from kea import help as kea_help
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -70,59 +70,70 @@ document.querySelectorAll("pre > code").forEach(function (code) {
 """
 
 
-def slug(value: str, separator: str = "-") -> str:
-    """Heading id: lower case, every run of other characters one '-' (the help page links to these)."""
-    return re.sub(r"[^a-z0-9]+", separator, value.lower()).strip(separator)
-
-
-def coloured_kinds(page_html: str) -> str:
-    """Prefix the first cell of each row of the table after <!-- KINDS --> with that page type's coloured tag."""
-    marker = page_html.find("<!-- KINDS -->")
-    if marker < 0:
-        return page_html
-    start = page_html.find("<table>", marker)
-    end = page_html.find("</table>", start)
-    if start < 0 or end < 0:
-        return page_html
-    by_label = {label.lower(): kind for kind, label in TYPE_LABELS.items()}
-
-    def tag(match: re.Match) -> str:
-        name = re.sub(r"<[^>]+>", "", match.group(1)).strip()
-        kind = by_label.get(name.lower()) or (name.lower() if name.lower() in TYPE_COLOURS else None)
-        if not kind:
-            return match.group(0)
-        colour = TYPE_COLOURS.get(kind, "#556677")
-        return (f"<tr>\n<td><span class='tag' style='background:{colour}'>{icons.svg(kind)}"
-                f"{html.escape(name)}</span></td>")
-    table = re.sub(r"<tr>\s*<td>(.*?)</td>", tag, page_html[start:end])
-    return page_html[:marker] + page_html[marker + len("<!-- KINDS -->"):start] + table + page_html[end:]
+SITE_PAGES = ROOT / "doc" / "_site"          # Kea's own site pages (related work, …): also pages of the web site
 
 
 def repository_links(page_html: str) -> str:
-    """Relative links to files in the repository go to GitHub; anchors and absolute URLs stay."""
-    return re.sub(r'href="(?!https?:|mailto:|#)([^"]+)"', lambda match: f'href="{GITHUB}{match.group(1)}"', page_html)
+    """Relative links to doc/_site/<name>.md go to the web page <name>.html; other relative links to files in the
+    repository go to GitHub; anchors and absolute URLs stay. Links to those pages on GitHub become local too."""
+    page_html = re.sub(r'href="(?:https://github\.com/mfiers/Kea/blob/main/)?doc/_site/([\w-]+)\.md(#[^"]*)?"',
+                       lambda match: f'href="{match.group(1)}.html{match.group(2) or ""}"', page_html)
+    return re.sub(r'href="(?!https?:|mailto:|#|[\w-]+\.html[#"])([^"]+)"', lambda match: f'href="{GITHUB}{match.group(1)}"',
+                  page_html)
+
+
+def wrap(title: str, body: str, source: str, hero: bool) -> str:
+    """A page of the web site around rendered Markdown."""
+    return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+            f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>{html.escape(title)}</title>\n"
+            f"<meta name=\"description\" content=\"{html.escape(DESCRIPTION)}\">\n"
+            "<link rel=\"icon\" href=\"favicon.ico\">\n"
+            f"<!-- Generated from {source} by src/build_web.py (make web). Do not edit by hand. -->\n"
+            f"<style>{STYLE}</style>\n</head>\n<body>\n<main>\n"
+            + ("<div class=\"hero\"><img src=\"logo.png\" alt=\"kea\"></div>\n" if hero else
+               "<p><a href=\"index.html\">← Kea</a></p>\n")
+            + f"{body}\n"
+            "<footer>Kea · <a href=\"https://github.com/mfiers/Kea\">github.com/mfiers/Kea</a> · "
+            f"this page is {source}</footer>\n</main>\n"
+            f"<script>{SCRIPT}</script>\n</body>\n</html>\n")
+
+
+def render(text: str) -> str:
+    body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc"],
+                             extension_configs={"toc": {"slugify": kea_help.slug}})
+    return repository_links(kea_help.kinds_table(body, kea_help.plain_tag))
 
 
 def build() -> str:
-    """The whole web page as HTML."""
-    text = README.read_text(encoding="utf-8")
+    """The front page (README.md) as HTML; README's help sections are refreshed first."""
+    text = kea_help.readme_sync(README.read_text(encoding="utf-8"))
+    if text != README.read_text(encoding="utf-8"):
+        README.write_text(text, encoding="utf-8")
+        print("README.md: help sections copied from src/kea/help/")
     text = re.sub(r"^<p align='center'><img src='branding/logo\.png'[^>]*></p>\s*", "", text)   # the hero instead
-    body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc"],
-                             extension_configs={"toc": {"slugify": slug}})
-    body = repository_links(coloured_kinds(body))
-    return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>Kea</title>\n"
-            f"<meta name=\"description\" content=\"{html.escape(DESCRIPTION)}\">\n"
-            "<link rel=\"icon\" href=\"favicon.ico\">\n"
-            "<!-- Generated from README.md by src/build_web.py (make web). Do not edit by hand. -->\n"
-            f"<style>{STYLE}</style>\n</head>\n<body>\n<main>\n"
-            "<div class=\"hero\"><img src=\"logo.png\" alt=\"kea\"></div>\n"
-            f"{body}\n"
-            "<footer>Kea · <a href=\"https://github.com/mfiers/Kea\">github.com/mfiers/Kea</a> · "
-            "this page is README.md</footer>\n</main>\n"
-            f"<script>{SCRIPT}</script>\n</body>\n</html>\n")
+    return wrap("Kea", render(text), "README.md", hero=True)
+
+
+def site_pages() -> dict[str, str]:
+    """docs/<name>.html for each doc/_site/<name>.md (front matter title as the heading)."""
+    import yaml
+    pages = {}
+    for source in sorted(SITE_PAGES.glob("*.md")):
+        text = source.read_text(encoding="utf-8")
+        header = {}
+        if text.startswith("---\n"):
+            front, text = text[4:].split("\n---\n", 1)
+            header = yaml.safe_load(front) or {}
+        title = str(header.get("title") or source.stem)
+        intro = f"<p><i>{html.escape(str(header['short']))}</i></p>" if header.get("short") else ""
+        pages[f"{source.stem}.html"] = wrap(f"{title} · Kea", f"<h1>{html.escape(title)}</h1>{intro}" + render(text),
+                                            f"doc/_site/{source.name}", hero=False)
+    return pages
 
 
 if __name__ == "__main__":
     OUT.write_text(build(), encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)} from README.md")
+    for name, page in site_pages().items():
+        (OUT.parent / name).write_text(page, encoding="utf-8")
+        print(f"wrote docs/{name} from doc/_site/")

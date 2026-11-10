@@ -13,7 +13,8 @@ The PDF tells each experiment as a story for a reader who is not on the site (a 
                      (resources O, data files), figure files, glossary (terms T, then groups such as Genes),
                      references (numbered B in order of citation, Nature style), what changed (document)
 
-At the end a standard chapter "About this document" explains the page types (with the site's colours), numbers,
+At the end a standard chapter "About this document" gives the reader's help on why Kea and how a project progresses
+(kea/help/1-why.md and 2-progress.md, the text every site's Help page shows) and explains the page types (with the site's colours), numbers,
 statuses, page references and what is left out. Every link to a page carries its page number. Left out: comments,
 plans, review history, change log, code listings, the relations graph and previews of data tables (so no donor-level
 rows reach the PDF). In figure pages, paragraphs that only point to the caption file (``caption_file``) are dropped;
@@ -1348,6 +1349,8 @@ result or a page changes. The website and this document are two views of the sam
 source files on {text(today)}; the website also carries the comments and the review history. When the website shows a
 newer version, that one replaces this document.
 
+{self.help_markup()}
+
 == How it is ordered
 
 {'The document is one experiment, in these parts' if self.single else 'Each experiment is one chapter, in these parts'}: {listed(main)}.
@@ -1387,6 +1390,12 @@ lists them.
 #meta[Made with Kea (github.com/mfiers/Kea), a tool that turns an analysis into a site of linked claims and
 evidence, reviewed in cycles by readers and an AI agent.]
 """
+
+    def help_markup(self) -> str:
+        """Why Kea and how a project progresses: the reader's help (kea/help/1-why.md, 2-progress.md), verbatim, as
+        on every site's Help page and on GitHub."""
+        from kea import help as kea_help
+        return Converter(self.urls, heading_level=2).convert(kea_help.render(("1-why", "2-progress")))
 
     def document(self, stamp: dict | None = None) -> str:
         """The whole Typst source. `stamp` ({"version", "commit", "built"}) replaces the release, commit and date

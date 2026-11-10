@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Related work · Kea</title>
+<meta name="description" content="Kea turns a data analysis into a website of small, linked, commentable pages of claims and evidence, reviewed in cycles by people and an AI agent.">
+<link rel="icon" href="favicon.ico">
+<!-- Generated from doc/_site/related-work.md by src/build_web.py (make web). Do not edit by hand. -->
+<style>
+:root{--fg:#1d2330;--muted:#5b6475;--line:#d9dde5;--bg:#ffffff;--soft:#f5f7fa;--accent:#4f6b1f;--accent2:#d9822b;--code:#f3f5f8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#e6e9ef;--muted:#a3abba;--line:#323a48;--bg:#14181f;--soft:#1b212b;--accent:#a8c46a;--accent2:#f0a050;--code:#1f2632}}
+:root[data-theme="dark"]{--fg:#e6e9ef;--muted:#a3abba;--line:#323a48;--bg:#14181f;--soft:#1b212b;--accent:#a8c46a;--accent2:#f0a050;--code:#1f2632}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:880px;margin:0 auto;padding:28px 16px 70px}
+a{color:var(--accent)}
+.hero{display:flex;justify-content:center;margin:10px 0 24px}
+.hero img{width:min(420px,90%);height:auto;background:#fff;border-radius:14px;padding:14px 18px}
+h1{font-size:30px;margin:10px 0 6px}
+h2{font-size:22px;margin:38px 0 10px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+h3{font-size:17px;margin:22px 0 6px}
+pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;position:relative}
+code{background:var(--code);padding:1px 4px;border-radius:4px}
+pre code{background:none;padding:0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:2px 8px;cursor:pointer}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14.5px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--soft)}
+blockquote{border-left:4px solid var(--accent2);background:var(--soft);margin:12px 0;padding:6px 12px;border-radius:0 8px 8px 0}
+.tag{display:inline-flex;align-items:center;gap:4px;color:#fff;font:700 12px system-ui,sans-serif;border-radius:11px;padding:1px 8px 1px 6px;white-space:nowrap}
+.tag .ico{width:13px;height:13px}
+footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<p><a href="index.html">← Kea</a></p>
+<h1>Related work</h1><p><i>How Kea relates to models of claims and evidence, to provenance standards and to AI systems that keep a structured state of an analysis, and how Kea&#x27;s terms map onto theirs.</i></p><p>Kea's pages and relations were designed for running an analysis with an AI agent, not taken from a standard. Most of its parts have close counterparts elsewhere. This page names them, maps the vocabulary, and says what Kea adds. Citations were checked against the primary sources on 10 November 2026, except Toulmin (1958) and Peroni &amp; Shotton (2012), cited from the record.</p>
+<h2 id="models-of-claims-and-evidence">Models of claims and evidence</h2>
+<p><strong>Micropublications</strong> (Clark, Ciccarese &amp; Goble 2014). A semantic model of the argument in a biomedical paper: statements, data, methods and materials linked by <em>supports</em> and <em>challenges</em>, grounded in Toulmin–Verheij argumentation, with an OWL 2 vocabulary at purl.org/mp. The minimal micropublication is "a statement with its attribution", which is what a Kea page with its permanent id and author is. Micropublications describe arguments in published papers, after the fact; Kea records an argument while the analysis is done.</p>
+<p><strong>Discourse graphs</strong> (Chan et al. 2024). Questions, claims, evidence and sources; evidence informs questions and supports or opposes claims. Built as a Roam Research extension, and adapted by hand by users of Obsidian and other notebooks, mostly for literature synthesis. This is the lightest model and the closest to Kea's core: Kea's question, conclusion (claim), result (evidence) and reference (source), with <em>supported_by</em> and <em>opposed_by</em>, form a discourse graph of one analysis. Kea adds the route around it: hypotheses fixed before their test, the steps that make results, premises, decisions and caveats.</p>
+<p><strong>Octopus</strong> (octopus.ac). A publishing platform with eight linked publication types: Research Problem, Rationale/Hypothesis, Method, Results/Sources of Evidence, Analysis, Interpretation, Applications/Implications, and Review. Its chain is the closest to Kea's route. Its founder has noted that authors ask what belongs in Results as opposed to Analysis (Coddington 2024); Kea cuts that line as a result (what a file shows, every number from a named file) against a conclusion (what the results mean, with a certainty).</p>
+<p><strong>Nanopublications</strong> (Kuhn et al. 2018). Each record is an assertion graph, a provenance graph and a publication-info graph, held together by a head graph, identified by a hash-based Trusty URI, with provenance in W3C PROV. The machine-readable format for publishing single claims; a possible export for Kea's confirmed conclusions.</p>
+<p><strong>SEPIO</strong>, the Scientific Evidence and Provenance Information Ontology (OBO Foundry). Assertions about propositions, evidence lines that support or dispute them, evidence and data items, assertion methods and agents. The GA4GH Variant Annotation specification (VA-Spec 1.0) derives its core model from SEPIO, with profiles for ACMG variant pathogenicity used by ClinGen. The most rigorous model here, and too heavy to write by hand page by page.</p>
+<p><strong>Toulmin (1958) and IBIS (Kunz &amp; Rittel 1970)</strong>, the roots of the above. Toulmin's argument: claim, data, warrant, backing, qualifier and rebuttal. IBIS: issues, positions, and arguments for or against a position.</p>
+<p><strong>GRADE</strong> (Schünemann et al. 2013). Rates the quality (now: certainty) of a body of evidence as high, moderate, low or very low, lowered for risk of bias, inconsistency, indirectness, imprecision and publication bias. Kea's <code>certainty:</code> uses the same four labels with a one-line reason; it does not apply GRADE's rating method.</p>
+<h2 id="provenance">Provenance</h2>
+<p><strong>W3C PROV-O</strong> (Lebo, Sahoo &amp; McGuinness 2013). Entities, activities and agents, linked by <em>wasGeneratedBy</em>, <em>used</em>, <em>wasDerivedFrom</em> and <em>wasAttributedTo</em>.</p>
+<p><strong>Workflow Run RO-Crate</strong> (Leo et al. 2024). JSON-LD packages of a run's inputs, code and outputs, aligned to PROV and schema.org, in three profiles (Process Run Crate, Workflow Run Crate, Provenance Run Crate), implemented in several workflow systems, among them Galaxy, COMPSs, StreamFlow and Autosubmit. Kea's <code>made_by</code>, <code>uses</code> and <code>sources</code> map onto PROV, so an RO-Crate export is possible; it would be thin until Kea's steps record their inputs and outputs per run.</p>
+<p><strong>CiTO</strong>, the Citation Typing Ontology (SPAR). Typed citations, among them <em>supports</em>, <em>disputes</em>, <em>critiques</em>, <em>agreesWith</em>, <em>disagreesWith</em> and <em>retracts</em>.</p>
+<h2 id="ai-systems-that-keep-a-structured-state">AI systems that keep a structured state</h2>
+<p><strong>Kosmos</strong> (Mitchener et al. 2025). An AI scientist whose data-analysis agent and literature agent share a "structured world model", updated each cycle with summaries of the task outputs and queried to plan the next; a run has over 200 agent rollouts, and the claims in its report link back to the analysis or paper they came from. The same idea as Kea's graph, but inside the machine: the paper gives no schema for the world model, and no person approves a step before the next one is built on it.</p>
+<p><strong>POPPER</strong> (Huang et al. 2025). Agents test a free-form hypothesis by sequential falsification: they design experiments on its measurable implications and pool the evidence as e-values, with control of the Type-I error. Kea's hypothesis with its <code>prediction:</code> and <code>criterion:</code>, tested by a step, is the same move made by hand, without the statistical frame.</p>
+<h2 id="kea-s-terms-and-theirs">Kea's terms and theirs</h2>
+<table>
+<thead>
+<tr>
+<th>Kea</th>
+<th>Nearest existing term</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>question</td>
+<td>question; issue; research problem</td>
+<td>discourse graphs; IBIS; Octopus</td>
+</tr>
+<tr>
+<td>premise</td>
+<td>none fits; nearest: backing, assumption</td>
+<td>Toulmin</td>
+</tr>
+<tr>
+<td>hypothesis</td>
+<td>rationale/hypothesis</td>
+<td>Octopus</td>
+</tr>
+<tr>
+<td><code>prediction:</code>, <code>criterion:</code></td>
+<td>measurable implication; falsification test</td>
+<td>POPPER</td>
+</tr>
+<tr>
+<td>step</td>
+<td>method; activity</td>
+<td>Octopus, micropublications; PROV</td>
+</tr>
+<tr>
+<td>decision</td>
+<td>position; architecture decision record</td>
+<td>IBIS; software engineering</td>
+</tr>
+<tr>
+<td>result</td>
+<td>evidence; data; results/sources of evidence</td>
+<td>discourse graphs, micropublications, Toulmin; Octopus</td>
+</tr>
+<tr>
+<td>conclusion</td>
+<td>claim; statement; assertion</td>
+<td>discourse graphs; micropublications; nanopublications, SEPIO</td>
+</tr>
+<tr>
+<td><code>supported_by</code>, <code>opposed_by</code></td>
+<td>supports, opposes; supports, challenges</td>
+<td>discourse graphs; micropublications</td>
+</tr>
+<tr>
+<td><code>because:</code> on a link</td>
+<td>warrant</td>
+<td>Toulmin</td>
+</tr>
+<tr>
+<td>caveat</td>
+<td>rebuttal, qualifier; limitation</td>
+<td>Toulmin; GRADE</td>
+</tr>
+<tr>
+<td><code>certainty:</code> high … very low</td>
+<td>certainty (quality) of evidence</td>
+<td>GRADE, same four levels</td>
+</tr>
+<tr>
+<td><code>made_by</code>, <code>uses</code>, <code>sources</code></td>
+<td>wasGeneratedBy, used, wasDerivedFrom</td>
+<td>PROV</td>
+</tr>
+<tr>
+<td>resource</td>
+<td>Dataset, SoftwareApplication (with an RRID)</td>
+<td>schema.org, RO-Crate</td>
+</tr>
+<tr>
+<td>reference</td>
+<td>source</td>
+<td>discourse graphs</td>
+</tr>
+<tr>
+<td>permanent id with author</td>
+<td>statement with its attribution; Trusty URI</td>
+<td>micropublications; nanopublications</td>
+</tr>
+<tr>
+<td><code>fixed_before_results: true</code></td>
+<td>preregistered (but see below)</td>
+<td>OSF, registered reports</td>
+</tr>
+<tr>
+<td>exploratory, confirmatory</td>
+<td>the same</td>
+<td>standard usage</td>
+</tr>
+</tbody>
+</table>
+<p>Kea keeps its own word where no standard one fits: <em>premise</em> (no model above has it), <em>decision</em>, <em>step</em> and <em>caveat</em> (sharper than "limitation": it names what limits which page and stays open until a step addresses it). <code>fixed_before_results</code> is not called preregistration on purpose: the record is a commit in the project's own repository, whose history can be rewritten and which is often private, while a preregistration sits in a public registry.</p>
+<h2 id="what-kea-adds">What Kea adds</h2>
+<p>We found none of the following, combined, in the systems above:</p>
+<ul>
+<li>a person's approval at each step of the route before the agent builds on it (<code>pace: guided</code>);</li>
+<li>hypotheses fixed before their test, recorded in the graph with the commit time as the record;</li>
+<li>recheck flags that run downstream when a page upstream changes;</li>
+<li>the agent's runs, change logs and review cycles tied to semantic versions of the whole graph;</li>
+<li>all of it as Markdown in the project's own git repository.</li>
+</ul>
+<p>The survey is short; this is what we found, not a claim that nothing like it exists.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Chan J, Akamatsu M, Vargas D, Kawerau L, Gartner M (2024). Steps towards an infrastructure for scholarly synthesis. arXiv:2407.20666. <a href="https://arxiv.org/abs/2407.20666">https://arxiv.org/abs/2407.20666</a></li>
+<li>Clark T, Ciccarese PN, Goble CA (2014). Micropublications: a semantic model for claims, evidence, arguments and annotations in biomedical communications. J Biomed Semantics 5:28. doi:10.1186/2041-1480-5-28. <a href="https://doi.org/10.1186/2041-1480-5-28">https://doi.org/10.1186/2041-1480-5-28</a></li>
+<li>Coddington M (2024). How to enter a new chapter in academic publishing (interview with Alexandra Freeman). Technology Networks, 10 August 2024.</li>
+<li>Guyatt GH, Oxman AD, Vist GE et al. (2008). GRADE: an emerging consensus on rating quality of evidence and strength of recommendations. BMJ 336:924–926. doi:10.1136/bmj.39489.470347.AD</li>
+<li>Huang K, Jin Y, Li R, Li MY, Candès E, Leskovec J (2025). Automated hypothesis validation with agentic sequential falsifications. Proc. 42nd ICML, PMLR 267:25372–25437. arXiv:2502.09858. <a href="https://proceedings.mlr.press/v267/huang25n.html">https://proceedings.mlr.press/v267/huang25n.html</a></li>
+<li>Kuhn T, Meroño-Peñuela A, Malic A, Poelen JH, Hurlbert AH et al. (2018). Nanopublications: a growing resource of provenance-centric scientific linked data. IEEE 14th International Conference on e-Science, 83–92. doi:10.1109/eScience.2018.00024. arXiv:1809.06532.</li>
+<li>Kunz W, Rittel HWJ (1970). Issues as elements of information systems. Working paper, Institute of Urban and Regional Development, University of California, Berkeley. <a href="https://escholarship.org/uc/item/5cj786v8">https://escholarship.org/uc/item/5cj786v8</a></li>
+<li>Lebo T, Sahoo S, McGuinness D (eds) (2013). PROV-O: the PROV ontology. W3C Recommendation, 30 April 2013. <a href="https://www.w3.org/TR/2013/REC-prov-o-20130430/">https://www.w3.org/TR/2013/REC-prov-o-20130430/</a></li>
+<li>Leo S, Crusoe MR, Rodríguez-Navas L, Sirvent R, Kanitz A et al. (2024). Recording provenance of workflow runs with RO-Crate. PLOS ONE 19(9):e0309210. doi:10.1371/journal.pone.0309210.</li>
+<li>Mitchener L, Yiu A, Chang B, Bourdenx M, Nadolski T et al. (2025). Kosmos: an AI scientist for autonomous discovery. arXiv:2511.02824. <a href="https://arxiv.org/abs/2511.02824">https://arxiv.org/abs/2511.02824</a></li>
+<li>Octopus: <a href="https://www.octopus.ac">https://www.octopus.ac</a>; publication types in the author guide, <a href="https://www.octopus.ac/author-guide">https://www.octopus.ac/author-guide</a>.</li>
+<li>Schünemann H, Brożek J, Guyatt G, Oxman A (eds) (2013). GRADE handbook. <a href="https://gdt.gradepro.org/app/handbook/handbook.html">https://gdt.gradepro.org/app/handbook/handbook.html</a></li>
+<li>SEPIO: <a href="https://obofoundry.org/ontology/sepio">https://obofoundry.org/ontology/sepio</a>; GA4GH VA-Spec 1.0, <a href="https://va-spec.ga4gh.org/en/1.0/">https://va-spec.ga4gh.org/en/1.0/</a></li>
+<li>SPAR CiTO: <a href="http://purl.org/spar/cito">http://purl.org/spar/cito</a>; Peroni S, Shotton D (2012). FaBiO and CiTO: ontologies for describing bibliographic resources and citations. J Web Semantics 17:33–43. doi:10.1016/j.websem.2012.08.001.</li>
+<li>Toulmin SE (1958). The uses of argument. Cambridge University Press.</li>
+</ul>
+<footer>Kea · <a href="https://github.com/mfiers/Kea">github.com/mfiers/Kea</a> · this page is doc/_site/related-work.md</footer>
+</main>
+<script>
+document.querySelectorAll("pre > code").forEach(function (code) {
+  var button = document.createElement("button");
+  button.className = "copy"; button.textContent = "copy";
+  button.addEventListener("click", function () {
+    navigator.clipboard.writeText(code.textContent).then(function () {
+      button.textContent = "copied"; setTimeout(function () { button.textContent = "copy"; }, 1500);
+    });
+  });
+  code.parentElement.appendChild(button);
+});
+</script>
+</body>
+</html>

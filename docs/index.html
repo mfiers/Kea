@@ -38,8 +38,11 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <main>
 <div class="hero"><img src="logo.png" alt="kea"></div>
 <h1 id="kea">Kea</h1>
-<p>Kea turns a data analysis into a website of small pages: one question, hypothesis, step, result, conclusion or caveat per page, linked by typed relations. Readers comment on the pages. An AI agent writes and revises them in review cycles and releases numbered versions. The pages are Markdown files in git; the site is static HTML.</p>
-<p>Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see <a href="#how-to-use-it">How to use it</a>.</p>
+<p>Structure a data analysis as small, linked blocks (questions, hypotheses, steps, results, conclusions) and run your AI agent on them, one reviewed step at a time.</p>
+<p>The agent reads the blocks that bear on a question, takes one step along the route, writes it back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.</p>
+<p>Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see <a href="#how-to-use-it">How to use it</a>. How Kea relates to micropublications, discourse graphs, Octopus, nanopublications and PROV: <a href="related-work.html">Related work</a>.</p>
+<!-- help:1-why -->
+
 <h2 id="why">Why</h2>
 <p>An analysis produces claims, and whether a claim holds depends on things that are hard to see: the file a number came from, the test that was run, what was assumed, when the hypothesis was written, and what changed since. In a report or a notebook that chain is not inspectable. The number is there but not its file; the hypothesis reads as if it came first; a premise was revised weeks ago and nothing downstream was looked at again.</p>
 <p>An AI agent makes this worse. It produces more claims, faster, and the reasoning that connects them sits in a chat log nobody will read again.</p>
@@ -49,19 +52,38 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>One claim per page, so that each claim can be handled on its own. A page can be linked by a typed relation (this result supports that conclusion; this caveat limits it), cited by a permanent id that survives edits and renames, commented on, approved or dropped by a reader, rechecked when something it rests on changes, and versioned with the rest of the site.</p>
 <p>The evidence chain becomes checkable because every link is written down. A result names the file every number comes from. A conclusion names the results for and against it, with a reason per link and a certainty. A hypothesis states its prediction and what would count as support, and whether that was written before or after the test. <code>kea check</code> reads the links as a graph on every build.</p>
 <p>A page is also the right unit for an agent and for a reader. The agent works, is reviewed and corrected one page at a time. A reader with five minutes reads a question's answer and stops, or follows the links down to the file.</p>
+<h2 id="what-kea-adds">What Kea adds</h2>
+<p>Claims linked to their evidence are not new: micropublications, discourse graphs, Octopus and nanopublications model them, and agent systems such as Kosmos keep a structured state of an analysis (see <a href="related-work.html">Related work</a>). We found none of the following, combined, in those systems:</p>
+<ul>
+<li>a person's approval at each step of the route before the agent builds on it (<code>pace: guided</code>);</li>
+<li>hypotheses fixed before their test, recorded in the graph with the commit time as the record;</li>
+<li>recheck flags that run downstream when a page upstream changes;</li>
+<li>the agent's runs, change logs and review cycles tied to semantic versions of the whole graph;</li>
+<li>all of it as Markdown in the project's own git repository.</li>
+</ul>
+<!-- /help -->
+
+<!-- help:2-progress -->
+
 <h2 id="how-a-project-progresses">How a project progresses</h2>
+<!-- ROUTE -->
+
 <p>Every analysis follows one route, and each page is a stop on it: experiment → question → hypothesis → step → result → conclusion → the question's answer. Premises, decisions, caveats, figures, artefacts and resources feed in from the side.</p>
 <ul>
 <li>A question is proposed, and approved before anything is built on it.</li>
-<li>Hypotheses are written before the test, with a prediction and a criterion for support, and committed; the commit time is the record. Work not fixed in advance is labelled exploratory on its results and conclusions.</li>
+<li>Hypotheses are written before the test, with a prediction and a criterion for support, and committed; the commit time is the record. That record lives in the project's own repository, so it is not a public preregistration: git history can be rewritten, and the repository is often private. Work not fixed in advance is labelled exploratory on its results and conclusions.</li>
 <li>Steps do the work from scripts (Makefile targets, seeds, versions) and make results; every number on a result page comes from a named file.</li>
-<li>Conclusions are drawn from results only, with the evidence for and against, a reason per link and a certainty. The question's answer and the summaries change in the same commit.</li>
+<li>Conclusions are drawn from results only, with the evidence for and against, a reason per link and a certainty. The question's answer and the summaries change in the same commit. The reason on each link is Toulmin's warrant (why this evidence bears on this claim); the certainty uses GRADE's four labels (high, moderate, low, very low), though Kea does not apply GRADE's rating method.</li>
 <li>After each run the caveats are read again: addressed by this run, or still limiting the new result.</li>
 </ul>
 <p>One step at a time (<code>pace: guided</code>, the default of <code>kea init</code>). The agent takes one step along the route and stops for the owner's review: it proposes questions and waits; for an approved question it proposes hypotheses and planned steps and waits; it runs approved steps, writes the results and waits; it concludes from reviewed results. A page that waits carries a "waiting for approval" pill. The reader's verdicts on it are Approve (the next step may build on it), Revise (say what to change; it is rewritten and waits again) and Drop (remove it, with every page that rests only on it). On a settled page the verdicts are Confirm (keep it as it is; recorded on the page), Revise and Drop. Approval can also be given in the agent's chat; either way it is written on the page (<code>approved:</code>), and <code>kea check</code> refuses work built on unapproved pages.</p>
 <p>What Kea checks on every build (<code>kea check</code>; <code>kea build --strict</code> fails on a problem): a conclusion rests on at least one result or figure, not on a hypothesis or a question; no conclusions support each other in a loop; a live conclusion does not rest on deprecated evidence; a confirmatory conclusion does not rest on exploratory results only; a hypothesis with an outcome names the result that tested it; a hypothesis fixed before its results states its prediction and criterion; every relation connects the right kinds of page; every linked page and file exists.</p>
 <p>When a page upstream changes (a premise is revised, a result redone, a decision changed), every page that rests on it, directly or further down, gets a red "recheck" pill. The agent reads each against the change, updates it when it is even slightly affected, and records the check (<code>kea recheck</code>, ledger <code>doc/_checks.yaml</code>). A version is not released while pages wait for a recheck.</p>
 <p>Versions. Each release is a semantic version and a git tag: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages, PATCH for wording only; before 1.0 a major change counts as minor. Each page shows the release in which it last changed, so settled parts stand out from parts in flux. The site and the PDF are two views of one version.</p>
+<!-- /help -->
+
+<!-- help:3-reading -->
+
 <h2 id="reading-a-kea-site">Reading a Kea site</h2>
 <p>Start at the top. With one experiment the site opens at the experiment's page: its summary, then every question with its answer in short. With more experiments the project page summarises them first. A question page leads with its answer so far, then its conclusions, results and hypotheses. Details are one click further down.</p>
 <p>Every page has a type, shown as a coloured tag with an icon and a number (Q1, R2, C3; references show author and year). The tag is the link to the page; hover it for the page's one-line summary. In lists of pages the whole line is the link.</p>
@@ -139,8 +161,18 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <li>Pills next to the title: the status (green: supported, done or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or dropped); "exploratory"; on a hypothesis "written before its test" or "written after results"; on a conclusion its certainty; "waiting for approval", "approved", "confirmed", "recheck"; and the release in which the page last changed.</li>
 <li>The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (all pages as one document); Help.</li>
 </ul>
-<p>Commenting, on a site served with comments: select text for Comment, Edit (that passage) or a one-click tag (explain, expand, shorten, delete, challenge, needs source; or the manuscript section the passage belongs in). The buttons at the bottom right act on the whole page: Comment, Edit, the verdicts, Propose (the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …), Next run and Manuscript. Edits are saved as suggestions and shown as a diff. Sign in with the site password and your name, or with ORCID on a hub that offers it.</p>
-<h2 id="the-review-cycle">The review cycle</h2>
+<!-- /help -->
+
+<!-- help:4-reviewing -->
+
+<h2 id="comments-and-the-review-cycle">Comments and the review cycle</h2>
+<p>On a site served with comments, sign in with the site password and your name, or with ORCID on a hub that offers it. Then:</p>
+<ul>
+<li>Select any text for Comment, Edit (just that passage) or a one-click tag: a request for the next run (explain, expand, shorten, delete, challenge, needs source) or the manuscript section the passage belongs in.</li>
+<li>The buttons at the bottom right act on the whole page: Comment, Edit, the verdicts (Approve, Revise, Drop; Confirm on a settled page), Propose (the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …), Next run and Manuscript.</li>
+<li>The pencils in the left margin edit the title or summary in place; the pencil after a section heading edits that section. Every edit is saved as a suggestion, shown as a diff, and goes into the next plan.</li>
+</ul>
+<p>Nothing changes until the comments are harvested:</p>
 <ol>
 <li>Comment. Readers comment, tag, edit and propose for as long as the round takes. The agent waits (<code>kea watch</code>) without reading them; comments alone never wake it, so a long round costs nothing.</li>
 <li>Harvest. A PI presses "Harvest comments". The agent folds every comment into one plan of numbered items (what will change, on which pages, the version it will make) and answers each comment with its item. Approve, Revise and Drop on pages waiting for approval are applied at the harvest itself, so the route never waits for an Implement. The plan stands until the next harvest; the plan page counts the comments made since, and "Harvest again" adds them.</li>
@@ -148,24 +180,26 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <li>Release. A new version and git tag, with the run's change log. Open pages reload and comments reopen. Comments left out of the plan stay for the next cycle. The History page links each comment to its plan item, commit and pages.</li>
 </ol>
 <p>The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.</p>
+<!-- /help -->
+
 <h2 id="how-to-use-it">How to use it</h2>
 <p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
 <p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
 <p>For Claude Code, the skill is one file:</p>
-<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.22.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 </code></pre>
 <p>Other agents: put <code>skill/SKILL.md</code> where the agent reads its instructions, for example in the project's agent instructions file.</p>
 <h2 id="install">Install</h2>
 <p>Kea is not on PyPI; install it from this repository with <a href="https://docs.astral.sh/uv/">uv</a> (it fetches Python ≥ 3.11 if needed). Always name a tag (see <a href="https://github.com/mfiers/Kea/tags">tags</a>), so a project does not change when Kea does. The agent normally does this itself.</p>
 <pre><code># as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.22.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.23.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.22.0&quot;
+uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.23.0&quot;
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.22.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.23.0 kea --help
 </code></pre>
 <ul>
 <li>Upgrade: run the same command with the new tag (<code>uv tool install --force git+…@vX.Y.Z</code>, or <code>uv add</code> again). <code>uv tool upgrade kea</code> does not move a pinned tag.</li>
@@ -176,8 +210,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.22.0 kea --help
 </ul>
 <h2 id="reference">Reference</h2>
 <h3 id="what-the-agent-runs-in-a-project">What the agent runs in a project</h3>
-<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.22.0&quot;     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.22.0
+<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.23.0&quot;     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.0
 kea init --title &quot;My project&quot; --author &quot;Your Name&quot; --experiment first-experiment --question &quot;What does it ask?&quot;
 make site &amp;&amp; make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

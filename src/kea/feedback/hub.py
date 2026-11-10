@@ -25,8 +25,9 @@ iteration password makes them PIs: it also lets them harvest the comments into t
 it. With ORCID accounts (accounts.py) each reader has a role per project: auditor, reviewer, PI or director.
 
 The apex (https://kea.example.org/, or https://keahub.eu/) shows a landing page (feedback/landing.py): for a visitor,
-what Kea and the hub are, "Sign in with ORCID" and the public projects; for a reader signed in on the hub, their
-projects with their role, the ones waiting for approval, the other public projects and Sign out.
+what Kea and the hub are, "Sign in with ORCID", the public projects and the reader's help (kea/help/*.md, the same
+text as every site's Help and GitHub); for a reader signed in on the hub, their projects with their role, the ones
+waiting for approval, the other public projects and Sign out. /help shows the help on its own, without an account.
 
 Addresses: with hub.yaml `project_domain: keahub.eu` every project is served at https://<name>.keahub.eu/ (one
 wildcard certificate at the proxy); https://keahub.eu/p/<name>/<page> redirects there, the agent API stays at
@@ -582,6 +583,14 @@ class HubApp:
             return
         if path == "/":
             await self.landing(Request(scope, receive))(scope, receive, send)
+            return
+        if path == "/help":
+            settings = self.hub.settings()
+            request = Request(scope, receive)
+            signed_in = bool(self.apex_session(request)) if accounts.orcid_settings() else False
+            domain = self.hub.project_domain() or urllib.parse.urlsplit(self.apex_url()).netloc
+            await HTMLResponse(landing.help_page(str(settings.get("title") or "Kea hub"), domain, signed_in),
+                               headers={"Cache-Control": "no-store"})(scope, receive, send)
             return
         if path in (landing.LOGO, "/favicon.ico"):
             await FileResponse(LOGO_FILE, media_type="image/png",
