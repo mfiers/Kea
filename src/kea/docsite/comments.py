@@ -29,7 +29,6 @@ RECOGITO_CSS = "recogito-text-annotator-4.3.7.css"
 STATUS_TEXT = {"open": "open", "answered": "answered", "page-changed": "page changed",
                "wont-fix": "won't fix", "resolved": "resolved", "planned": "in the plan", "marked": "marked"}
 HISTORY_LIMIT = 15
-DIFF_LINE_LIMIT = 300
 
 
 def _git(*args: str) -> str:
@@ -53,32 +52,35 @@ def source_version(source: Path | None) -> str:
 
 
 def history_html(source: Path, prefix: str) -> str:
+    """'Changes to this page': one line per version (the release a change went into, or 'not released yet'), with
+    the date and what each change was; the diffs themselves are on the commit pages under History."""
+    from kea.docsite.versions import commit_labels
     relative = str(source.relative_to(PROJECT_ROOT))
     log = _git("log", "--follow", f"-{HISTORY_LIMIT}", "--format=%h%x09%ad%x09%an%x09%s", "--date=short", "--", relative)
     if not log:
         return ""
-    items = []
+    labels = commit_labels()
+    groups: list[tuple[str, list[tuple[str, str, str]]]] = []
     for line in log.splitlines():
-        commit, date, author, subject = (line.split("\t") + ["", "", "", ""])[:4]
-        diff_lines = _git("show", "--format=", "--unified=1", commit, "--", relative).splitlines()
-        shown = []
-        for diff_line in diff_lines[:DIFF_LINE_LIMIT]:
-            if diff_line.startswith(("diff --git", "index ", "--- ", "+++ ", "new file", "similarity", "rename")):
-                continue
-            css = "add" if diff_line.startswith("+") else "del" if diff_line.startswith("-") else \
-                "hunk" if diff_line.startswith("@@") else ""
-            shown.append(f"<span class='{css or 'ctx'}'>{esc(diff_line) or ' '}</span>")
-        from kea.docsite.versions import commit_labels
-        release = commit_labels().get(commit[:7], "")
-        badge = f"<span class='pill'>{esc(release)}</span> " if release else ""
-        commit_link = (f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(commit)}</code></a>"
-                       if mode.WITH_CHANGELOG else f"<code>{esc(commit)}</code>")
-        items.append(f"<li><details><summary>{badge}{commit_link} "
-                     f"{esc(date)} · {esc(subject)} <span class='help'>({esc(author)})</span></summary>"
-                     f"<pre class='diff'>{''.join(shown)}</pre></details></li>")   # spans are blocks
+        commit, date, _author, subject = (line.split("\t") + ["", "", "", ""])[:4]
+        release = labels.get(commit[:7], "")
+        release = "" if release.startswith("after ") else release
+        if not groups or groups[-1][0] != release:
+            groups.append((release, []))
+        groups[-1][1].append((commit, date, subject))
+    items = []
+    for release, commits in groups:
+        dates = sorted({date for _, date, _ in commits})
+        when = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
+        what = "; ".join(dict.fromkeys(subject for _, _, subject in commits))
+        links = " ".join((f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(commit)}</code></a>"
+                          if mode.WITH_CHANGELOG else f"<code>{esc(commit)}</code>") for commit, _, _ in commits)
+        badge = f"<span class='pill'>{esc(release)}</span>" if release else "<span class='pill'>not released yet</span>"
+        items.append(f"<li>{badge} {esc(when)} · {esc(what)} <span class='help'>{links}</span></li>")
     return ("<section class='fb-history not-annotatable' id='history'><h2>Changes to this page</h2>"
-            f"<p class='help'>Saved versions of <code>{esc(relative)}</code>, newest first (at most {HISTORY_LIMIT}). "
-            f"Open a line for the change: green added, red removed.</p><ul>{''.join(items)}</ul></section>")
+            f"<p class='help'>Newest first, one line per version (at most {HISTORY_LIMIT} changes)"
+            + (", with what changed in each; the commit links show the exact text." if mode.WITH_CHANGELOG else ".")
+            + f"</p><ul class='page-versions'>{''.join(items)}</ul></section>")
 
 
 def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None = None) -> str:

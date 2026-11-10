@@ -73,3 +73,55 @@ def test_build_modes(tmp_path):
     assert refused.returncode != 0                                            # local must stay inside the project
     refused = run(["build", "--mode", "public", "--out", str(project / "data" / "site")], project)
     assert refused.returncode != 0                                            # never into data/
+
+
+def test_figures_are_featured_embedded_and_provenance_folds(tmp_path):
+    """A result shows its figure in full under its summary (take-home once, the rest folded); ![[f-…]] places a
+    figure in the text instead; a conclusion shows its results' first figures as a strip; steps fold under
+    Provenance; the page history is one line per version."""
+    import base64
+    project = tmp_path / "example"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    run(["init", "--title", "Example", "--experiment", "first"], project)
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    (project / "report" / "figures").mkdir(parents=True)
+    (project / "report" / "figures" / "a.png").write_bytes(png)
+    (project / "report" / "figures" / "a.caption.md").write_text(
+        "# a\n\n**The take-home line.**\n\n*Shows:* x. *Method:* y. *Statistics:* none.\n")
+    pages = {
+        "step/s-one.md": "id: s-one\ntype: step\ntitle: A step\nshort: It ran.\nparent: home\nstatus: done",
+        "result/r-one.md": "id: r-one\ntype: result\ntitle: One\nshort: It works.\nparent: home\nstatus: done\n"
+                           "relations:\n  shown_in: [f-a]\n  made_by: [s-one]",
+        "result/r-two.md": "id: r-two\ntype: result\ntitle: Two\nshort: Also.\nparent: home\nstatus: done\n"
+                           "relations:\n  shown_in: [f-a]\n---\nBefore.\n\n![[f-a]]\n\nAfter.\n",
+        "figure/f-a.md": "id: f-a\ntype: figure\ntitle: Fig\nshort: The take-home line.\nparent: r-one\nstatus: done\n"
+                         "image: report/figures/a.png\ncaption_file: report/figures/a.caption.md",
+        "conclusion/c-one.md": "id: c-one\ntype: conclusion\ntitle: C\nshort: So.\nparent: home\nstatus: supported\n"
+                               "certainty: low\ncertainty_because: small.\nrelations:\n  supported_by: [r-one]",
+    }
+    for relative, header in pages.items():
+        path = project / "doc" / "first" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header, _, body = header.partition("\n---\n")
+        path.write_text(f"---\n{header}\n---\n{body}")
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "start"], cwd=project,
+                   check=True)
+    built = run(["build", "--no-pdf"], project)
+    assert built.returncode == 0, built.stdout + built.stderr
+    site = project / "report" / "site" / "first"
+    one = (site / "r-one.html").read_text()
+    assert one.index("class='featured") < one.index("<article>")            # under the summary, before the text
+    import re
+    visible = lambda html: re.sub(r"title='[^']*'", "", html)              # hover texts aside
+    assert visible(one).count("The take-home line.") == 1 and "<details><summary>Shows, method and statistics" in one
+    assert "class='thumb'" not in one and "details class='provenance'" in one
+    two = (site / "r-two.html").read_text()
+    article = two.split("<article>")[1]
+    assert article.index("Before.") < article.index("class='featured") < article.index("After.")
+    assert two.count("class='featured") == 1                                   # placed by the embed, not twice
+    assert "class='figure-strip" in (site / "c-one.html").read_text()
+    figure_page = (site / "f-a.html").read_text()
+    assert visible(figure_page).count("The take-home line.") == 1        # the summary box only
+    assert "class='page-versions'" in one and "<pre class='diff'>" not in one

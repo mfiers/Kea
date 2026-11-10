@@ -122,6 +122,10 @@ RELATIONS_JS = """
 """
 
 
+
+PROVENANCE_KINDS = {"step", "resource", "artefact", "decision"}   # folded under Provenance on a page
+CHIP_KINDS = {"conclusion", "caveat", "premise", "reference", "term"}   # one line each, not a table
+
 class SiteRenderer:
     """Turns the validated tree (plus git, comments and plans) into HTML pages; knows nothing about serving."""
 
@@ -135,6 +139,7 @@ class SiteRenderer:
         self.downloads: set[str] = set()
         self.code_used_on: dict[str, list[tuple[str, str]]] = {}
         self.broken: list[str] = []
+        self.featured: dict[str, set[str]] = {}    # page key -> figures shown in full on it (not listed again below)
         self.artefact_by_path = {str(node.header.get("path")).rstrip("/"): node
                                  for node in tree.nodes.values() if node.type == "artefact"}
 
@@ -189,23 +194,75 @@ class SiteRenderer:
         return trail + [(f"{node.number} {node.title}" if node.number else node.title, None)]
 
     # ------------------------------------------------------------------ node pages
-    def figure_html(self, node: Node, prefix: str, context: LinkContext, full: bool) -> str:
+    def figure_image(self, node: Node) -> str | None:
+        """Copy the figure's image into the site; its file name there, or None when the image is missing."""
         image = node.header.get("image")
         if not image or not (PROJECT_ROOT / image).exists():
-            return f"<p class='ref-broken'>figure image missing: {esc(image)}</p>"
+            return None
         copy = self.site / "figures" / Path(image).name
         copy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(PROJECT_ROOT / image, copy)
+        return copy.name
+
+    def caption_parts(self, node: Node) -> tuple[str, str]:
+        """(take-home, the rest) of the figure's caption file, as Markdown: the take-home is the caption's opening
+        bold line (the figure script writes it), else the page's summary; the rest is Shows / Method / Statistics."""
         caption_file = node.header.get("caption_file")
-        caption = ""
-        if caption_file and (PROJECT_ROOT / caption_file).exists():
-            caption_text = (PROJECT_ROOT / caption_file).read_text()
-            caption_text = "\n".join(line for line in caption_text.splitlines()
-                                     if not line.startswith(("# ", "- source table:", "- script:", "- commit:")))
-            caption = render_markdown(caption_text.strip(), context)
-            missing = [part for part in CAPTION_PARTS if part not in caption_text]
-            if missing:
-                self.tree.notes.append(f"{node.key}: caption lacks {', '.join(missing)} (caption standard)")
+        if not (caption_file and (PROJECT_ROOT / caption_file).exists()):
+            return node.short, ""
+        caption_text = (PROJECT_ROOT / caption_file).read_text()
+        caption_text = "\n".join(line for line in caption_text.splitlines()
+                                 if not line.startswith(("# ", "- source table:", "- script:", "- commit:"))).strip()
+        missing = [part for part in CAPTION_PARTS if part not in caption_text]
+        if missing:
+            self.tree.notes.append(f"{node.key}: caption lacks {', '.join(missing)} (caption standard)")
+        match = re.match(r"^\*\*(.+?)\*\*\s*(?:\n|$)", caption_text, flags=re.S)
+        if match:
+            return match.group(1).strip(), caption_text[match.end():].strip()
+        return node.short, caption_text
+
+    def featured_figure(self, node: Node, prefix: str, context: LinkContext) -> str:
+        """A figure shown in full on the page of what it shows (or where ![[f-…]] puts it): the image, the
+        figure's tag and take-home once, and the rest of the caption folded."""
+        name = self.figure_image(node)
+        if name is None:
+            return f"<p class='ref-broken'>figure image missing: {esc(node.header.get('image'))}</p>"
+        take_home, rest = self.caption_parts(node)
+        return (f"<figure class='featured not-annotatable'><a href='{prefix}{node.url}'>"
+                f"<img src='{prefix}figures/{esc(name)}' alt='{esc(node.title)}'></a>"
+                f"<figcaption><span class='fig-head'>{node_link(node, prefix)} "
+                f"{render_markdown(take_home, context).removeprefix('<p>').removesuffix('</p>')}</span>"
+                + (f"<details><summary>Shows, method and statistics</summary>{render_markdown(rest, context)}</details>"
+                   if rest else "") + "</figcaption></figure>")
+
+    def figure_strip(self, figures: list[Node], prefix: str) -> str:
+        """Small images of figures, each a link to its page with its tag: on question and conclusion pages."""
+        items = []
+        for figure in figures:
+            name = self.figure_image(figure)
+            if name:
+                items.append(f"<a class='strip-item' href='{prefix}{figure.url}' title='{esc(figure.short)}'>"
+                             f"<img src='{prefix}figures/{esc(name)}' alt='{esc(figure.title)}'>"
+                             f"<span><span class='tag t-figure'>{render.tag_inner(figure)}</span> {esc(figure.tag_title)}</span></a>")
+        return f"<div class='figure-strip not-annotatable'>{''.join(items)}</div>" if items else ""
+
+    def figures_of(self, node: Node) -> list[Node]:
+        """The figures that show this page: shown_in, figures that name it with shows:, and figures under it."""
+        keys = list(node.relations.get("shown_in", [])) + list(node.incoming.get("Shown in", []))
+        keys += [child.key for child in self.tree.children(node) if child.type == "figure"]
+        found = [self.tree.nodes[key] for key in dict.fromkeys(keys) if key in self.tree.nodes]
+        return [figure for figure in found if figure.type == "figure"]
+
+    def figure_html(self, node: Node, prefix: str, context: LinkContext, full: bool) -> str:
+        name = self.figure_image(node)
+        if name is None:
+            return f"<p class='ref-broken'>figure image missing: {esc(node.header.get('image'))}</p>"
+        image = node.header.get("image")
+        copy = self.site / "figures" / name
+        take_home, rest = self.caption_parts(node)
+        # the figure's page: the summary box above already gives the take-home, so the caption starts after it
+        caption = render_markdown(rest if full and not repeats_body(node) else
+                                  (f"**{take_home}**\n\n{rest}" if rest else take_home), context)
         if not full:
             return (f"<div class='thumb'><a href='{prefix}{node.url}'><img src='{prefix}figures/{esc(copy.name)}' "
                     f"alt='{esc(node.title)}'></a><div><b>{tagline(node, prefix)}</b>"
@@ -256,7 +313,7 @@ class SiteRenderer:
     def about_html(self, node: Node, prefix: str, context: LinkContext) -> str:
         from kea.docsite.nodes import FORWARD_LABELS
         sections: list[str] = []
-        shown: set[str] = {node.key}
+        shown: set[str] = {node.key} | getattr(self, "featured", {}).get(node.key, set())
         section = lambda title, html: sections.append(f"<section class='about not-annotatable'><h2>{esc(title)}</h2>{html}</section>")
         own = TYPE_LABELS.get(node.type, node.type).lower()
         kinds = linked_kinds
@@ -274,6 +331,7 @@ class SiteRenderer:
             if hypotheses:
                 section(f"{'Hypothesis' if len(hypotheses) == 1 else 'Hypotheses'} for this question", self.hypothesis_table(hypotheses, prefix, heading=False))
             shown.update(member.key for member in hypotheses + results + conclusions)
+        provenance: list[str] = []      # how the page was made: steps, resources, artefacts, sources, folded
         links: dict[str, list[str]] = {}
         for relation, keys in node.relations.items():
             links.setdefault(FORWARD_LABELS.get(relation, relation), []).extend(keys)
@@ -289,9 +347,15 @@ class SiteRenderer:
             missing = [key for key, target in zip(members, targets) if target is None]
             rest = [target for target in targets if target is not None and target not in figures]
             named = [target for target in targets if target is not None]
-            section(f"{label} {kinds(named)}" if named else label,
-                    "".join(self.figure_html(figure, prefix, context, False) for figure in figures)
-                    + self.node_table(rest, prefix, missing, note=lambda member: self.tree.reason(node.key, member.key)))
+            reason = lambda member: self.tree.reason(node.key, member.key)
+            title = f"{label} {kinds(named)}" if named else label
+            figure_html = "".join(self.figure_html(figure, prefix, context, False) for figure in figures)
+            if rest and not missing and not figures and all(member.type in PROVENANCE_KINDS for member in rest):
+                provenance.append(f"<h3>{esc(title)}</h3>" + self.chip_list(rest, prefix, reason))
+            elif rest and not missing and not figures and all(member.type in CHIP_KINDS for member in rest):
+                section(title, self.chip_list(rest, prefix, reason))
+            else:
+                section(title, figure_html + self.node_table(rest, prefix, missing, note=reason))
             shown.update(members)
         groups: dict[str, list[Node]] = {}
         for child in self.tree.children(node):
@@ -309,7 +373,11 @@ class SiteRenderer:
                 shown.update(user.key for user in users)
         sources = self.sources_html(node, prefix)
         if sources:
-            section("Sources", sources)
+            provenance.append("<h3>Sources</h3>" + sources)
+        if provenance:
+            sections.append("<section class='about not-annotatable'><details class='provenance'><summary><h2>"
+                            "Provenance</h2><span class='help'>how this was made: steps, data, sources</span></summary>"
+                            + "".join(provenance) + "</details></section>")
         if node.id == "home":
             sections.append(self.project_index_html(node.project, prefix))
             if render.SOLE_PROJECT == node.project:
@@ -371,6 +439,15 @@ class SiteRenderer:
                  f"<td></td></tr>" for key in missing or []]
         return ("<table class='nodes'><colgroup><col class='c-page'><col><col class='c-status'></colgroup>"
                 "<tr><th>Page</th><th>In short</th><th>Status</th></tr>" + "".join(rows) + "</table>")
+
+    def chip_list(self, members: list[Node], prefix: str, note=None) -> str:
+        """Pages as one line each: tag and title (the summary on hover), status, and why the link holds."""
+        items = []
+        for member in members:
+            reason = note(member) if note else ""
+            items.append(f"<li>{tagline(member, prefix)} {status_pill(member)}"
+                         + (f"<span class='cell-note'>because {esc(reason)}</span>" if reason else "") + "</li>")
+        return f"<ul class='chips'>{''.join(items)}</ul>"
 
     def hypothesis_table(self, hypotheses: list[Node], prefix: str, heading: bool = True) -> str:
         """Hypotheses of a question with when they were written and their outcome; rows tinted by outcome."""
@@ -462,6 +539,25 @@ class SiteRenderer:
                  + ("" if repeats_body(node) else f"<div class='short'>{esc(node.short)}</div>")]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
+        # figures: ![[f-…]] in the text places a figure there; the others that show this page come right after the
+        # summary, in full; a question or conclusion shows the first figure of each result behind it as a strip
+        embedded = re.findall(r"^!\[\[([\w-]+)\]\]\s*$", node.body, flags=re.M)
+        self.featured.setdefault(node.key, set())
+        if node.type != "figure":
+            for figure in self.figures_of(node):
+                if figure.id not in embedded:
+                    parts.append(self.featured_figure(figure, prefix, context))
+                self.featured[node.key].add(figure.key)
+        if node.type in ("question", "conclusion"):
+            if node.type == "question":
+                behind = questions.evidence(self.tree, node)[1]
+            else:
+                behind = [self.tree.nodes[key] for key in node.relations.get("supported_by", []) + node.relations.get("opposed_by", [])
+                          if key in self.tree.nodes and self.tree.nodes[key].type == "result"]
+            firsts = [figures[0] for figures in (self.figures_of(result) for result in behind) if figures]
+            firsts = [figure for figure in {figure.key: figure for figure in firsts}.values() if figure.id not in embedded]
+            if firsts:
+                parts.append(self.figure_strip(firsts, prefix))
         if node.type == "artefact":
             panel, download = artefacts.artefact_panel(str(node.header["path"]), prefix, node.header.get("access"),
                                                        self.downloads)
@@ -496,7 +592,20 @@ class SiteRenderer:
                 parts.append(f"<div class='project-summary'><span class='answer-label not-annotatable'>The project"
                              f"</span>{render_markdown(project_summary, context)}</div>")
             parts.append("<p class='help not-annotatable'>New here? <a href='../help.html'>How to read this site</a>.</p>")
-        parts.append(f"<article>{render_markdown(body_text, context)}</article>")
+        figures_here = {}
+        def embed(match: re.Match) -> str:
+            target = self.tree.nodes.get(f"{node.project}:{match.group(1)}")
+            if target is None or target.type != "figure":
+                self.broken.append(f"{node.key}: figure embed ![[{match.group(1)}]]")
+                return match.group(0)
+            figures_here[target.id] = self.featured_figure(target, prefix, context)
+            self.featured[node.key].add(target.key)
+            return f"\n<div data-kea-figure=\"{target.id}\"></div>\n"
+        body_text = re.sub(r"^!\[\[([\w-]+)\]\]\s*$", embed, body_text, flags=re.M)
+        article = render_markdown(body_text, context)
+        for figure_id, html_figure in figures_here.items():
+            article = re.sub(rf"(?:<p>)?<div data-kea-figure=\"{figure_id}\"></div>(?:</p>)?", lambda _: html_figure, article)
+        parts.append(f"<article>{article}</article>")
         colour = TYPE_COLOURS.get(node.type, '#556')
         parts.append("</div>")
         if node.type == "question" and questions.answer(node):

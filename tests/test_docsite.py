@@ -313,3 +313,30 @@ def test_help_is_one_text_on_the_site_github_and_hub():
     rendered = kea_help.render(tag=kea_help.plain_tag, route="<div class='route'></div>")
     assert "<!-- KINDS -->" not in rendered and "<!-- ROUTE -->" not in rendered and "class='route'" in rendered
     assert rendered.count("class='tag'") >= 14 and "id='why-small-pages'".replace("'", '"') in rendered
+
+
+def test_a_conclusion_stays_with_the_question_it_names(toy_doc):
+    """A conclusion that answers Q2 but cites a result of Q1 belongs to Q2 only; one that names no question is found
+    through its results."""
+    from kea.docsite import questions
+    write_page(toy_doc, "proj/question/q-b.md", "id: q-b\ntype: question\ntitle: Q2\nshort: B.\nparent: home\nstatus: open")
+    write_page(toy_doc, "proj/conclusion/c-b.md", "id: c-b\ntype: conclusion\ntitle: C\nshort: C.\nparent: q-b\n"
+               "status: supported\nrelations:\n  answers: [q-b]\n  supported_by: [r-a]")
+    write_page(toy_doc, "proj/conclusion/c-free.md", "id: c-free\ntype: conclusion\ntitle: Free\nshort: F.\n"
+               "parent: home\nstatus: supported\nrelations:\n  supported_by: [r-a]")
+    tree = nodes.load_tree(toy_doc)
+    first = [node.id for node in questions.evidence(tree, tree.nodes["proj:q-a"])[2]]
+    second = [node.id for node in questions.evidence(tree, tree.nodes["proj:q-b"])[2]]
+    assert first == ["c-free"] and second == ["c-b"]
+
+
+def test_data_links_are_chips_and_a_dataset_id_is_named_once(toy_doc):
+    write_page(toy_doc, "proj/resource/o-ds.md", "id: o-ds\ntype: resource\ntitle: \"Anthive dataset G23/MIC: Gerrits "
+               "2023 microglia\"\nshort: Data.\nparent: home\naliases: [G23/MIC]")
+    tree = nodes.load_tree(toy_doc)
+    context = LinkContext(tree, "proj", "", lambda target, prefix: None, lambda target, prefix: ("x.html", target))
+    html = render_markdown("Counts in [[data:data/final/a_very_long_file_name_for_counts_2026.tsv]]. G23/MIC is "
+                           "big; G23/MIC again.\n\n| id |\n|---|\n| G23/MIC |", context)
+    assert "class='data-chip'" in html and "title='data/final/a_very_long_file_name_for_counts_2026.tsv'" in html
+    assert "<code>" not in html
+    assert html.count("class='alias-name'") == 1 and "(Gerrits 2023 microglia)" in html

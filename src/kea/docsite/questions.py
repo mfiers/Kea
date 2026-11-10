@@ -23,8 +23,9 @@ def evidence(tree: Tree, question: Node) -> tuple[list[Node], list[Node], list[N
     """(hypotheses, results, conclusions) that belong to a question.
 
     Hypotheses: its children, or pages that answer it. Results: its children, results that answer it or test one of
-    its hypotheses. Conclusions: its children, conclusions that answer it or are supported or opposed by one of its
-    results.
+    its hypotheses. Conclusions: its children, conclusions that answer it, and conclusions that name no question
+    themselves (no question as parent, no answers:) but are supported or opposed by one of its results. A conclusion
+    that names its question is never pulled under another one through the results it cites.
     """
     members = [node for node in tree.nodes.values() if node.project == question.project]
 
@@ -41,9 +42,14 @@ def evidence(tree: Tree, question: Node) -> tuple[list[Node], list[Node], list[N
     results = [node for node in members if node.type == "result"
                and (is_child(node) or points_to(node, ("answers", "tests"), tested))]
     found = {node.key for node in results}
+
+    def placed(node: Node) -> bool:
+        """The page names its question itself: a question as parent, or answers:. Then only that counts."""
+        parent = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
+        return bool((parent is not None and parent.type == "question") or node.relations.get("answers"))
     conclusions = [node for node in members if node.type == "conclusion"
                    and (is_child(node) or points_to(node, ("answers",), own)
-                        or points_to(node, ("supported_by", "opposed_by"), found))]
+                        or (not placed(node) and points_to(node, ("supported_by", "opposed_by"), found)))]
     return sorted(hypotheses, key=ORDER), sorted(results, key=ORDER), sorted(conclusions, key=ORDER)
 
 

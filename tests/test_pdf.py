@@ -215,3 +215,24 @@ def test_no_pdf_build_keeps_the_last_built_pdf(tmp_path, monkeypatch):
     assert kept["file"] == "my-project-v0.2.0.pdf" and kept["reused"]
     assert (site / "my-project-v0.2.0.pdf").read_bytes() == b"%PDF v0.2.0"
 
+
+
+def test_reader_copy_leaves_the_records_out_and_links_stay_safe(toy_doc):
+    """The reader's PDF keeps the story, glossary and references, drops the overview tables, and says where they
+    are; links to pages that only the complete copy holds fall back to their text (klink/nlink check the label)."""
+    write_page(toy_doc, "proj/term/t-x.md", "id: t-x\ntype: term\ntitle: Thing\nshort: A thing.\nparent: home")
+    tree = nodes.load_tree(toy_doc)
+    fixed = {"version": "-", "commit": "-", "built": "-"}
+    complete = pdf.PdfWriter(tree).document(fixed)
+    reader = pdf.PdfWriter(tree, reader=True).document(fixed)
+    assert "== Overview of all pages" in complete and "== Overview of all pages" not in reader
+    assert "== Glossary" in reader and "reader's copy" in reader and "reader's copy" not in complete
+    assert "#let klink(target, body) = context { if query(target).len() > 0" in reader
+    assert "#link(<" not in reader.split("#outline")[1]        # every link to a page goes through klink/nlink
+
+
+def test_a_wide_table_in_a_page_body_gets_a_landscape_page():
+    cells = "".join(f"<th>c{index}</th>" for index in range(8))
+    wide = pdf.Converter({}, landscape=True).convert(f"<table><tr>{cells}</tr><tr><td>1</td></tr></table>")
+    assert wide.startswith("#page(flipped: true)[#datatable(8, 8pt, 1,")
+    assert not pdf.Converter({}).convert(f"<table><tr>{cells}</tr></table>").startswith("#page(")

@@ -91,7 +91,7 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
                "downloads": len(renderer.downloads),
                "problems": len(tree.problems) + len(renderer.broken) + len(broken_in_site),
                "notes": len(tree.notes),
-               "pdf": (renderer.pdf or {}).get("file", "none (typst not installed)" if with_pdf else "skipped")
+               "pdf": (renderer.pdf or {}).get("file", "none (typst not installed, or it failed: see above)" if with_pdf else "skipped")
                + ((" (kept from the last build)" if not with_pdf else " (reused)")
                   if (renderer.pdf or {}).get("reused") else "")}
     return summary, tree.problems + renderer.broken + broken_in_site

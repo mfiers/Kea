@@ -246,8 +246,9 @@ class Converter:
     """HTML (as rendered for the site) to Typst markup. ``urls`` maps page paths (node.url) to node keys. Links to
     pages become ``#nlink`` (with the page number), glossary links ``#tlink`` (preamble)."""
 
-    def __init__(self, urls: dict[str, str], heading_level: int = 3, cite=None):
+    def __init__(self, urls: dict[str, str], heading_level: int = 3, cite=None, landscape: bool = False):
         self.urls, self.heading_level = urls, heading_level
+        self.landscape = landscape    # a wide table (7+ columns) at the top level gets a landscape page of its own
         self.cite = cite              # key, link text -> citation markup for references (None: an ordinary link)
         self.in_table = 0
 
@@ -255,6 +256,9 @@ class Converter:
         builder = TreeBuilder()
         builder.feed(html_text)
         builder.close()
+        for child in builder.root.children:
+            if isinstance(child, Element) and child.tag == "table":
+                child.attrs["data-top"] = "1"
         return self.blocks(builder.root.children).strip()
 
     # block level: a list of children where text and inline elements are gathered into paragraphs
@@ -344,6 +348,10 @@ class Converter:
             parts += [cell for cells in body_rows for cell in padded(cells)]
         finally:
             self.in_table -= 1
+        if self.landscape and element.attrs.get("data-top") and width >= 7:
+            # too wide for the text column: a landscape page of its own, at a readable size
+            return (f"#page(flipped: true)[#datatable({width}, 8pt, {1 if header_rows else 0}, " + ", ".join(parts)
+                    + ")]")
         return f"#datatable({width}, {size}, {1 if header_rows else 0}, " + ", ".join(parts) + ")"
 
     def inlines(self, children: list) -> str:
@@ -388,7 +396,7 @@ class Converter:
                     kind = next((name[2:] for name in classes if name.startswith("t-")), "page")
                     return f"#nlink({label(key)})[{tag_markup(kind, node.text_content().strip())}]"
                 if "tagline" in classes:          # tag and one line: the whole line is the link, page at the end
-                    return f"#link({label(key)})[{inner}] #h(0.4em) #h(1fr) #pagenum({label(key)})"
+                    return f"#klink({label(key)})[{inner}] #h(0.4em) #h(1fr) #pagenum({label(key)})"
                 return f"#tlink({label(key)})[{inner}]" if "term" in node.attrs.get("class", "").split() \
                     else f"#nlink({label(key)})[{inner}]"
             if href.startswith(("http://", "https://", "mailto:")):
@@ -454,17 +462,18 @@ PREAMBLE = r"""#let ink = rgb("#1d2330")
   let there = locate(target).page()
   if there != here().page() { text(size: 0.72em, fill: muted)[#h(1.5pt)p.#counter(page).at(target).first()] }
 }
-#let nlink(target, body) = { link(target, body); pageref(target) }
-#let tlink(target, body) = link(target, underline(stroke: (paint: luma(150), thickness: 0.5pt, dash: "dotted"), offset: 2pt, text(fill: ink, body)))
+#let klink(target, body) = context { if query(target).len() > 0 { link(target, body) } else { body } }
+#let nlink(target, body) = context { if query(target).len() > 0 { link(target, body); pageref(target) } else { body } }
+#let tlink(target, body) = context { if query(target).len() == 0 { body } else { link(target, underline(stroke: (paint: luma(150), thickness: 0.5pt, dash: "dotted"), offset: 2pt, text(fill: ink, body))) } }
 #let tag(colour, icon, body) = box(fill: rgb(colour), inset: (x: 2.6pt), outset: (y: 1.6pt), radius: 4pt,
   text(font: sans, fill: white, size: 6.6pt, weight: "bold", top-edge: "cap-height", bottom-edge: "baseline",
     { box(height: 0.92em, baseline: 0.02em, image(bytes(icon), format: "svg")); h(1.4pt); body }))
 #let kindname(colour, word) = text(font: sans, weight: "bold", fill: rgb(colour), word)
 #let pagenum(target) = context {
-  if locate(target).page() != here().page() { text(font: sans, size: 7pt, fill: muted)[p.#counter(page).at(target).first()] }
+  if query(target).len() > 0 and locate(target).page() != here().page() { text(font: sans, size: 7pt, fill: muted)[p.#counter(page).at(target).first()] }
 }
 #let entry(target, head, body, status) = grid(columns: (1fr, auto), column-gutter: 0.6em,
-  link(target, { head; h(0.35em); text(fill: ink, body) }),
+  context { let inner = { head; h(0.35em); text(fill: ink, body) }; if query(target).len() > 0 { link(target, inner) } else { inner } },
   align(right + top, box({ status; h(3pt); pagenum(target) })))
 #let icode(body) = { h(1.2pt); highlight(fill: luma(240), extent: 0.6pt, text(font: "DejaVu Sans Mono", size: 0.84em, body)); h(1.2pt) }
 #let badge(colour, body) = box(fill: rgb(colour), inset: (x: 4.5pt, y: 2.2pt), outset: (y: 0.5pt), radius: 2.5pt, text(font: sans, fill: white, size: 7.5pt, weight: "bold", body))
@@ -564,8 +573,9 @@ OVERVIEW_TYPES = ("question", "hypothesis", "premise", "step", "decision", "resu
 
 
 class PdfWriter:
-    def __init__(self, tree: Tree):
+    def __init__(self, tree: Tree, reader: bool = False):
         self.tree = tree
+        self.reader = reader       # the reader's PDF: the story, glossary and references; the records go to the full one
         self.urls = {node.url: node.key for node in tree.nodes.values()}
         self.artefact_by_path = {str(node.header.get("path", "")).rstrip("/"): node
                                  for node in tree.nodes.values() if node.type == "artefact"}
@@ -575,10 +585,11 @@ class PdfWriter:
         self.notes: list[str] = []                   # problems worth a line in the build log (small figures)
 
     # ------------------------------------------------------------------ helpers
-    def markdown(self, node: Node, source: str, level: int) -> str:
+    def markdown(self, node: Node, source: str, level: int, landscape: bool = False) -> str:
         context = LinkContext(self.tree, node.project, SENTINEL, lambda target, prefix: None,
                               self.data_href, node.key)
-        return Converter(self.urls, heading_level=level, cite=self.cite).convert(render_markdown(source, context))
+        return Converter(self.urls, heading_level=level, cite=self.cite,
+                         landscape=landscape).convert(render_markdown(source, context))
 
     def reference_number(self, key: str) -> str:
         if key not in self.reference_numbers:
@@ -661,11 +672,11 @@ class PdfWriter:
         return title + items + "\n#v(0.6em)"
 
     def tag_cell(self, node: Node) -> str:
-        return f"#link({label(node.key)})[{tag_markup(node.type, node.number)}]"
+        return f"#klink({label(node.key)})[{tag_markup(node.type, node.number)}]"
 
     def title_cell(self, node: Node, words: str) -> str:
         """Table cell: the text as the link, the page number at the end of the line."""
-        return f"#link({label(node.key)})[#text(fill: ink)[{text(words)}]] #h(0.4em) #h(1fr) #pagenum({label(node.key)})"
+        return f"#klink({label(node.key)})[#text(fill: ink)[{text(words)}]] #h(0.4em) #h(1fr) #pagenum({label(node.key)})"
 
     def links(self, keys: list[str]) -> str:
         found = sorted((self.tree.nodes[key] for key in keys if key in self.tree.nodes), key=self.number_order)
@@ -690,7 +701,7 @@ class PdfWriter:
             source = "\n\n".join(paragraphs)
         if node.type == "reference":
             source = drop_section(source, "Abstract")
-        return self.markdown(node, source, level + 1) if source.strip() else ""
+        return self.markdown(node, source, level + 1, landscape=True) if source.strip() else ""
 
     def head(self, node: Node, level: int, extra: str = "") -> str:
         """The heading block: stripe in the type's colour, heading with label, badge and pills, summary."""
@@ -715,12 +726,18 @@ class PdfWriter:
                 + (f"#block(above: 0.5em, below: 0.7em)[{pills}]\n\n" if pills else "")
                 + f"#summary({string(colour)})[{text(node.short)}]]")
 
-    def section(self, node: Node, level: int) -> str:
-        """One page of the tree as a section (heading block, figure, body, a few connection lines)."""
+    def section(self, node: Node, level: int, figures: list[Node] | None = None) -> str:
+        """One page of the tree as a section (heading block, figure, body, a few connection lines). `figures`: the
+        figures that show a result, printed right after its summary (each with its tag and take-home once)."""
         self.placed.add(node.key)
         parts = [self.head(node, level)]
         if node.type == "figure":
             parts.append(self.figure(node, level))
+        for figure in figures or []:
+            self.placed.add(figure.key)
+            parts.append(f"#block(above: 0.9em, sticky: true)[#text(font: sans, size: 9pt, weight: \"bold\")[{self.link(figure)} "
+                         f"{text(figure.title)}] {label(figure.key)}]")
+            parts.append(self.figure(figure, level + 1, take_home=True))
         if node.type == "hypothesis":            # what was expected and what counts as support, fixed with the claim
             for name, title in (("prediction", "Prediction"), ("criterion", "Counts as support if")):
                 if node.header.get(name):
@@ -796,7 +813,9 @@ class PdfWriter:
                     paths.append(str(value).split("#")[0].strip().rstrip("/"))
         return paths
 
-    def figure(self, node: Node, level: int) -> str:
+    def figure(self, node: Node, level: int, take_home: bool = False) -> str:
+        """The image and its caption. The caption's opening bold line (the take-home) is left out where the
+        summary above already says it; `take_home`: printed (a figure inside a result, without its own summary)."""
         image = str(node.header.get("image", ""))
         if not image or not (PROJECT_ROOT / image).is_file():
             return f"#emph[Figure image missing: {text(image)}]"
@@ -812,7 +831,12 @@ class PdfWriter:
         caption_file = node.header.get("caption_file")
         if caption_file and (PROJECT_ROOT / caption_file).is_file():
             caption = "\n".join(line for line in (PROJECT_ROOT / caption_file).read_text().splitlines()
-                                if not line.startswith(("# ", "- source table:", "- script:", "- commit:")))
+                                if not line.startswith(("# ", "- source table:", "- script:", "- commit:"))).strip()
+            opening = re.match(r"^\*\*(.+?)\*\*\s*(?:\n|$)", caption, flags=re.S)
+            if opening and not take_home:
+                caption = caption[opening.end():].strip()
+            elif not opening and take_home:
+                caption = f"**{node.short}**\n\n{caption}"
             parts.append(f"#block(inset: (x: 4pt), above: 0.8em)[#set text(size: 9pt)\n"
                          f"{self.markdown(node, caption.strip(), level + 1)}]")
             if len(caption) < 1800:        # a short caption stays with its image (a long one may run on)
@@ -898,12 +922,11 @@ class PdfWriter:
         for result in results:
             if result.key in self.placed:
                 continue
-            parts.append(self.section(result, level))
             figures = [self.tree.nodes[key] for key in result.relations.get("shown_in", []) if key in self.tree.nodes]
             figures += [child for child in self.tree.children(result) if child.type == "figure"]
-            for figure in figures:
-                if figure.key not in self.placed:
-                    parts.append(self.section(figure, level + 1))
+            figures = [figure for figure in {figure.key: figure for figure in figures}.values()
+                       if figure.key not in self.placed and figure.header.get("image")]
+            parts.append(self.section(result, level, figures))
         return parts
 
     def at_a_glance(self, project: str, home: Node) -> list[str]:
@@ -1011,7 +1034,9 @@ class PdfWriter:
 
     def closing_chapters(self, project: str, hypotheses: list[Node]) -> list[str]:
         """The chapters at the end: overview of all pages, hypotheses in full, data and resources, glossary,
-        references."""
+        references. The reader's PDF keeps only the glossary and the references."""
+        if self.reader:
+            return self.glossary(project) + self.bibliography(project)
         parts = self.overview(project)
         if hypotheses:
             parts += [f"== Hypotheses in full",
@@ -1170,7 +1195,7 @@ class PdfWriter:
         """Tags only (no page numbers), grouped by kind: compact cells of the overview tables."""
         groups: dict[str, list[str]] = {}
         for item in nodes:
-            groups.setdefault(item.type, []).append(f"#link({label(item.key)})[{tag_markup(item.type, item.number)}]")
+            groups.setdefault(item.type, []).append(f"#klink({label(item.key)})[{tag_markup(item.type, item.number)}]")
         return " #h(5pt) ".join(" ".join(tags) for tags in groups.values())
 
     def overview(self, project: str) -> list[str]:
@@ -1386,10 +1411,19 @@ lists of pages the whole line is the link, with the status and the page number a
 The comments of readers, the review plans and the changed text of each page (all on the site); the code (named by
 its file); the relations graph (the overview tables at the end are its printed form); and the contents of data
 files, which may hold controlled-access, donor-level data. Numbers in the text come from those files; Data and resources
-lists them.
+lists them.{self.reader_note()}
 
 #meta[Made with Kea (github.com/mfiers/Kea). {text(TAGLINE)}]
 """
+
+    def reader_note(self) -> str:
+        """In the reader's PDF: where the records went."""
+        if not self.reader:
+            return ""
+        return ("\n\nThis is the reader's copy: the story, the glossary and the references. The records (overview "
+                "tables of every page, hypotheses in full, data and resources, figure files) are in the complete PDF "
+                "of the same version, on the site; a page that appears only there is named here without a page "
+                "number.")
 
     def help_markup(self) -> str:
         """Why Kea and how a project progresses: the reader's help (kea/help/1-why.md, 2-progress.md), verbatim, as
@@ -1540,38 +1574,54 @@ def pdf_logo() -> str:
 
 
 def site_pdf(tree: Tree, site: Path) -> dict | None:
-    """The PDF for a site build (`kea build`), or None when Typst is not installed or the compile fails.
+    """The PDFs for a site build (`kea build`): the reader's copy (the story, glossary and references) and the
+    complete one (with the records: overview tables, hypotheses in full, data and resources, figure files); None
+    when Typst is not installed or the compile fails.
 
-    The same PDF for every build mode: it prints no data-file contents. It is compiled only when an input changed.
-    The cache key covers everything that reaches the PDF: the whole Typst source (made with a fixed stamp, so the
-    date and commit do not count), the bytes of every image it includes, the Kea version and the Typst version.
-    Compiled files are kept in report/pdf/_cache/<key>.pdf (the last CACHE_KEEP) with a manifest of the inputs; a
-    reused PDF carries the version and commit of the build that compiled it. The build prints why the PDF was
-    reused or rebuilt. Returns {"file", "version", "commit", "built", "reused", "reason"}; the PDF is copied to
-    <site>/<file>.
+    Neither prints data-file contents. Each is compiled only when an input changed. The cache key covers everything
+    that reaches the PDF: the whole Typst source (made with a fixed stamp, so the date and commit do not count), the
+    bytes of every image it includes, the Kea version and the Typst version. Compiled files are kept in
+    report/pdf/_cache/<key>.pdf (the last CACHE_KEEP) with a manifest of the inputs; a reused PDF carries the version
+    and commit of the build that compiled it. The build prints why each was reused or rebuilt. Returns {"file",
+    "complete", "version", "commit", "built", "reused", "reason"}; both PDFs are copied into <site>.
     """
-    import hashlib
     import json
-    import kea
     command = typst_command()
     if command is None:
         return None
-    writer = PdfWriter(tree)
+    cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    built = {}
+    for kind in ("complete", "reader"):
+        result = compile_cached(tree, command, cache, reader=(kind == "reader"))
+        if result is None:
+            return None
+        built[kind] = result
+    (cache / LAST).write_text(json.dumps({"key": built["complete"][0].stem, "reader": built["reader"][0].stem}))
+    complete = publish_cached(built["complete"][0], site, *built["complete"][1:], suffix="-complete")
+    reader = publish_cached(built["reader"][0], site, *built["reader"][1:])
+    return {**reader, "complete": complete["file"]}
+
+
+def compile_cached(tree: Tree, command: str, cache: Path, reader: bool) -> tuple[Path, bool, str] | None:
+    """Compile one PDF (or reuse it from the cache): (cached file, reused, reason), or None when Typst fails."""
+    import hashlib
+    import json
+    import kea
+    writer = PdfWriter(tree, reader=reader)
     fixed = writer.document({"version": "-", "commit": "-", "built": "-"})
     source = writer.document()                  # second, so writer.stamp holds the real version and commit
     typst_version = subprocess.run([command, "--version"], capture_output=True, text=True).stdout.strip()
     inputs = {"(typst source)": hashlib.sha256(fixed.encode()).hexdigest()[:16],
-              "(kea)": kea.__version__, "(typst)": typst_version}
+              "(kea)": kea.__version__, "(typst)": typst_version, "(copy)": "reader" if reader else "complete"}
     for image in sorted(set(re.findall(r'image\("/([^"]+)"', fixed))):
         path = PROJECT_ROOT / image
         inputs[image] = hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.is_file() else "missing"
     digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()[:16]
-    cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
-    cache.mkdir(parents=True, exist_ok=True)
     cached, meta_path = cache / f"{digest}.pdf", cache / f"{digest}.json"
     reused = cached.exists() and meta_path.exists()
     if reused:
-        reason = f"reused: none of its {len(inputs) - 3} image(s), its source, Kea or Typst changed (key {digest})"
+        reason = f"reused: none of its {len(inputs) - 4} image(s), its source, Kea or Typst changed (key {digest})"
     else:
         reason = "rebuilt: " + changed_inputs(cache, inputs)
         typ_path = cache / f"{digest}.typ"
@@ -1583,25 +1633,25 @@ def site_pdf(tree: Tree, site: Path) -> dict | None:
                   f"{result.stderr.strip()[:2000]}", file=sys.stderr)
             return None
         meta_path.write_text(json.dumps({**writer.stamp, "inputs": inputs}))
-        for note in writer.notes:
-            print(f"note    PDF {note}")
+        if not reader:
+            for note in writer.notes:
+                print(f"note    PDF {note}")
         for old in sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime)[:-CACHE_KEEP]:
             for suffix in (".pdf", ".json", ".typ"):
                 old.with_suffix(suffix).unlink(missing_ok=True)
-    (cache / LAST).write_text(json.dumps({"key": digest}))
-    return publish_cached(cached, site, reused, reason)
+    return cached, reused, reason
 
 
 LAST = "_last.json"         # in report/pdf/_cache: the key of the PDF the last full build put on the site
 
 
-def publish_cached(cached: Path, site: Path, reused: bool, reason: str) -> dict:
-    """Copy a compiled PDF from the cache into the site under <title>-<version>.pdf; its build record."""
+def publish_cached(cached: Path, site: Path, reused: bool, reason: str, suffix: str = "") -> dict:
+    """Copy a compiled PDF from the cache into the site under <title>-<version><suffix>.pdf; its build record."""
     import json
     meta = json.loads(cached.with_suffix(".json").read_text())
     meta.pop("inputs", None)
     title = re.sub(r"[^a-z0-9]+", "-", str(SETTINGS.get("title") or PROJECT_ROOT.name).lower()).strip("-")
-    name = f"{title}-{meta['version']}.pdf"
+    name = f"{title}-{meta['version']}{suffix}.pdf"
     shutil.copy2(cached, site / name)
     print(f"pdf     {name} {reason}")
     return {"file": name, **meta, "reused": reused, "reason": reason}
@@ -1615,8 +1665,14 @@ def last_pdf(site: Path) -> dict | None:
     cache = PROJECT_ROOT / "report" / "pdf" / "_cache"
     candidates = []
     try:
-        key = json.loads((cache / LAST).read_text())["key"]
-        candidates.append(cache / f"{key}.pdf")
+        last = json.loads((cache / LAST).read_text())
+        key = last["key"]
+        complete, reader = cache / f"{key}.pdf", cache / f"{last.get('reader', '')}.pdf"
+        if last.get("reader") and all(path.is_file() and path.with_suffix(".json").is_file() for path in (complete, reader)):
+            why = "kept from the last full build (--no-pdf: not checked against the current pages)"
+            kept = publish_cached(complete, site, True, why, suffix="-complete")
+            return {**publish_cached(reader, site, True, why), "complete": kept["file"]}
+        candidates.append(complete)
     except (OSError, ValueError, KeyError):
         pass
     candidates += sorted(cache.glob("*.pdf"), key=lambda path: path.stat().st_mtime, reverse=True)

@@ -164,7 +164,10 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
 - Figures: made by scripts from saved tables, new version per change; captions with title, take-home and per
   panel take-home / Shows / Method / Statistics (`kea build` notes missing parts). Make figures at their printed
   size (at most 16.6 cm wide, 19 cm high, fonts 6–8 pt, with the PNG's dpi set): the PDF prints them at that size
-  and the build notes figures it has to shrink below 80 %.
+  and the build notes figures it has to shrink below 80 %. Start the caption with the take-home as one bold line: the site and the PDF show it once,
+  under the image, and fold the rest (Shows / Method / Statistics).
+- A result's figures (`shown_in:`, or figures under it) are shown in full right under its summary, on the site and in the PDF; a conclusion or question shows the first figure of each result behind it as a strip. To place a figure inside the text instead, put `![[f-…]]` on a line of its own.
+- Inline data links (`[[data:path]]`) render as a short chip with the path on hover; give the chip a name with `[[data:path|counts table]]`. A resource with `aliases:` (a dataset id) is followed by its title at its first mention in a page's prose.
 - Terms (`aliases:`) are linked automatically at their first use in each section (each `##` heading starts a new one), in prose and in table cells (not table headers), and numbered T1, T2 … in glossary order. Terms that
   name entities (genes, proteins, cell types) get `group: Genes` (etc.); the glossary lists each group after the
   key terms (titles that look like gene symbols go under Genes without it).
@@ -308,7 +311,7 @@ tables; for hosting elsewhere; check `_public_report.json`; run entries may quot
 - **No data-file contents.**
 - **Without Typst** the `.typ` source is still written and the command exits 3 with install instructions. Offer
   to install Typst rather than working around it.
-- **`kea build` adds the PDF to the site**, linked from the menu bar of every page. It is recompiled only when its inputs change
+- **`kea build` adds two PDFs to the site**: the reader's copy (the story, glossary and references; the menu's PDF) and the complete one with the records (overview tables, hypotheses in full, data and resources, figure files; under PDF ▸ With all records). Each is recompiled only when its inputs change
   (source, images, Kea, Typst; the build says why); `--no-pdf` skips compiling it and keeps the PDF of the last full build on the site.
 
 The PDF is read on paper by people outside the review cycle. Keep review-process notes ("plan v0.4 #2", "Mark's

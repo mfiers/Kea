@@ -158,8 +158,9 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>On a page:</p>
 <ul>
 <li>The coloured bar on the left and the word above the title say the type. The page's own content (title, summary, text) is set in a serif face. Under the line "About this page" is what Kea knows about it: its permanent identifier (<code>kea:…</code>, which stays when the page is edited or moved, and <code>@…</code> for exactly this version, to cite), its sources, and its links to other pages as tables ("Tested by this step", "Supported by these results"), with the reason each link holds.</li>
+<li>A result's figures come right under its summary, with the take-home; open "Shows, method and statistics" for the rest of the caption. A question or conclusion shows the figures of the results behind it as a row of small images. Under the text, conclusions and caveats are listed one per line; how the page was made (steps, data, sources) is folded under Provenance. "Changes to this page" lists one line per version; the exact changes are under History.</li>
 <li>Pills next to the title: the status (green: supported, done or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or dropped); "exploratory"; on a hypothesis "written before its test" or "written after results"; on a conclusion its certainty; "waiting for approval", "approved", "confirmed", "recheck"; and the release in which the page last changed.</li>
-<li>The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (all pages as one document); Help.</li>
+<li>The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (the analysis as one document to read; with all records under it); Help.</li>
 </ul>
 <!-- /help -->
 
@@ -187,20 +188,20 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
 <p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
 <p>For Claude Code, the skill is one file:</p>
-<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.2/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.24.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 </code></pre>
 <p>Other agents: put <code>skill/SKILL.md</code> where the agent reads its instructions, for example in the project's agent instructions file.</p>
 <h2 id="install">Install</h2>
 <p>Kea is not on PyPI; install it from this repository with <a href="https://docs.astral.sh/uv/">uv</a> (it fetches Python ≥ 3.11 if needed). Always name a tag (see <a href="https://github.com/mfiers/Kea/tags">tags</a>), so a project does not change when Kea does. The agent normally does this itself.</p>
 <pre><code># as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.23.2
+uv tool install git+https://github.com/mfiers/Kea.git@v1.24.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.23.2&quot;
+uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.24.0&quot;
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.23.2 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.24.0 kea --help
 </code></pre>
 <ul>
 <li>Upgrade: run the same command with the new tag (<code>uv tool install --force git+…@vX.Y.Z</code>, or <code>uv add</code> again). <code>uv tool upgrade kea</code> does not move a pinned tag.</li>
@@ -211,8 +212,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.23.2 kea --help
 </ul>
 <h2 id="reference">Reference</h2>
 <h3 id="what-the-agent-runs-in-a-project">What the agent runs in a project</h3>
-<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.23.2&quot;     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.2
+<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.24.0&quot;     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.24.0
 kea init --title &quot;My project&quot; --author &quot;Your Name&quot; --experiment first-experiment --question &quot;What does it ask?&quot;
 make site &amp;&amp; make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement
@@ -311,11 +312,12 @@ kea publish                          # after every build: sends only files the h
 <ul>
 <li><em>At a glance</em>: every question with its answer in short and its conclusions, each conclusion in full once, and the open caveats;</li>
 <li>background and scope, premises;</li>
-<li>one part per question: a table of its hypotheses, then the results with their figures;</li>
+<li>one part per question: a table of its hypotheses, then the results, each with its figures right under its summary (take-home once, then Shows / Method / Statistics);</li>
 <li>conclusions, caveats and methods (steps, each followed by its decisions);</li>
 <li>closing chapters: overview of all pages (one table per kind: tag, one line, status, question, linked pages), hypotheses in full, data and resources (resources O1 … with version, retrieval date, checksum and local copy; data files; figure files), the glossary (terms T1 …, then groups such as <em>Genes</em>), the references, and what changed (releases with kind, plan and commit; runs with their commits).</li>
 </ul>
 <p>References are numbered B1, B2 … in order of first citation, shown in the text as tags like every other page (not superscript), and listed like a journal's reference list from each page's <code>citation:</code> (<code>kea cite --write</code> fills it from Europe PMC, Nature style). Full names read as the kind in its colour followed by the tag (Question [Q1]); lists of pages carry the status and page number at the end of each line. Figures are printed at their own size (from the PNG's dpi), at most the text width and 19 cm high; the build notes figures it has to shrink below 80 %. A figure page may set <code>pdf_width:</code> (<code>100%</code>, <code>12cm</code>) to override the automatic size. The Methods list the tools each step uses with their RRIDs, plus the questions, results and conclusions that follow from the step.</p>
+<p><code>kea build</code> puts two PDFs on the site: the reader's copy (the story, the glossary and the references) and the complete one with the closing chapters (overview tables, hypotheses in full, data and resources, figure files); a page that is only in the complete copy is named in the reader's without a page number. A table with seven or more columns in a page's text gets a landscape page of its own.</p>
 <p>A standard closing chapter, <em>About this document</em>, explains the parts present, the page types (in the site's colours), the numbers, the statuses and the page references. Every link to a page shows its page number.</p>
 <p>It leaves out comments, plans, code listings, the relations graph (the overview tables are its printed form) and the contents of data files, so no donor-level rows reach the PDF. It needs <a href="https://github.com/typst/typst/releases">Typst</a> (a single binary; or <code>typst:</code> in <code>kea.yaml</code>). Without it the <code>.typ</code> source is still written. Output goes to <code>report/pdf/&lt;title&gt;_&lt;date&gt;_&lt;version&gt;_&lt;commit&gt;.pdf</code> and is never overwritten.</p>
 <p><code>kea build</code> also puts the PDF into the site, linked from the menu bar, when Typst is installed. It is recompiled only when something in it changes: the cache key (<code>report/pdf/_cache/</code>) covers the whole Typst source, every image file's bytes, the Kea version and the Typst version, and the build prints why it reused or rebuilt the PDF. <code>--no-pdf</code> skips it.</p>

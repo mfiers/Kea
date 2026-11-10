@@ -126,6 +126,11 @@ a.ref{border-bottom:1px dotted var(--accent)}a.ref:hover{text-decoration:none;ba
 .help{color:var(--muted);font-size:13px}
 figure{margin:12px 0}figure img{max-width:100%;border:1px solid var(--line);border-radius:4px;background:#fff}
 figcaption{font-size:13.5px;color:#333;margin-top:6px}
+.alias-name{color:#5a6270}
+ul.chips{list-style:none;padding:0;margin:6px 0}ul.chips li{margin:4px 0}ul.chips .cell-note{display:block;margin:1px 0 0 2px}details.provenance>summary{cursor:pointer;list-style:revert}details.provenance>summary h2{display:inline;margin-right:10px}details.provenance h3{font-size:14px;margin:14px 0 4px;color:#5a6270}
+.data-chip{display:inline-flex;align-items:center;gap:3px;font:500 12px/1.3 system-ui,sans-serif;padding:0 7px 0 5px;border:1px solid var(--line);border-radius:9px;background:#f6f7f9;color:#5a4a10;text-decoration:none;white-space:nowrap;vertical-align:1px}.data-chip .ico{width:12px;height:12px}
+figure.featured{margin:14px 0 18px}figure.featured img{width:100%;display:block}figure.featured figcaption{font-size:14px}.fig-head{display:block;font-weight:600;color:var(--fg,#1d2330)}figure.featured details{margin-top:6px}figure.featured summary{cursor:pointer;color:#5a6270;font-size:13px}
+.figure-strip{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 16px}.strip-item{flex:0 1 220px;text-decoration:none;color:inherit;font-size:12.5px}.strip-item img{width:100%;border:1px solid var(--line);border-radius:4px;background:#fff;display:block;margin-bottom:4px}
 .thumb{display:grid;grid-template-columns:minmax(0,300px) 1fr;gap:14px;align-items:start;margin:12px 0;
 padding-bottom:10px;border-bottom:1px solid var(--line)}
 .thumb img{width:100%;border:1px solid var(--line);border-radius:4px}.thumb figcaption{margin-top:4px}
@@ -384,8 +389,14 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
                 else link("History", "history.html"))
         right.append(group(head, history_members if mode.WITH_CHANGELOG else history_members[1:]))
     if PDF:
-        right.append(f"<a href='{prefix}{esc(PDF['file'])}' title='All pages as one PDF: version "
-                     f"{esc(PDF['version'])}, commit {esc(PDF['commit'])}, made {esc(PDF['built'])}'>PDF</a>")
+        made = f"version {esc(PDF['version'])}, commit {esc(PDF['commit'])}, made {esc(PDF['built'])}"
+        head = f"<a href='{prefix}{esc(PDF['file'])}' title='The analysis as one PDF to read: {made}'>PDF</a>"
+        if PDF.get("complete"):
+            right.append(group(head, [link("With all records", PDF["complete"], "The same PDF with the records at "
+                                           "the end: overview tables, hypotheses in full, data and resources, figure "
+                                           "files")]))
+        else:
+            right.append(head)
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
             f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>{version_pill()}"
@@ -470,6 +481,7 @@ class LinkContext:
         self.current = current                 # key of the page being rendered (no term links to itself)
         self.broken: list[str] = []
         self.linked_terms: set[str] = set()    # terms already linked on this page (first use only)
+        self.expanded: set[str] = set()        # resources whose alias was already followed by their name
         self.terms = term_patterns(tree, project)
 
     def replace(self, match: re.Match) -> str:
@@ -482,9 +494,14 @@ class LinkContext:
                 return f"<span class='ref-broken' title='code not found'>{esc(label)}</span>"
             return f"<a class='ref' href='{esc(href)}' title='{esc(note or target[5:])}'><code>{esc(label)}</code></a>"
         if target.startswith("data:"):
-            href, label = self.data_href(target[5:], self.prefix)
-            return (f"<a class='ref' href='{esc(href)}'><code>{esc(text or label)}</code></a>" if href
-                    else f"<code>{esc(text or target[5:])}</code>")
+            # in running text a short chip (the text given, or the file name, shortened); the path on hover
+            path = target[5:]
+            href, label = self.data_href(path, self.prefix)
+            name = text or path.rstrip("/").split("/")[-1].split("#")[0]
+            name = name if len(name) <= 32 else name[:30] + "…"
+            chip = f"{icons.svg('artefact')}{esc(name)}"
+            return (f"<a class='data-chip' href='{esc(href)}' title='{esc(note or path)}'>{chip}</a>" if href
+                    else f"<span class='data-chip' title='{esc(note or path)}'>{chip}</span>")
         node = self.tree.resolve(target, self.project)
         if node is None and RUN_ID.fullmatch(target) and (DOC / "_changes" / f"{target}.md").exists():
             from kea.docsite import mode        # a run entry ([[2026-11-05-a]]): its change-log page
@@ -521,14 +538,17 @@ def term_patterns(tree: Tree, project: str) -> list[tuple[re.Pattern, Node]]:
 def link_terms(html_text: str, context: LinkContext) -> str:
     """Link the first use of each term in each section of the page (a ## heading starts a new one), in prose and in
     table cells (not in links, code, headings or table headers); a term with ``link: every`` in its front matter
-    (gene names, say) is linked at every use. Resources with aliases: are linked the same way."""
+    (gene names, say) is linked at every use. Resources with aliases: are linked the same way, and the first mention
+    of a resource in the page's prose (not in a table) is followed by its title: G23/MIC (Dataset G23, …)."""
     if not context.terms:
         return html_text
     tokens = re.split(r"(<[^>]+>)", html_text)
-    skip_depth = 0
+    skip_depth = table_depth = 0
     for index, token in enumerate(tokens):
         if token.startswith("<"):
             match = re.match(r"<(/?)([a-zA-Z0-9]+)", token)
+            if match and match.group(2).lower() == "table":
+                table_depth = max(table_depth + (-1 if match.group(1) else 1), 0)
             if match and not match.group(1) and match.group(2).lower() in ("h1", "h2"):
                 context.linked_terms.clear()                     # a new section: link each term once more
             if match and match.group(2).lower() in SKIP_AUTOLINK_TAGS and not token.endswith("/>"):
@@ -552,8 +572,15 @@ def link_terms(html_text: str, context: LinkContext) -> str:
                 if not found:
                     position += 1
                     continue
+                expand = ""            # a dataset id: its name after the first mention in the page's prose
+                if node.type == "resource" and not table_depth and node.key not in context.expanded:
+                    context.expanded.add(node.key)
+                    named = re.match(rf"^.*?{re.escape(found.group(1))}\s*:\s*(.+)$", node.title, flags=re.I)
+                    name = named.group(1) if named else node.title
+                    if named or not node.title.lower().startswith(found.group(1).lower()):
+                        expand = f"<span class='alias-name'> ({esc(name)})</span>"
                 pieces[position:position + 1] = [(text[:found.start()], False),
-                                                  (anchor_start + found.group(1) + "</a>", True),
+                                                  (anchor_start + found.group(1) + "</a>" + expand, True),
                                                   (text[found.end():], False)]
                 if not every:
                     context.linked_terms.add(node.key)
