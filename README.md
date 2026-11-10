@@ -94,7 +94,7 @@ Every page has a type, shown as a coloured tag with an icon and a number (Q1, R2
 On a page:
 
 - The coloured bar on the left and the word above the title say the type. The page's own content (title, summary, text) is set in a serif face. Under the line "About this page" is what Kea knows about it: its permanent identifier (`kea:…`, which stays when the page is edited or moved, and `@…` for exactly this version, to cite), its sources, and its links to other pages as tables ("Tested by this step", "Supported by these results"), with the reason each link holds.
-- A page reads in this order: its title, summary and text; on a question, the answer so far; then its figures and data files under their own separator (one tab per figure or file when there are several; the take-home under each figure, the rest of the caption under "Shows, method and statistics"; a question or conclusion also shows the figures of the results behind it as a row of small images); then About this page. Under the text, conclusions and caveats are listed one per line; how the page was made (steps, data, sources) is folded under Provenance. "Changes to this page" lists one line per version; the exact changes are under History.
+- A page reads in this order: its title, summary and text, as written, in a typewriter face; on a question, the answer so far; then its figures and data files under their own separator (one tab per figure or file when there are several; the take-home under each figure, the rest of the caption under "Shows, method and statistics"; a question or conclusion also shows the figures of the results behind it as a row of small images); then About this page. Under the text, conclusions and caveats are listed one per line; how the page was made (steps, data, sources) is folded under Provenance. "Changes to this page" lists one line per version; the exact changes are under History.
 - Pills next to the title: the status (green: supported, done or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or dropped); "exploratory"; on a hypothesis "written before its test" or "written after results"; on a conclusion its certainty; "waiting for approval", "approved", "confirmed", "recheck"; and the release in which the page last changed.
 - The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (the analysis as one document to read; with all records under it); Help.
 
@@ -132,7 +132,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.25.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.25.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -143,14 +143,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.25.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.25.1
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.25.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.25.1"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.25.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.25.1 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -164,8 +164,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.25.0 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.25.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.25.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.25.1"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.25.1
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

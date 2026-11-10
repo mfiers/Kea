@@ -597,7 +597,8 @@ class SiteRenderer:
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
                  f"<span class='pills'>{pills}</span></div>"
-                 f"<h1><span class='node-title'>{esc(node.tag_title)}</span></h1>"
+                 # the page as written (title, summary, text): set apart in Kea's typewriter face, indented
+                 f"<div class='given'><h1><span class='node-title'>{esc(node.tag_title)}</span></h1>"
                  + ("" if repeats_body(node) else f"<div class='short'>{esc(node.short)}</div>")]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
@@ -652,7 +653,7 @@ class SiteRenderer:
         article = render_markdown(body_text, context)
         for figure_id, html_figure in figures_here.items():
             article = re.sub(rf"(?:<p>)?<div data-kea-figure=\"{figure_id}\"></div>(?:</p>)?", lambda _: html_figure, article)
-        parts.append(f"<article>{article}</article>")
+        parts.append(f"<article>{article}</article></div>")
         colour = TYPE_COLOURS.get(node.type, '#556')
         parts.append("</div>")
         if node.type == "question" and questions.answer(node):
@@ -660,7 +661,7 @@ class SiteRenderer:
             # question's text above stands alone
             _, results, conclusions = questions.evidence(self.tree, node)
             basis = " ".join(node_link(item, prefix) for item in list(conclusions) + list(results))
-            parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>Answer so far</span></div>"
+            parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>Answer so far</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
         parts.append(self.media_html(node, prefix, context, embedded, colour))

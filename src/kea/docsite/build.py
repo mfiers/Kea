@@ -55,7 +55,7 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
         shutil.rmtree(site)
     site.mkdir(parents=True)
     (site / "_assets").mkdir()
-    for asset in [*ASSETS.glob("*.js"), *ASSETS.glob("*.png"), *ASSETS.glob("*.ico")]:
+    for asset in [*ASSETS.glob("*.js"), *ASSETS.glob("*.png"), *ASSETS.glob("*.ico"), *ASSETS.glob("*.woff2")]:
         shutil.copy2(asset, site / "_assets" / asset.name)
     renderer = SiteRenderer(tree, site)
     from kea.docsite import pdf

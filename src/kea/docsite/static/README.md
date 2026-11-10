@@ -15,3 +15,4 @@
   (`branding/make_logo2.py`, `branding/make_assets2.py`, candidates in `branding/candidates/`) was not taken.
   `favicon.ico` and `kea-icon-64.png` are kept for older sites but no longer used.
 
+- `plex-mono-latin-400-normal.woff2`, `plex-mono-latin-400-italic.woff2`, `plex-mono-latin-600-normal.woff2`: IBM Plex Mono (SIL Open Font License 1.1, IBM Corp.), Latin subset, from `@fontsource/ibm-plex-mono` 5.1.1 on cdn.jsdelivr.net, downloaded 2026-11-10; sha256 3c5a451f…, 78439db2…, c4d3deb7… respectively. Kea's typewriter face for the title, summary and text of a page (`.given`); characters outside the subset fall back to the system's monospace.
