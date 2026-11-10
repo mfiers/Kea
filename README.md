@@ -2,8 +2,6 @@
 
 # Kea
 
-Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see [How to use it](#how-to-use-it). How Kea relates to micropublications, discourse graphs, Octopus, nanopublications and PROV: [Related work](doc/_site/related-work.md).
-
 <!-- help:1-why -->
 
 ## What is Kea?
@@ -121,6 +119,8 @@ Nothing changes until the comments are harvested:
 The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.
 
 <!-- /help -->
+
+Links: [code on GitHub](https://github.com/mfiers/Kea) · [web page](https://mfiers.github.io/Kea/) · [how to use it](#how-to-use-it) · [related work](doc/_site/related-work.md) (micropublications, discourse graphs, Octopus, nanopublications, PROV).
 
 ## How to use it
 

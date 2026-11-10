@@ -38,7 +38,6 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <main>
 <div class="hero"><img src="logo.png" alt="kea"></div>
 <h1 id="kea">Kea</h1>
-<p>Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see <a href="#how-to-use-it">How to use it</a>. How Kea relates to micropublications, discourse graphs, Octopus, nanopublications and PROV: <a href="related-work.html">Related work</a>.</p>
 <!-- help:1-why -->
 
 <h2 id="what-is-kea">What is Kea?</h2>
@@ -183,6 +182,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.</p>
 <!-- /help -->
 
+<p>Links: <a href="https://github.com/mfiers/Kea">code on GitHub</a> · <a href="https://mfiers.github.io/Kea/">web page</a> · <a href="#how-to-use-it">how to use it</a> · <a href="related-work.html">related work</a> (micropublications, discourse graphs, Octopus, nanopublications, PROV).</p>
 <h2 id="how-to-use-it">How to use it</h2>
 <p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
 <p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
