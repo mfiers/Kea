@@ -784,9 +784,7 @@ class SiteRenderer:
         route drawn in the site's tags. The comments part only on a site served with comments."""
         from kea import help as kea_help
         names = tuple(name for name in kea_help.NAMES if mode.MODE == "review" or name not in kea_help.REVIEW_ONLY)
-        body = (crumbs([("Help", None)], "") + "<h1>How to read this site</h1>"
-                "<div class='short'>This site documents one data analysis as small pages, one claim per page, linked "
-                "by typed relations. Every claim says what it rests on, and every change is recorded.</div>"
+        body = (crumbs([("Help", None)], "") +
                 "<div class='not-annotatable'>"
                 + kea_help.render(names, tag=lambda kind, label: self.legend(kind), route=self.route_html(self.legend))
                 + "<h2>About Kea</h2><p>This site is built with Kea. The same help, how to use Kea and how to install "

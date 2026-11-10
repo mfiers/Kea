@@ -131,7 +131,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.2/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -142,14 +142,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.23.1
+uv tool install git+https://github.com/mfiers/Kea.git@v1.23.2
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.1"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.2"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.23.1 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.23.2 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -163,8 +163,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.23.1 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.1"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.1
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.2"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.2
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement
