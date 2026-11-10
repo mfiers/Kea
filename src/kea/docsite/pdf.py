@@ -43,6 +43,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from kea.config import SETTINGS
+from kea import TAGLINE
 from kea.docsite import artefacts, icons, questions
 from kea.docsite.nodes import (FORWARD_LABELS, PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree, load_tree, natural,  # noqa: F401
                                 term_group)
@@ -1387,8 +1388,7 @@ its file); the relations graph (the overview tables at the end are its printed f
 files, which may hold controlled-access, donor-level data. Numbers in the text come from those files; Data and resources
 lists them.
 
-#meta[Made with Kea (github.com/mfiers/Kea), a tool that turns an analysis into a site of linked claims and
-evidence, reviewed in cycles by readers and an AI agent.]
+#meta[Made with Kea (github.com/mfiers/Kea). {text(TAGLINE)}]
 """
 
     def help_markup(self) -> str:

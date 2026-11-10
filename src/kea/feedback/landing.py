@@ -18,7 +18,7 @@ name), pending (bool). Every value is escaped here.
 """
 from __future__ import annotations
 
-from kea import __version__
+from kea import TAGLINE, __version__
 
 import html
 
@@ -28,12 +28,13 @@ LOGO = "/kea-head.png"
 GITHUB = "https://github.com/mfiers/Kea"
 
 
-def help_section(heading: str = "How to read a Kea site") -> str:
-    """The reader's help (kea/help/*.md, verbatim: the same text as every site's Help, GitHub and the PDF)."""
+def help_section() -> str:
+    """The reader's help (kea/help/*.md, verbatim: the same text as every site's Help, GitHub and the PDF); it opens
+    with "What is Kea?" and the tagline."""
     from kea import help as kea_help
     toc = " ".join(f"<a href='#{kea_help.slug(title)}'>{_esc(title)}</a>" for title in help_titles())
-    return (f"<section class='help' id='help'><h2>{_esc(heading)}</h2><p class='toc'>{toc}</p>"
-            + kea_help.render(tag=kea_help.plain_tag, shift=1) + "</section>")
+    return (f"<section class='help' id='help'>" + kea_help.render(tag=kea_help.plain_tag)
+            + f"<p class='toc'>Sections: {toc}</p></section>")
 
 
 def help_titles() -> list[str]:
@@ -60,7 +61,7 @@ main{max-width:920px;margin:0 auto;padding:28px 18px 48px}
 .hero img{width:120px;height:120px;flex:0 0 auto;margin-top:2px}
 .hero h1{font-size:30px;line-height:1.15;margin:0 0 10px;letter-spacing:-.01em}
 .hero .links{font-size:14px;margin:12px 0 0;color:var(--muted)}
-.help{margin-top:34px;padding-top:6px;border-top:1px solid var(--line)}
+.help{margin-top:34px;padding-top:6px;border-top:1px solid var(--line)}main>.help:first-child{margin-top:0;padding-top:0;border-top:0}main>.help:first-child h2:first-child{margin-top:4px}
 .help h2{font-size:20px;margin:30px 0 8px}.help h3{font-size:16px;margin:22px 0 6px}
 .help p,.help li{max-width:75ch}.help li{margin:3px 0}
 .help code{background:#eef0f4;padding:1px 4px;border-radius:4px;font-size:13px}
@@ -113,7 +114,7 @@ def _page(title: str, hub_title: str, domain: str, right: str, body: str) -> str
             f"<header class='topbar'><a class='brand' href='/'><img src='{LOGO}' alt=''>{_esc(hub_title)}</a>"
             f"<span class='domain'>{_esc(domain)}</span><span class='version' title='This hub runs Kea {_esc(__version__)}'>"
             f"Kea {_esc(__version__)}</span><span class='right'>{right}</span></header>"
-            f"<main>{body}<footer>Kea: typed, versioned documentation sites for data analyses, reviewed by comments. "
+            f"<main>{body}<footer>Kea: {_esc(TAGLINE)} "
             f"<a href='{GITHUB}'>Kea on GitHub</a> · <a href='{GITHUB}#readme'>documentation</a> · "
             f"<a href='/help'>help</a></footer></main></body></html>")
 
@@ -157,11 +158,10 @@ def visitor_page(hub_title: str, domain: str, sign_in_url: str | None, public_ro
         right = f"<a href='#help'>Help</a><a href='{GITHUB}'>GitHub</a>"
     body = (f"<section class='hero'><img src='{LOGO}' alt='Kea, a mountain parrot'><div>"
             f"<h1>{_esc(hub_title)}</h1>"
-            "<p>Kea turns a data analysis into a documentation site: questions, premises, hypotheses, results and "
-            "conclusions as typed, versioned pages, each linked to the code and data behind it.</p>"
+            f"<p>{_esc(TAGLINE)}</p>"
             "<p>This hub hosts the sites of several research projects. Readers comment on any sentence; the project's "
             "agent folds the comments into a plan and works through it in review cycles.</p>"
-            f"{sign_in}<p class='links'><a href='#help'>How to read a Kea site</a> · "
+            f"{sign_in}<p class='links'><a href='#help'>What is Kea?</a> · "
             f"<a href='{GITHUB}'>Kea on GitHub</a></p></div></section>"
             "<h2>Public projects</h2>" + public_table(public_rows) + help_section())
     return _page(hub_title, hub_title, domain, right, body)
@@ -170,8 +170,7 @@ def visitor_page(hub_title: str, domain: str, sign_in_url: str | None, public_ro
 def help_page(hub_title: str, domain: str, signed_in: bool) -> str:
     """https://<domain>/help: the reader's help on its own, readable without an account."""
     right = (f"<a href='/'>{'Your projects' if signed_in else 'Projects'}</a><a href='{GITHUB}'>GitHub</a>")
-    body = ("<h1 class='page'>How to read a Kea site</h1><p class='person'>The same text as every site's Help page and "
-            f"<a href='{GITHUB}#readme'>Kea's documentation on GitHub</a>.</p>" + help_section("Contents"))
+    body = help_section()
     return _page(f"Help · {hub_title}", hub_title, domain, right, body)
 
 

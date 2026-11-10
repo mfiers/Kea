@@ -307,6 +307,9 @@ def test_help_is_one_text_on_the_site_github_and_hub():
     assert kea_help.readme_sync(readme) == readme, "README.md is out of date with src/kea/help/: run make web"
     for name in kea_help.NAMES:
         assert f"<!-- help:{name} -->" in readme
+    from kea import TAGLINE                      # one tagline: the help opens with it, and pyproject carries it
+    assert kea_help.text("1-why").startswith(f"## What is Kea?\n\n{TAGLINE}\n")
+    assert f'description = "{TAGLINE}"' in (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
     rendered = kea_help.render(tag=kea_help.plain_tag, route="<div class='route'></div>")
     assert "<!-- KINDS -->" not in rendered and "<!-- ROUTE -->" not in rendered and "class='route'" in rendered
     assert rendered.count("class='tag'") >= 14 and "id='why-small-pages'".replace("'", '"') in rendered

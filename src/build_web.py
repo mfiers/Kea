@@ -20,14 +20,14 @@ from pathlib import Path
 
 import markdown
 
+from kea import TAGLINE
 from kea import help as kea_help
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 OUT = ROOT / "docs" / "index.html"
 GITHUB = "https://github.com/mfiers/Kea/blob/main/"
-DESCRIPTION = ("Kea turns a data analysis into a website of small, linked, commentable pages of claims and "
-               "evidence, reviewed in cycles by people and an AI agent.")
+DESCRIPTION = TAGLINE
 
 STYLE = """
 :root{--fg:#1d2330;--muted:#5b6475;--line:#d9dde5;--bg:#ffffff;--soft:#f5f7fa;--accent:#4f6b1f;--accent2:#d9822b;--code:#f3f5f8}

@@ -580,7 +580,7 @@ def test_apex_landing_page_for_visitors(demo, monkeypatch):
     page = apex.get("/")
     assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
     text = page.text
-    assert "Sign in with ORCID" in text and "href='/auth/login'" in text and "Kea turns a data analysis" in text
+    assert "Sign in with ORCID" in text and "href='/auth/login'" in text and "Break a data analysis into small, linked nodes" in text and "What is Kea?" in text
     assert "Open atlas" in text and "https://open-atlas.keahub.example/" in text
     assert "Demo project" not in text                                    # private projects stay unlisted
     assert "<script" not in text and "src='http" not in text and "href='http" not in text.replace(
@@ -589,7 +589,7 @@ def test_apex_landing_page_for_visitors(demo, monkeypatch):
     assert "href='https://github.com/mfiers/Kea'" in text and "id='help'" in text
     assert "Why small pages" in text and "class='tag'" in text and "Comments and the review cycle" in text
     alone = apex.get("/help")
-    assert alone.status_code == 200 and "How a project progresses" in alone.text and "Sign out" not in alone.text
+    assert alone.status_code == 200 and "What is Kea?" in alone.text and "How a project progresses" in alone.text and "Sign out" not in alone.text
     logo = apex.get("/kea-head.png")
     assert logo.status_code == 200 and logo.headers["content-type"] == "image/png" and logo.content[:4] == b"\x89PNG"
     assert apex.get("/healthz").text == "ok" and apex.get("/nothing-here").status_code == 404

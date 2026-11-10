@@ -2,13 +2,15 @@
 
 # Kea
 
-Structure a data analysis as small, linked blocks (questions, hypotheses, steps, results, conclusions) and run your AI agent on them, one reviewed step at a time.
-
-The agent reads the blocks that bear on a question, takes one step along the route, writes it back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.
-
 Code: https://github.com/mfiers/Kea. This page: https://mfiers.github.io/Kea/. Kea is run by an AI coding agent through a skill; see [How to use it](#how-to-use-it). How Kea relates to micropublications, discourse graphs, Octopus, nanopublications and PROV: [Related work](doc/_site/related-work.md).
 
 <!-- help:1-why -->
+
+## What is Kea?
+
+Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. You and your AI agent work through them one at a time, reviewing each before moving on.
+
+The agent reads the nodes that bear on a question, takes one step along the route, writes it back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.
 
 ## Why
 
@@ -129,7 +131,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.23.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -140,14 +142,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.23.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.23.1
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.1"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.23.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.23.1 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -161,8 +163,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.23.0 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.23.1"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.23.1
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

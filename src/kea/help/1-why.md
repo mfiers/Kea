@@ -1,3 +1,9 @@
+## What is Kea?
+
+Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. You and your AI agent work through them one at a time, reviewing each before moving on.
+
+The agent reads the nodes that bear on a question, takes one step along the route, writes it back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.
+
 ## Why
 
 An analysis produces claims, and whether a claim holds depends on things that are hard to see: the file a number came from, the test that was run, what was assumed, when the hypothesis was written, and what changed since. In a report or a notebook that chain is not inspectable. The number is there but not its file; the hypothesis reads as if it came first; a premise was revised weeks ago and nothing downstream was looked at again.

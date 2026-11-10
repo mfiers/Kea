@@ -32,6 +32,8 @@ FEEDBACK_COMMANDS = {"list", "show", "reply", "status", "cycle", "watch", "apply
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help"):
+        from kea import TAGLINE, __version__
+        print(f"Kea {__version__}. {TAGLINE}\n")
         print(__doc__)
         return 0
     command, rest = argv[0], argv[1:]

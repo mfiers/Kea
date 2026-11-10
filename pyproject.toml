@@ -1,7 +1,7 @@
 [project]
 name = "kea"
-version = "1.23.0"
-description = "Kea: a documentation site for an analysis, with typed pages, comments, review cycles and semantic versions"
+version = "1.23.1"
+description = "Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. You and your AI agent work through them one at a time, reviewing each before moving on."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Mark Fiers" }]
