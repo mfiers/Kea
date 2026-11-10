@@ -235,6 +235,68 @@ class SiteRenderer:
                 + (f"<details><summary>Shows, method and statistics</summary>{render_markdown(rest, context)}</details>"
                    if rest else "") + "</figcaption></figure>")
 
+    def media_html(self, node: Node, prefix: str, context: LinkContext, embedded: list[str], colour: str) -> str:
+        """'Figures and files' after the page's text (and a question's answer): its figures in full, the first
+        figure of each result behind a question or conclusion as a strip, and its data files with preview and
+        download. More than one item: tabs on the separator line, one panel shown at a time."""
+        if node.type in ("figure", "artefact", "resource"):
+            return ""
+        items: list[tuple[str, str, str]] = []          # (tab label, title for the tab's hover, panel)
+        for figure in self.figures_of(node):
+            self.featured[node.key].add(figure.key)
+            if figure.id not in embedded:
+                items.append((f"{figure.tag} {figure.tag_title}", figure.short,
+                              self.featured_figure(figure, prefix, context)))
+        if node.type in ("question", "conclusion"):
+            if node.type == "question":
+                behind = questions.evidence(self.tree, node)[1]
+            else:
+                behind = [self.tree.nodes[key] for key in node.relations.get("supported_by", []) + node.relations.get("opposed_by", [])
+                          if key in self.tree.nodes and self.tree.nodes[key].type == "result"]
+            firsts = [figures[0] for figures in (self.figures_of(result) for result in behind) if figures]
+            firsts = [figure for figure in {figure.key: figure for figure in firsts}.values()
+                      if figure.id not in embedded and figure.key not in self.featured[node.key]]
+            if firsts:
+                items.append(("From the results", "The first figure of each result behind this page",
+                              self.figure_strip(firsts, prefix)))
+        keys = list(node.relations.get("from_artefact", []))
+        keys += [child.key for child in self.tree.children(node) if child.type == "artefact"]
+        keys += [self.artefact_by_path[path].key for path in self.source_paths(node) if path in self.artefact_by_path]
+        for key in dict.fromkeys(keys):
+            item = self.tree.nodes.get(key)
+            if item is None or item.type != "artefact" or not item.header.get("path"):
+                continue
+            panel, download = artefacts.artefact_panel(str(item.header["path"]), prefix, item.header.get("access"),
+                                                       self.downloads)
+            if download:
+                self.downloads.add(download)
+            self.featured[node.key].add(item.key)
+            items.append((f"{item.tag} {item.tag_title}", item.short,
+                          f"<p class='media-head'>{node_link(item, prefix)} {esc(item.title)}</p>{panel}"))
+        if not items:
+            return ""
+        label = "Figures and files" if any(key in self.featured[node.key] and self.tree.nodes[key].type == "artefact"
+                                           for key in self.featured[node.key]) else "Figures"
+        if len(items) == 1:
+            return (f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>"
+                    f"{label}</span></div><div class='media-panels'>{items[0][2]}</div>")
+        short = lambda words: words if len(words) <= 30 else words[:28].rstrip() + "…"
+        tabs = "".join(f"<button type='button' class='media-tab{' on' if index == 0 else ''}' data-tab='{index}' "
+                       f"title='{esc(hover)}'>{esc(short(words))}</button>" for index, (words, hover, _) in enumerate(items))
+        panels = "".join(f"<div class='media-panel' data-tab='{index}'{'' if index == 0 else ' hidden'}>{panel}</div>"
+                         for index, (_, _, panel) in enumerate(items))
+        return (f"<div class='node-data-sep media-sep not-annotatable' style='--kc:{colour}'><span class='media-tabs'>"
+                f"{tabs}</span><span class='sep-label'>{label}</span></div><div class='media-panels'>{panels}</div>")
+
+    @staticmethod
+    def source_paths(node: Node) -> list[str]:
+        paths = []
+        for entry in node.header.get("sources") or []:
+            for kind, value in (entry.items() if isinstance(entry, dict) else [("data", entry)]):
+                if kind == "data":
+                    paths.append(str(value).split("#")[0].strip().rstrip("/"))
+        return paths
+
     def figure_strip(self, figures: list[Node], prefix: str) -> str:
         """Small images of figures, each a link to its page with its tag: on question and conclusion pages."""
         items = []
@@ -539,25 +601,10 @@ class SiteRenderer:
                  + ("" if repeats_body(node) else f"<div class='short'>{esc(node.short)}</div>")]
         if node.type == "figure":
             parts.append(self.figure_html(node, prefix, context, True))
-        # figures: ![[f-…]] in the text places a figure there; the others that show this page come right after the
-        # summary, in full; a question or conclusion shows the first figure of each result behind it as a strip
+        # figures: ![[f-…]] in the text places a figure there; the others, and the page's data files, go under their
+        # own separator after the text (media_html)
         embedded = re.findall(r"^!\[\[([\w-]+)\]\]\s*$", node.body, flags=re.M)
         self.featured.setdefault(node.key, set())
-        if node.type != "figure":
-            for figure in self.figures_of(node):
-                if figure.id not in embedded:
-                    parts.append(self.featured_figure(figure, prefix, context))
-                self.featured[node.key].add(figure.key)
-        if node.type in ("question", "conclusion"):
-            if node.type == "question":
-                behind = questions.evidence(self.tree, node)[1]
-            else:
-                behind = [self.tree.nodes[key] for key in node.relations.get("supported_by", []) + node.relations.get("opposed_by", [])
-                          if key in self.tree.nodes and self.tree.nodes[key].type == "result"]
-            firsts = [figures[0] for figures in (self.figures_of(result) for result in behind) if figures]
-            firsts = [figure for figure in {figure.key: figure for figure in firsts}.values() if figure.id not in embedded]
-            if firsts:
-                parts.append(self.figure_strip(firsts, prefix))
         if node.type == "artefact":
             panel, download = artefacts.artefact_panel(str(node.header["path"]), prefix, node.header.get("access"),
                                                        self.downloads)
@@ -616,6 +663,7 @@ class SiteRenderer:
             parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span>Answer so far</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
+        parts.append(self.media_html(node, prefix, context, embedded, colour))
         uid = str(node.header.get("uid") or "")
         pid = ""
         if uid:      # the permanent identifiers, on the line of the separator; a click copies the link (TOPBAR_JS)

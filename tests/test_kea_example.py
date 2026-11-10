@@ -76,7 +76,7 @@ def test_build_modes(tmp_path):
 
 
 def test_figures_are_featured_embedded_and_provenance_folds(tmp_path):
-    """A result shows its figure in full under its summary (take-home once, the rest folded); ![[f-…]] places a
+    """A result shows its figure in full after its text, under a Figures separator (take-home once, the rest folded); ![[f-…]] places a
     figure in the text instead; a conclusion shows its results' first figures as a strip; steps fold under
     Provenance; the page history is one line per version."""
     import base64
@@ -112,7 +112,8 @@ def test_figures_are_featured_embedded_and_provenance_folds(tmp_path):
     assert built.returncode == 0, built.stdout + built.stderr
     site = project / "report" / "site" / "first"
     one = (site / "r-one.html").read_text()
-    assert one.index("class='featured") < one.index("<article>")            # under the summary, before the text
+    # the page's own content first, then the figures under their own separator, then About this page
+    assert one.index("</article>") < one.index(">Figures</span>") < one.index("class='featured") < one.index("About this page")
     import re
     visible = lambda html: re.sub(r"title='[^']*'", "", html)              # hover texts aside
     assert visible(one).count("The take-home line.") == 1 and "<details><summary>Shows, method and statistics" in one

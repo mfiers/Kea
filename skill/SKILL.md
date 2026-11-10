@@ -166,7 +166,7 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
   size (at most 16.6 cm wide, 19 cm high, fonts 6–8 pt, with the PNG's dpi set): the PDF prints them at that size
   and the build notes figures it has to shrink below 80 %. Start the caption with the take-home as one bold line: the site and the PDF show it once,
   under the image, and fold the rest (Shows / Method / Statistics).
-- A result's figures (`shown_in:`, or figures under it) are shown in full right under its summary, on the site and in the PDF; a conclusion or question shows the first figure of each result behind it as a strip. To place a figure inside the text instead, put `![[f-…]]` on a line of its own.
+- A page's figures (`shown_in:`, or figures under it) and data files (`from_artefact:`, artefacts under it, artefact files in `sources:`) are shown after its text (and a question's answer) under a Figures (and files) separator, with a tab per item when there are several; a conclusion or question also shows the first figure of each result behind it. In the PDF a result's figures follow its summary. To place a figure inside the text instead, put `![[f-…]]` on a line of its own.
 - Inline data links (`[[data:path]]`) render as a short chip with the path on hover; give the chip a name with `[[data:path|counts table]]`. A resource with `aliases:` (a dataset id) is followed by its title at its first mention in a page's prose.
 - Terms (`aliases:`) are linked automatically at their first use in each section (each `##` heading starts a new one), in prose and in table cells (not table headers), and numbered T1, T2 … in glossary order. Terms that
   name entities (genes, proteins, cell types) get `group: Genes` (etc.); the glossary lists each group after the
