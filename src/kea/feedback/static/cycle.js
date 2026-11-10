@@ -10,12 +10,14 @@
  *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
  *   since the last heartbeat. When the session stopped unexpectedly ("gone"), readers who may steer get a banner
  *   on every page (dismissable until the next change).
- * The page's build id comes from data-build on this script tag.
+ * The page's build id: data-build on this script tag on sites built before 1.26; since then the build id the
+ * server reports at the first poll after the page loaded (pages then stay byte-identical across builds, so a
+ * publish sends only the pages that changed).
  */
 (function () {
   "use strict";
   const script = document.currentScript;
-  const BUILD = script.dataset.build || "";
+  let BUILD = script.dataset.build || "";
   const PREFIX = script.dataset.prefix || "";
   const BASE = script.src.replace(/_feedback\/[^/]*$/, "");   // the site root (also under a hub prefix)
   const POLL_MS = 20000;
@@ -194,6 +196,7 @@
     const onPlan = !!document.getElementById("fb-plan-actions");
     const commentsHere = !["implement-requested", "implementing"].includes(cycle.state);
     document.body.classList.toggle("fb-frozen", !commentsHere);
+    if (!BUILD && status.build && status.build.build_id) BUILD = status.build.build_id;   // the build this page came with
     const newBuild = status.build && status.build.build_id && BUILD && status.build.build_id !== BUILD;
     if (goneBanner(status)) {
       /* shown: more urgent than the cycle banners for whoever can restart the session */

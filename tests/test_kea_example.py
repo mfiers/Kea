@@ -126,3 +126,40 @@ def test_figures_are_featured_embedded_and_provenance_folds(tmp_path):
     figure_page = (site / "f-a.html").read_text()
     assert visible(figure_page).count("The take-home line.") == 1        # the summary box only
     assert "class='page-versions'" in one and "<pre class='diff'>" not in one
+
+
+def test_experiment_lists_questions_then_answers_and_has_no_files(tmp_path):
+    """An experiment page: Questions (one line each), then Answers so far, then About; no Figures separator. An
+    artefact directly under the experiment is a problem."""
+    project = tmp_path / "example"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    run(["init", "--title", "Example", "--experiment", "first"], project)
+    pages = {
+        "question/q-one.md": "id: q-one\ntype: question\ntitle: Does it work?\nshort: Whether it works.\nparent: home\n"
+                             "status: answered\nanswer: It does, a little.",
+        "conclusion/c-one.md": "id: c-one\ntype: conclusion\ntitle: It works a little\nshort: So.\nparent: q-one\n"
+                               "status: supported\ncertainty: low\ncertainty_because: small.",
+    }
+    for relative, header in pages.items():
+        path = project / "doc" / "first" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"---\n{header}\n---\n")
+    built = run(["build", "--no-pdf"], project)
+    assert built.returncode == 0, built.stdout + built.stderr
+    home = (project / "report" / "site" / "first" / "home.html").read_text()
+    assert (home.index("</article>") < home.index(">Questions</span>") < home.index(">Answers so far</span>")
+            < home.index("It does, a little.") < home.index(">About this page</span>"))
+    listed = home.split("class='chips experiment-questions")[1].split("</ul>")[0]
+    import re
+    listed = re.sub(r"title='[^']*'", "", listed)                       # the summary only on hover
+    assert "Does it work?" in listed and "Whether it works." not in listed
+    assert ">Figures" not in home
+    comments_page = (project / "report" / "site" / "comments.html").read_text()     # Plan → Current comments
+    assert "id='comments-data'" in comments_page and "_assets/comments.js" in comments_page
+    assert "href='../comments.html'" in home and (project / "report" / "site" / "_assets" / "comments.js").exists()
+    artefact = project / "doc" / "first" / "artefact" / "a-table.md"
+    artefact.parent.mkdir(parents=True, exist_ok=True)
+    artefact.write_text("---\nid: a-table\ntype: artefact\ntitle: T\nshort: A table.\nparent: home\npath: data/t.tsv\n---\n")
+    checked = run(["check"], project)
+    assert checked.returncode != 0 and "artefact directly under the experiment" in checked.stdout

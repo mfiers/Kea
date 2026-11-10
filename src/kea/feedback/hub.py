@@ -54,6 +54,7 @@ Agent API (Authorization: Bearer <project key>; X-Kea-Agent: <agent id>), under 
     POST publish                    body: a .tar.gz from `kea publish` (X-Kea-Sha256: its sha256); older clients
     POST blobs/missing              {sha256: [...]}: which files the hub lacks ({missing: {sha: bytes already here}})
     POST blobs/<sha256>?offset=&total=   body: one chunk of that file, appended at offset (409 + have: resume there)
+                                    (Content-Encoding: gzip accepted; offsets count the file's own bytes)
     POST release                    {manifest: {path: sha256}, meta}: a release made of stored files only
 Files are stored once per project by checksum (projects/<name>/blobs/), so a publish sends only what changed.
 Every write needs the lease (taken automatically when free).
@@ -342,6 +343,21 @@ def missing_blobs(hub: Hub, name: str, shas: list) -> dict:
         partial = partial_path(hub, name, sha)
         missing[sha] = partial.stat().st_size if partial.is_file() else 0
     return missing
+
+
+def gunzip_limited(data: bytes, limit: int) -> bytes:
+    """A gzip-compressed chunk, decompressed; refused when it would be larger than `limit` (no gzip bombs)."""
+    import zlib
+    inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    try:
+        plain = inflater.decompress(data, limit + 1)
+    except zlib.error as error:
+        raise ValueError(f"chunk is not valid gzip ({error})") from error
+    if len(plain) > limit or inflater.unconsumed_tail:
+        raise ValueError(f"chunk larger than {limit // 1048576} MB once decompressed")
+    if not inflater.eof:
+        raise ValueError("chunk is not valid gzip (truncated)")
+    return plain
 
 
 def receive_chunk(hub: Hub, name: str, sha: str, offset: int, total: int, data: bytes) -> dict:
@@ -964,7 +980,8 @@ class HubApp:
                     shas = body.get("sha256")
                     if not isinstance(shas, list):
                         raise ValueError("blobs/missing needs sha256: [...]")
-                    return JSONResponse({"missing": missing_blobs(self.hub, name, shas)})
+                    # gzip: chunks may come gzip-compressed (Content-Encoding: gzip), since 1.26
+                    return JSONResponse({"missing": missing_blobs(self.hub, name, shas), "gzip": True})
                 if action == "release":
                     result = install_manifest(self.hub, name, body.get("manifest"), body.get("meta"))
                     log.info("%s: published release %s by %s (%d files, %d new page version(s))", name,
@@ -1015,12 +1032,18 @@ class HubApp:
             if size > CHUNK_MAX:
                 return JSONResponse({"error": f"chunk larger than {CHUNK_MAX // 1048576} MB"}, status_code=413)
             chunks.append(chunk)
+        data = b"".join(chunks)
+        if request.headers.get("content-encoding", "").lower() == "gzip":
+            try:
+                data = gunzip_limited(data, CHUNK_MAX)
+            except ValueError as error:
+                return JSONResponse({"error": str(error)}, status_code=413 if "larger" in str(error) else 400)
         with project_lock(name):
             holder = self.hub.lease(name)
             if not agent.is_free_for(holder, agent_name, check_process=False):
                 return JSONResponse({"error": agent.describe_refusal(holder), "holder": holder}, status_code=409)
             try:
-                return JSONResponse(receive_chunk(self.hub, name, sha, offset, total, b"".join(chunks)))
+                return JSONResponse(receive_chunk(self.hub, name, sha, offset, total, data))
             except OffsetMismatch as mismatch:
                 return JSONResponse({"error": str(mismatch), "have": mismatch.have}, status_code=409)
             except (ValueError, OSError) as error:

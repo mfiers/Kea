@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 from kea.config import SITE_DIR
-from kea.docsite import comments, mode
+from kea.docsite import changes, comments, mode
 from kea.docsite.nodes import PROJECT_ROOT, Tree, load_tree
 from kea.docsite.pages import ASSETS, SiteRenderer
 
@@ -51,6 +51,8 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     """Render all pages into an empty ``site`` folder and add the comment layer (review mode). Returns
     (summary, problems)."""
     mode.configure(build_mode, site, with_changelog)
+    comments.reset_file_log()                     # commits may have been made since the last build in this process
+    changes.reset_caches()
     if site.exists():
         shutil.rmtree(site)
     site.mkdir(parents=True)

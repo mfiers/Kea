@@ -14,7 +14,9 @@ Which data files go up (kea.yaml):
       upload_include: [data/final/summary.tsv, "data/final/*.png"]   # always (also flagged or larger ones)
       upload_exclude: ["data/intermediate/*"]                        # never
 The hub keeps every file by checksum: a publish asks which files it lacks and sends only those, in 4 MB chunks
-that resume after a broken connection (hubs before 1.21 get the whole site as one upload).
+that resume after a broken connection, gzip-compressed for text when the hub accepts it (1.26 and later); hubs
+before 1.21 get the whole site as one upload. A build changes only the pages whose content changed, so a publish
+after a small change sends only those.
 
 A file is flagged when it looks like it may hold identifiers (a column or key named like donor, subject,
 patient, individual, participant, sample, specimen, projid, barcode) or is a format kea cannot inspect
@@ -206,13 +208,27 @@ def read_part(content: bytes | Path, offset: int, size: int) -> bytes:
         return handle.read(size)
 
 
-def upload_blob(client, sha: str, content: bytes | Path, total: int, have: int) -> None:
-    """Send one file in chunks from `have` on; a failed chunk is retried, and the hub says where to resume."""
-    failures = 0
+COMPRESSED_ALREADY = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".woff", ".woff2", ".gz", ".zip", ".xz", ".bz2",
+                      ".zst", ".h5ad", ".h5", ".parquet", ".mp4", ".ico"}
+
+
+def worth_compressing(name: str) -> bool:
+    return Path(name).suffix.lower() not in COMPRESSED_ALREADY
+
+
+def upload_blob(client, sha: str, content: bytes | Path, total: int, have: int, gzip_ok: bool = False) -> int:
+    """Send one file in chunks from `have` on; a failed chunk is retried, and the hub says where to resume. With
+    gzip_ok each chunk goes gzip-compressed (offsets count the file's own bytes). Returns the bytes on the wire."""
+    import gzip
+    failures, wire = 0, 0
     while have < total or total == 0:
         data = read_part(content, have, CHUNK)
+        headers = {"Content-Type": "application/octet-stream"}
+        if gzip_ok:
+            data = gzip.compress(data, compresslevel=6, mtime=0)
+            headers["Content-Encoding"] = "gzip"
         try:
-            reply = client.request("POST", f"blobs/{sha}", data, headers={"Content-Type": "application/octet-stream"},
+            reply = client.request("POST", f"blobs/{sha}", data, headers=headers,
                                    query={"offset": have, "total": total}, timeout=CHUNK / SLOWEST + 30)
         except backend.RemoteError as error:
             if error.status == 409 and "have" in error.detail:
@@ -223,26 +239,33 @@ def upload_blob(client, sha: str, content: bytes | Path, total: int, have: int) 
                 raise
             time.sleep(2 * failures)
             continue
+        wire += len(data)
         have = int(reply["have"])
         if reply.get("stored"):
-            return
+            return wire
+    return wire
 
 
 def send_incremental(client, found: dict, meta: dict) -> tuple[dict, int, int]:
     """Publish by checksum: only files the hub lacks go up. Returns (hub reply, bytes sent, bytes reused).
     Raises RemoteError with status 404 when the hub predates the blob store."""
-    manifest, sizes, contents = {}, {}, {}
+    manifest, sizes, contents, compressible = {}, {}, {}, {}
     for name, content in found.items():
         sha, size = file_sha(content)
         manifest[name], sizes[sha], contents[sha] = sha, size, content
-    missing = client.request("POST", "blobs/missing", {"sha256": sorted(sizes)})["missing"]
+        compressible[sha] = compressible.get(sha, True) and worth_compressing(name)
+    reply = client.request("POST", "blobs/missing", {"sha256": sorted(sizes)})
+    missing, gzip_ok = reply["missing"], bool(reply.get("gzip"))     # hubs before 1.26 take plain chunks only
     sent = sum(sizes[sha] - int(have) for sha, have in missing.items())
     if missing:
         print(f"uploading {len(missing)} of {len(sizes)} files ({sent / 1048576:.1f} MB; "
-              f"{(sum(sizes.values()) - sent) / 1048576:.1f} MB already on the hub)", file=sys.stderr)
+              f"{(sum(sizes.values()) - sent) / 1048576:.1f} MB already on the hub"
+              f"{'; text compressed' if gzip_ok else ''})", file=sys.stderr)
+    wire = 0
     for sha, have in missing.items():
-        upload_blob(client, sha, contents[sha], sizes[sha], int(have))
+        wire += upload_blob(client, sha, contents[sha], sizes[sha], int(have), gzip_ok and compressible[sha])
     result = client.request("POST", "release", {"manifest": manifest, "meta": meta}, timeout=300)
+    result["wire_bytes"] = wire
     return result, sent, sum(sizes.values()) - sent
 
 
@@ -297,7 +320,10 @@ def main(argv: list[str] | None = None) -> int:
         found, meta = entries(site, rows)
         try:
             result, sent, reused = send_incremental(client, found, meta)
-            how = f"{sent / 1048576:.1f} MB sent, {reused / 1048576:.1f} MB reused from earlier releases"
+            wire = result.get("wire_bytes", sent)
+            how = (f"{sent / 1048576:.1f} MB new" + (f" ({wire / 1048576:.1f} MB on the wire, compressed)"
+                                                    if wire < sent else "")
+                   + f", {reused / 1048576:.1f} MB reused from earlier releases")
         except backend.RemoteError as error:
             if error.status != 404:
                 raise

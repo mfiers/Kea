@@ -379,11 +379,8 @@ class SiteRenderer:
         section = lambda title, html: sections.append(f"<section class='about not-annotatable'><h2>{esc(title)}</h2>{html}</section>")
         own = TYPE_LABELS.get(node.type, node.type).lower()
         kinds = linked_kinds
-        if node.id == "home" and node.type == "experiment":
-            questions_block = self.questions_html(node.project, prefix, context)
-            if questions_block:
-                sections.append(questions_block)
-                shown.update(question.key for question in questions.questions(self.tree, node.project))
+        if node.id == "home" and node.type == "experiment":   # listed under their own separators (node_page)
+            shown.update(question.key for question in questions.questions(self.tree, node.project))
         if node.type == "question":
             hypotheses, results, conclusions = questions.evidence(self.tree, node)
             if conclusions:
@@ -531,7 +528,23 @@ class SiteRenderer:
                 "<col class='c-status'></colgroup><tr><th>Hypothesis</th><th>Expected (in short)</th><th>Outcome</th></tr>"
                 + "".join(rows) + "</table>")
 
-    def questions_html(self, project: str, prefix: str, context: LinkContext) -> str:
+    def experiment_sections(self, node: Node, prefix: str, context: LinkContext, colour: str) -> str:
+        """On an experiment page, after its text: "Questions" (one line each: tag, title, status) and "Answers so
+        far" (each question's answer and conclusions), each under its own separator. An experiment has no figures
+        or files of its own (a graph rule), so there is no "Figures and files"."""
+        listed = questions.questions(self.tree, node.project)
+        if not listed:
+            return ""
+        separator = lambda label: (f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'>"
+                                   f"<span class='sep-label'>{label}</span></div>")
+        html = separator("Questions") + ("<ul class='chips experiment-questions not-annotatable'>" + "".join(
+            f"<li>{tagline(question, prefix)} {status_pill(question)}</li>" for question in listed) + "</ul>")
+        state = self.questions_html(node.project, prefix, context, heading=False)
+        if any(questions.answer(question) or questions.evidence(self.tree, question)[2] for question in listed):
+            html += separator("Answers so far") + state
+        return html
+
+    def questions_html(self, project: str, prefix: str, context: LinkContext, heading: bool = True) -> str:
         """On an experiment page: each question as a heading with its executive summary and conclusions."""
         blocks, seen = [], set()
         for question in questions.questions(self.tree, project):
@@ -549,7 +562,8 @@ class SiteRenderer:
                               for member in conclusions) + "</ul>") if conclusions else "")
                           + (f"<p class='help'>Also: {' '.join(node_link(member, prefix) for member in earlier)}</p>"
                              if earlier else "") + "</div>")
-        return (f"<section class='questions not-annotatable'><h2>Questions</h2>{''.join(blocks)}</section>" if blocks else "")
+        return (f"<section class='questions not-annotatable'>{'<h2>Questions</h2>' if heading else ''}"
+                f"{''.join(blocks)}</section>" if blocks else "")
 
     def project_index_html(self, project: str, prefix: str) -> str:
         groups: dict[str, list[Node]] = {}
@@ -664,7 +678,10 @@ class SiteRenderer:
             parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>Answer so far</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
-        parts.append(self.media_html(node, prefix, context, embedded, colour))
+        if node.type == "experiment" and node.id == "home":
+            parts.append(self.experiment_sections(node, prefix, context, colour))
+        else:
+            parts.append(self.media_html(node, prefix, context, embedded, colour))
         uid = str(node.header.get("uid") or "")
         pid = ""
         if uid:      # the permanent identifiers, on the line of the separator; a click copies the link (TOPBAR_JS)
@@ -996,6 +1013,28 @@ class SiteRenderer:
         body = crumbs([("Comments", None)], "") + comments.overview_body(key_to_href, self.tree.projects)
         self.write("feedback.html", page("Comments", body, "", None, self.tree))
 
+    def comments_page(self) -> None:
+        """comments.html (Plan → Current comments): who commented what, on which page, in which state; one filter
+        per person. Rows as JSON from the comments known at build; served, static/comments.js loads the live list."""
+        from kea.feedback import states, store
+        info = states.context()
+        threads = []
+        for thread in store.threads():
+            item = thread.to_dict()
+            item["state"], item["state_label"] = states.state_of(thread, info)
+            threads.append(item)
+        hrefs = {key: relative for relative, (key, _) in self.pages.items()}
+        data = json.dumps({"threads": threads, "pages": hrefs}).replace("</", "<\\/")
+        body = (crumbs([("Plan", "plan.html"), ("Current comments", None)], "")
+                + "<h1>Current comments</h1><div class='short'>Who commented what, and where: the comments still open, "
+                  "marked or in the plan, newest first. Choose a person to see only theirs, or show all comments, "
+                  "answered ones included. Each comment in full, with its answers, is on its page and under "
+                  "History → Comments.</div>"
+                + "<div id='comments-view' class='not-annotatable'><p class='help'>Loading…</p></div>"
+                + f"<script type='application/json' id='comments-data'>{data}</script>"
+                + "<script src='_assets/comments.js'></script>")
+        self.write("comments.html", page("Current comments", body, "", None, self.tree, wide=True))
+
     def plan_pages(self) -> None:
         """plan.html (current cycle) and cycles/<cycle>.html for every plan in doc/_cycles/."""
         from kea.feedback import cycle as review_cycle
@@ -1115,6 +1154,7 @@ class SiteRenderer:
         self.help_page()
         if mode.MODE != "public":
             self.feedback_page()
+            self.comments_page()
             self.history_page()
         self.data_page()
 

@@ -17,6 +17,7 @@ Input: git tags and the blobs of doc/ files at each tag. Output: :func:`releases
 """
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from pathlib import Path
 import yaml
 
 from kea.config import SETTINGS
-from kea.docsite.nodes import PROJECT_ROOT, _quote_plain_values
+from kea.docsite.nodes import PROJECT_ROOT, _quote_plain_values, safe_yaml
 
 SEMVER = re.compile(r"^(?:(?P<experiment>[\w.-]+)/)?v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
 SETTLED_AFTER = 3        # releases without change before a page counts as settled
@@ -107,12 +108,14 @@ def _normalised(text: str | None) -> str | None:
     return None if text is None else re.sub(r"\s+", " ", text).strip()
 
 
+@functools.lru_cache(maxsize=65536)
 def _claim(text: str | None) -> tuple | None:
+    """(title, short, status) of one version of a page (cached: the same text recurs across releases)."""
     if text is None or not text.startswith("---\n"):
         return None
     end = text.find("\n---", 4)
     try:
-        header = yaml.safe_load(_quote_plain_values(text[4:end])) or {}
+        header = safe_yaml(_quote_plain_values(text[4:end])) or {}
     except yaml.YAMLError:
         return None
     return (str(header.get("title", "")), str(header.get("short", "")), str(header.get("status", "")))

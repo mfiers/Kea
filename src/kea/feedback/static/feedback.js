@@ -1077,6 +1077,16 @@
     dockPop.hidden = true;
     dockEl = buildDock();
     document.addEventListener("keydown", event => { if (event.key === "Escape") dockPop.hidden = true; });
+    /* Esc closes the comment window, unless it closes something smaller first (the selection bar, the dock's menu)
+       or a field outside the window handles Esc itself (editing a title or summary in place, the editor).
+       Capture phase: the state is read before those handlers hide their popups. */
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !panel.classList.contains("fb-open")) return;
+      const popupOpen = (selectBtn && !selectBtn.hidden) || (dockPop && !dockPop.hidden);
+      const fieldOutside = event.target instanceof Element && event.target.closest("input, textarea, [contenteditable]")
+        && !panel.contains(event.target);
+      if (!popupOpen && !fieldOutside) closePanel();
+    }, true);
     document.addEventListener("mousedown", event => {
       if (!dockPop.hidden && !dockPop.contains(event.target) && !event.target.closest(".fb-d-next, .fb-d-ms")) dockPop.hidden = true;
     });

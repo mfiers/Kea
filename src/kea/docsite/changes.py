@@ -13,6 +13,7 @@ Output: HTML bodies for changes/<run>.html, changes/index.html, commits/<sha>.ht
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from kea.docsite.nodes import DOC, PROJECT_ROOT, Tree, split_front_matter
+from kea.docsite.nodes import DOC, PROJECT_ROOT, Node, Tree, safe_yaml, split_front_matter
 from kea.docsite.render import esc, tagline
 from kea.feedback import store
 
@@ -30,6 +31,39 @@ DIFF_LINE_LIMIT = 500
 def git(*args: str) -> str:
     result = subprocess.run(["git", *args], capture_output=True, text=True, cwd=PROJECT_ROOT)
     return result.stdout if result.returncode == 0 else ""
+
+
+GIT_CACHE = PROJECT_ROOT / "report" / ".cache" / "git"
+FULL_SHA = re.compile(r"[0-9a-f]{40}")
+_SOURCES: dict[int, dict[Path, Node]] = {}
+
+
+def reset_caches() -> None:
+    _SOURCES.clear()
+
+
+def git_fixed(*args: str) -> str:
+    """git for output that cannot change: every revision named by its full id (show, diff between two commits).
+    Kept in report/.cache/git/ between builds, so a build after a small commit runs git only for the new commits."""
+    before_paths = list(args[1:args.index("--")] if "--" in args else args[1:])
+    revisions = [arg for arg in before_paths if not arg.startswith("-")]
+    fixed = lambda arg: bool(FULL_SHA.fullmatch(arg) or re.fullmatch(r"[0-9a-f]{40}:.+", arg))   # noqa: E731
+    if not revisions or not all(fixed(arg) for arg in revisions):
+        return git(*args)
+    key = hashlib.sha256("\x1f".join(args).encode()).hexdigest()
+    cached = GIT_CACHE / key[:2] / key
+    if cached.exists():
+        return cached.read_text(encoding="utf-8")
+    output = git(*args)
+    if output:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        ignore = GIT_CACHE.parent / ".gitignore"          # the cache ignores itself, also in projects made before 1.26
+        if not ignore.exists():
+            ignore.write_text("*\n")
+        temporary = cached.with_suffix(".tmp")
+        temporary.write_text(output, encoding="utf-8")
+        temporary.replace(cached)
+    return output
 
 
 @dataclass
@@ -98,16 +132,18 @@ def diff_html(diff: str) -> str:
 
 def file_link(path: str, tree: Tree, code_href, prefix: str) -> str:
     """A changed file, linked to the page readers see (doc node) or its code page."""
-    full = (PROJECT_ROOT / path).resolve()
-    for node in tree.nodes.values():
-        if node.source.resolve() == full:
-            return tagline(node, prefix)
+    sources = _SOURCES.get(id(tree))
+    if sources is None:                  # resolved once per build, not once per file per commit
+        sources = _SOURCES[id(tree)] = {node.source.resolve(): node for node in tree.nodes.values()}
+    node = sources.get((PROJECT_ROOT / path).resolve())
+    if node is not None:
+        return tagline(node, prefix)
     href = code_href(path, prefix)
     return f"<a href='{esc(href)}'><code>{esc(path)}</code></a>" if href else f"<code>{esc(path)}</code>"
 
 
 def commit_body(commit: Commit, tree: Tree, threads: list[store.Thread], code_href, prefix: str) -> str:
-    files = git("show", "--format=", "--name-status", commit.full).strip().splitlines()
+    files = git_fixed("show", "--format=", "--name-status", commit.full).strip().splitlines()
     file_items = "".join(f"<li><code>{esc(line.split(chr(9))[0])}</code> "
                          f"{file_link(line.split(chr(9))[-1], tree, code_href, prefix)}</li>" for line in files)
     answered = threads_answered(commit, threads)
@@ -120,7 +156,7 @@ def commit_body(commit: Commit, tree: Tree, threads: list[store.Thread], code_hr
     excluded = [":(exclude)uv.lock"]
     if mode.MODE == "public":                      # data files (and the comment logs) are never shown in a public copy
         excluded += [":(exclude)data", f":(exclude){SETTINGS['feedback_dir']}", ":(exclude)doc/_cycles"]
-    diff = git("show", "--format=", "--unified=2", commit.full, "--", ".", *excluded)
+    diff = git_fixed("show", "--format=", "--unified=2", commit.full, "--", ".", *excluded)
     return (f"<h1>Commit <code>{esc(commit.short)}</code></h1><div class='short'>{esc(commit.subject)}</div>"
             f"<div class='box'><div><b>Date:</b> {esc(commit.date)} · <b>author:</b> {esc(commit.author)}</div>"
             f"{run_html}<div><b>Full id:</b> <code>{esc(commit.full)}</code></div></div>"
@@ -150,12 +186,12 @@ def load_runs(commits: list[Commit]) -> list[Run]:
 
 
 def _status_at(revision: str, path: str) -> str | None:
-    text = git("show", f"{revision}:{path}")
+    text = git_fixed("show", f"{revision}:{path}")
     if not text.startswith("---"):
         return None
     end = text.find("\n---", 4)
     try:
-        return (yaml.safe_load(text[4:end]) or {}).get("status")
+        return (safe_yaml(text[4:end]) or {}).get("status")
     except yaml.YAMLError:
         return None
 
@@ -169,14 +205,14 @@ def run_generated(run: Run, tree: Tree, threads: list[store.Thread], code_href, 
     commit_items = "".join(f"<li><a href='{prefix}commits/{esc(commit.short)}.html'><code>{esc(commit.short)}</code></a> "
                            f"{esc(commit.date)} · {esc(commit.subject)}</li>" for commit in run.commits)
     if base:
-        changed = git("diff", "--name-status", base, newest.full, "--", "doc/").strip()
+        changed = git_fixed("diff", "--name-status", base, newest.full, "--", "doc/").strip()
     else:
-        changed = git("show", "--format=", "--name-status", newest.full, "--", "doc/").strip()
+        changed = git_fixed("show", "--format=", "--name-status", newest.full, "--", "doc/").strip()
     sections: dict[str, list[str]] = {"A": [], "M": [], "D": []}
     status_rows = []
     for line in changed.splitlines():
         kind, path = line.split("\t")[0][0], line.split("\t")[-1]
-        diff = git("diff", base, newest.full, "--", path) if base else git("show", "--format=", newest.full, "--", path)
+        diff = git_fixed("diff", base, newest.full, "--", path) if base else git_fixed("show", "--format=", newest.full, "--", path)
         item = (f"<li>{file_link(path, tree, code_href, prefix)}"
                 f"<details><summary class='help'>show the change</summary>{diff_html(diff)}</details></li>")
         sections.setdefault(kind, []).append(item)

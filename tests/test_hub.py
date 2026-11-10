@@ -749,6 +749,25 @@ def test_incremental_publish_sends_only_new_files_and_resumes(live_hub, tmp_path
     assert hub.blob_path(the_hub, "demo", sha).read_bytes() == other
 
 
+def test_text_goes_up_compressed_and_a_gzip_bomb_is_refused(live_hub, tmp_path, monkeypatch):
+    import gzip
+    the_hub, secrets, url = live_hub
+    monkeypatch.setenv("KEA_AGENT_ID", "agent-a")
+    client = backend.Remote(url, "demo", secrets["key"], tmp_path / "events.jsonl", tmp_path / "cycle.jsonl")
+    client.take_lease()
+    page = ("<p>" + "the same words again " * 4000 + "</p>").encode()
+    entries = {"site/index.html": page, "site/_files.json": b"[]", "doc/x/result/r-a.md": b"---\nid: r-a\n---\nt\n"}
+    result, sent, _ = publish.send_incremental(client, entries, {"files": [], "source_commits": {}})
+    assert result["wire_bytes"] < sent / 10                     # text: a tenth or less on the wire
+    assert (the_hub.project_dir("demo") / "current" / "site" / "index.html").read_bytes() == page
+    bomb = b"\0" * (hub.CHUNK_MAX + 1)
+    sha = hashlib.sha256(bomb).hexdigest()
+    with pytest.raises(backend.RemoteError) as refused:
+        client.request("POST", f"blobs/{sha}", gzip.compress(bomb), headers={"Content-Encoding": "gzip"},
+                       query={"offset": 0, "total": len(bomb)})
+    assert refused.value.status == 413 and not hub.partial_path(the_hub, "demo", sha).exists()
+
+
 def test_manifest_release_refuses_unsafe_paths_and_wrong_checksums(demo):
     the_hub, secrets = demo
     data = b"<html>x</html>"

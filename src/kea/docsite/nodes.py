@@ -42,6 +42,14 @@ FORWARD_LABELS = {"answers": "Answers", "tests": "Tests", "supports": "Supports"
 EQUIVALENT = {"supported_by": "supports", "opposed_by": "opposes"}
 
 
+FAST_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)     # libyaml when PyYAML has it: the same YAML, faster
+
+
+def safe_yaml(text: str):
+    """yaml.safe_load with libyaml's parser when available (front matter is read thousands of times per build)."""
+    return yaml.load(text, Loader=FAST_LOADER)
+
+
 def split_front_matter(text: str, path: Path) -> tuple[dict, str]:
     """(header dict, body) of a Markdown file with a leading '---' YAML block."""
     if not text.startswith("---\n"):
@@ -50,7 +58,7 @@ def split_front_matter(text: str, path: Path) -> tuple[dict, str]:
     if end < 0:
         raise ValueError(f"{path}: front matter not closed")
     try:
-        header = yaml.safe_load(_quote_plain_values(text[4:end])) or {}
+        header = safe_yaml(_quote_plain_values(text[4:end])) or {}
     except yaml.YAMLError as error:
         raise ValueError(f"{path}: YAML error: {error}") from error
     return header, text[end + 4:].lstrip("\n")
@@ -352,6 +360,16 @@ def _validate(tree: Tree) -> None:
             tree.problems.append(f"{where}: parent {node.parent!r} does not exist")
         if node.id != "home" and not node.parent:
             tree.problems.append(f"{where}: no parent")
+        parent_node = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
+        if node.type in ("artefact", "figure") and parent_node is not None and parent_node.type == "experiment":
+            # files and figures belong to what made or uses them (a step or a result), never to the experiment
+            tree.problems.append(f"{where}: {node.type} directly under the experiment (put it under the step that "
+                                 "made it or the result that uses it)")
+        if node.type == "experiment":
+            direct = [name for name in ("sources", "from_artefact") if node.header.get(name) or node.relations.get(name)]
+            if direct:
+                tree.problems.append(f"{where}: an experiment page links no files ({', '.join(direct)}: belongs on "
+                                     "the step or result that uses them)")
         if node.type in statuses and node.status not in statuses[node.type]:
             tree.problems.append(f"{where}: status {node.status!r} not in {statuses[node.type]}")
         if node.type == "hypothesis" and "fixed_before_results" not in node.header:
@@ -410,6 +428,9 @@ def _validate(tree: Tree) -> None:
                 target_node = tree.nodes.get(target)
                 if target_node is None:
                     _missing(tree, where, target)
+                elif node.type in ("artefact", "figure") and target_node.type == "experiment":
+                    tree.problems.append(f"{where}: {relation} links a {node.type} to the experiment (link it to the "
+                                         "step or result instead)")
                 elif not _allowed(rule, node.type, target_node.type):
                     tree.problems.append(f"{where}: {relation} from {node.type} to {target_node.type} not allowed")
                 elif relation == "relies_on":

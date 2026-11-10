@@ -36,6 +36,74 @@ def _git(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+_FILE_LOG: dict | None = None        # path -> commits touching it, newest first (file_log); reset per build
+
+
+def reset_file_log() -> None:
+    """Forget the history read by file_log (the build calls this first: commits may have been made since)."""
+    global _FILE_LOG
+    _FILE_LOG = None
+
+
+def file_log() -> dict:
+    """{"log": {path: [(short commit, date, author, subject), …] newest first, following renames like git log
+    --follow}, "dirty": paths with uncommitted changes or untracked}. One `git log` and one `git status` for the
+    whole repository instead of three git processes per page."""
+    global _FILE_LOG
+    if _FILE_LOG is not None:
+        return _FILE_LOG
+    raw = _git("log", "-M", "-C", "--name-status", "--format=%x1e%h%x1f%ad%x1f%an%x1f%s%x1f%H", "--date=short")
+    log: dict[str, list[tuple[str, str, str, str]]] = {}
+    # as `git log --follow <path>` does for each path: a path keeps the history of its own name, and where it was
+    # made by a rename it follows the old name further back. Newest first: tracking[name] = the paths (by their
+    # name now) whose history that name holds at this point in time.
+    tracking: dict[str, set[str]] = {}
+    # where a path first appears in this log (added, or a copy this log did not see): (full commit, its name then).
+    # What lies before is asked of git log --follow itself (history_html), which looks harder for copies.
+    origin: dict[str, tuple[str, str]] = {}
+
+    def add(name: str, commit: tuple) -> None:
+        for path in tracking.setdefault(name, {name}):
+            if path in origin:
+                continue
+            entries = log.setdefault(path, [])
+            if not entries or entries[-1][0] != commit[0]:
+                entries.append(commit)
+    for record in filter(None, raw.split("\x1e")):     # (_git strips: \x1e counts as whitespace)
+        head, _, files = record.partition("\n")
+        parts = (head.split("\x1f") + ["", "", "", "", ""])[:5]
+        commit, full = tuple(parts[:4]), parts[4]
+        for line in files.strip("\n").splitlines():
+            fields = line.split("\t")
+            if len(fields) < 2:
+                continue
+            add(fields[-1], commit)
+            if fields[0] == "A":
+                for path in tracking.get(fields[-1], set()):
+                    origin.setdefault(path, (full, fields[-1]))
+            if fields[0][:1] in "RC" and len(fields) == 3:     # older commits knew it as fields[1] (a copy: its source)
+                old, renamed_to = fields[1], fields[2]
+                if fields[0].startswith("R"):
+                    add(old, commit)              # seen from the old name: the file went away here
+                moved = tracking.get(renamed_to, {renamed_to})
+                tracking[renamed_to] = set()       # before this commit the new name held nothing of theirs
+                tracking.setdefault(old, {old}).update(moved)
+    status = subprocess.run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], capture_output=True,
+                            text=True, cwd=PROJECT_ROOT)
+    dirty = set()
+    parts = status.stdout.split("\0") if status.returncode == 0 else []
+    index = 0
+    while index < len(parts):
+        entry = parts[index]
+        if len(entry) > 3:
+            dirty.add(entry[3:])
+            if entry[0] in "RC":                 # a rename carries its old name in the next field
+                index += 1
+        index += 1
+    _FILE_LOG = {"log": log, "dirty": dirty, "origin": origin}
+    return _FILE_LOG
+
+
 def source_version(source: Path | None) -> str:
     """Short commit of the last change to `source` (HEAD for generated pages); '+edited' with uncommitted changes."""
     if source is None:              # a generated page: the commit the site is built from, +edited if doc/ differs
@@ -44,11 +112,11 @@ def source_version(source: Path | None) -> str:
                  or bool(_git("ls-files", "--others", "--exclude-standard", "--", "doc")))
         return head + ("+edited" if dirty and head else "")
     relative = str(source.relative_to(PROJECT_ROOT))
-    commit = _git("log", "-1", "--format=%h", "--", relative)
-    if not commit:
+    known = file_log()
+    commits = known["log"].get(relative)
+    if not commits:
         return "uncommitted"
-    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", relative], cwd=PROJECT_ROOT).returncode != 0
-    return commit + ("+edited" if dirty else "")
+    return commits[0][0] + ("+edited" if relative in known["dirty"] else "")
 
 
 def history_html(source: Path, prefix: str) -> str:
@@ -56,13 +124,21 @@ def history_html(source: Path, prefix: str) -> str:
     the date and what each change was; the diffs themselves are on the commit pages under History."""
     from kea.docsite.versions import commit_labels
     relative = str(source.relative_to(PROJECT_ROOT))
-    log = _git("log", "--follow", f"-{HISTORY_LIMIT}", "--format=%h%x09%ad%x09%an%x09%s", "--date=short", "--", relative)
+    known = file_log()
+    log = known["log"].get(relative, [])[:HISTORY_LIMIT]
+    if relative in known["origin"] and len(log) < HISTORY_LIMIT and log:
+        # before the commit that added it: whatever git log --follow finds (a copy's source); fixed, so cached
+        from kea.docsite.changes import git_fixed
+        full, name = known["origin"][relative]
+        older = git_fixed("log", "--follow", f"-{HISTORY_LIMIT}", "--format=%h%x09%ad%x09%an%x09%s", "--date=short",
+                          full, "--", name)
+        tail = [tuple((line.split("\t") + ["", "", "", ""])[:4]) for line in older.splitlines() if line]
+        log = (log + [entry for entry in tail if entry[0] != log[-1][0]])[:HISTORY_LIMIT]
     if not log:
         return ""
     labels = commit_labels()
     groups: list[tuple[str, list[tuple[str, str, str]]]] = []
-    for line in log.splitlines():
-        commit, date, _author, subject = (line.split("\t") + ["", "", "", ""])[:4]
+    for commit, date, _author, subject in log:
         release = labels.get(commit[:7], "")
         release = "" if release.startswith("after ") else release
         if not groups or groups[-1][0] != release:
@@ -190,7 +266,7 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
                                 f"<script src='{prefix}_feedback/{RECOGITO}'></script>"
                                 f"<script id='fb-script' src='{prefix}_feedback/feedback.js' data-page='{esc(key)}' "
                                 f"data-commit='{esc(version)}' data-title='{esc(title)}'></script>"
-                                f"<script id='fb-cycle' src='{prefix}_feedback/cycle.js' data-build='{esc(build_id)}' "
+                                f"<script id='fb-cycle' src='{prefix}_feedback/cycle.js' "
                                 f"data-prefix='{prefix}'></script></body>", 1)
         else:
             text = text.replace("</body>", f"<link rel='stylesheet' href='{prefix}_feedback/feedback.css'></body>", 1)
