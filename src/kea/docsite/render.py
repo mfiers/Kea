@@ -40,7 +40,7 @@ overflow:hidden;text-overflow:ellipsis}
 .topbar .experiment:hover{text-decoration:none;background:#f7c948}
 .topbar .here .tag{margin:0;flex:0 0 auto}
 .topbar .here-title{display:block;color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}.topbar .grp{display:inline-flex;align-items:center;gap:12px}.topbar .grp .sub{display:none;align-items:center;gap:12px}.topbar .grp.open>.sub{display:inline-flex}.topbar .grp.open{background:#2c3446;border-radius:7px;padding:0 9px;box-shadow:inset 0 0 0 1px #3d475c}.topbar .grp.open .grp.open{background:#3a4459;box-shadow:inset 0 0 0 1px #4f5b73;padding:0 7px}.topbar .grp.open>.sub::before{content:'›';color:#8a93a3}.topbar .grp .sub a,.topbar .grp .sub .off{font-size:13px;color:#c9d1e0}.topbar .links a.cur{color:#fff;font-weight:700;border-bottom:2px solid #fff}.topbar.folded.open .grp,.topbar.folded.open .grp .sub{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.topbar.folded.open .grp .sub{padding-left:14px}.topbar.folded.open .grp .sub::before{content:none}
+.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}.topbar .grp{display:inline-flex;align-items:center;gap:12px}.topbar .grp .sub{display:none;align-items:center;gap:12px}.topbar .grp.open>.sub{display:inline-flex;gap:2px;background:#e6eaf2;border-radius:6px;padding:2px 3px;box-shadow:0 1px 0 #0004}.topbar .grp.open>a:first-child{color:#f7c948}.topbar .grp.open>a:first-child::after{content:' ▸';font-size:11px;color:#f7c948}.topbar .grp .sub a,.topbar .grp .sub .off{font-size:13px;color:#2a3242;padding:1px 8px;border-radius:4px;line-height:1.45}.topbar .grp .sub .off{color:#8a93a3}.topbar .grp .sub a:hover{background:#fff;text-decoration:none}.topbar .links .grp .sub a.cur{background:#1d2330;color:#fff;border-bottom:0}.topbar .links a.cur{color:#fff;font-weight:700;border-bottom:2px solid #fff}.topbar.folded.open .grp,.topbar.folded.open .grp .sub{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.topbar.folded.open .grp .sub{padding:4px 6px;margin-left:10px}.topbar.folded.open .grp .sub::before{content:none}
 .topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
 cursor:pointer;flex:0 0 auto}
 .topbar.folded .links{display:none}
@@ -58,7 +58,7 @@ display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-seri
 .topbar .user-menu a,.topbar .user-menu .who{display:block;padding:6px 14px;color:#dfe6f2}
 .topbar .user-menu a:hover{background:#2d3748;text-decoration:none}
 .topbar .user-menu .who{font-size:12.5px;color:#8a93a3;border-bottom:1px solid #2d3748;margin-bottom:4px;white-space:normal}
-.topbar .user-menu .sep-line{border-top:1px solid #2d3748;margin:4px 0}.topbar .kea-version{flex:0 0 auto;font:500 11px/1 system-ui,sans-serif;color:#9aa3b2;border:1px solid #4a5468;border-radius:9px;padding:3px 7px;margin:0 10px 0 4px;white-space:nowrap;cursor:default}.topbar .kea-version.differs{color:#f0c674;border-color:#8a6d2a}@media (max-width:760px){.topbar .kea-version{display:none}}.topbar .user-menu .group{padding:6px 14px 2px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8a93a3}.topbar .user-menu a.project{display:flex;justify-content:space-between;gap:14px;max-width:320px}.topbar .user-menu a.project .role{font-size:11.5px;color:#8a93a3;white-space:nowrap}
+.topbar .user-menu .sep-line{border-top:1px solid #2d3748;margin:4px 0}.topbar .user-menu .versions{padding:4px 14px 2px;font:500 11.5px system-ui,sans-serif;color:#8a93a3;white-space:nowrap}.topbar .user-menu .versions.differs{color:#f0c674}.topbar .user-menu .group{padding:6px 14px 2px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8a93a3}.topbar .user-menu a.project{display:flex;justify-content:space-between;gap:14px;max-width:320px}.topbar .user-menu a.project .role{font-size:11.5px;color:#8a93a3;white-space:nowrap}
 .topbar.user-open,body.has-kindbar .topbar.user-open{z-index:80}
 .topbar.no-project .seg.project,.topbar.no-experiment .seg.experiment-seg{display:none}
 .crumbs{font-size:13px;color:var(--muted);margin:6px 0 10px}.crumbs a{color:var(--muted)}
@@ -152,6 +152,19 @@ table.nodes td:first-child .tagline,table.nodes td:first-child .tl-text{display:
 table.nodes td:nth-child(2){font-size:14px;color:#3b4252;margin-top:3px}table.nodes td:nth-child(2):empty{display:none}
 table.nodes tr:has(.m-status) td:last-child{display:none}
 table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-left-color:#5f2120}table.nodes tr.st-mid{border-left-color:#e0a030}}
+/* the sections after a page's text as tabs hanging from the separator (pages.tab_strip, _assets/kea.js): the open
+   tab in the type's colour and hanging lower, the others pale; without scripts (and in print) every panel shows */
+.node-data-sep span.sep-tabs{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start;gap:3px;margin-left:auto;background:none;padding:0;border-radius:0;letter-spacing:0;text-transform:none;line-height:0}
+.node-data-sep .sep-tab{border:0;cursor:pointer;margin:0;padding:3px 12px 4px;border-radius:0 0 6px 6px;font:700 11.5px/1.3 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--kc,#556) 13%,#fff);color:color-mix(in srgb,var(--kc,#556) 85%,#000);transition:background .12s}
+.node-data-sep .sep-tab:hover{background:color-mix(in srgb,var(--kc,#556) 26%,#fff)}
+.node-data-sep .sep-tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.node-data-sep .sep-tab.on{background:var(--kc,#556);color:#fff;padding-bottom:8px;cursor:default}
+.node-data-sep .sep-tab span.tab-count{display:inline-block;margin-left:7px;padding:0 6px;border-radius:8px;font:600 10.5px/1.5 system-ui,sans-serif;letter-spacing:0;background:color-mix(in srgb,var(--kc,#556) 22%,#fff);color:inherit}
+.node-data-sep .sep-tab.on span.tab-count{background:#fff3;color:#fff}
+.pid-line{display:flex;justify-content:flex-end;margin:0 0 4px}.pid-line .pid{font:400 11.5px/1.3 system-ui,sans-serif;color:#7a8394;margin:0}.pid-line .pid a{color:#7a8394;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:copy}.pid-line .pid a:hover{color:var(--accent);text-decoration:underline}.pid-line .pid a.copied{color:#1e6e3e}@media (max-width:640px){.node-data-sep .sep-tab{letter-spacing:.05em;padding:3px 8px 4px}.node-data-sep .sep-tab.on{padding-bottom:7px}}.tab-sep{margin-bottom:0}.tab-panel>.fb-static{margin-top:0;padding-top:0;border-top:0}.tab-panels{margin:12px 0 0}.js .tab-panel:not(.on){display:none}
+.tab-panel>section.about:first-child h2,.tab-panel>section:first-child>h2:first-child{margin-top:6px}
+.js table.nodes tr.pg-off{display:none!important}.kind-filter{margin:8px 0 2px}
+@media print{.js .tab-panel:not(.on){display:block}.sep-tab:not(.on){display:none}.tab-panel:not(.on)::before{content:attr(data-label);display:block;font:700 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;border-top:3px solid var(--kc,#556);margin-top:24px;padding-top:4px}.obj-pager,.kind-filter{display:none}.js table.nodes tr.pg-off{display:table-row!important}}
 """
 
 
@@ -359,7 +372,7 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         segments.append(f"<span class='seg here'><span class='sep'>/</span><span class='here-title'>{esc(here)}</span></span>")
     # Four entries: Map, Plan, History, PDF (Help is the kea logo). Map and History are groups whose own pages
     # unfold next to them in the bar while the reader is on one of them (TOPBAR_JS marks the current link):
-    #   Map: Relations, Objects (lists of all pages by type; under it Data and Code)
+    #   Map: Relations, Objects (all pages by type), Resources, Terms, References (Objects filtered), Data files, Code
     #   Plan: the plan of the current review cycle (what readers act on: harvest, implement), Current comments
     #   History: what changed per session (the group's own page), Review cycles, Comments
     # Map, Relations and Objects open the current experiment's pages, the only experiment's on a site with one.
@@ -375,10 +388,17 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
     def group(head: str, members: list[str]) -> str:
         return f"<span class='grp'>{head}<span class='sub'>{''.join(members)}</span></span>"
 
-    objects = group(link("Objects", f"{target}/objects.html" if target else None, "Every page of the experiment, by type"),
-                    [link("Data", "data.html"), link("Code", "code/index.html")])
-    right.append(group(link("Map", f"{target}/map.html" if target else None, "The experiment as a tree"),
-                       [link("Relations", f"{target}/relations.html" if target else None, "The graph of relations"), objects]))
+    def listed(kind: str, label: str, title: str) -> str:
+        return link(label, f"{target}/objects.html#type={kind}" if target else None, title)
+
+    right.append(group(link("Map", f"{target}/map.html" if target else None, "The experiment as a tree"), [
+        link("Relations", f"{target}/relations.html" if target else None, "The graph of relations"),
+        link("Objects", f"{target}/objects.html" if target else None, "Every page of the experiment, by type"),
+        listed("resource", "Resources", "What the analysis takes from outside: data sources, databases, tools (O1, O2 …)"),
+        listed("term", "Terms", "The words this experiment defines"),
+        listed("reference", "References", "The literature cited"),
+        link("Data files", "data.html", "Every data file the pages refer to, with size, checksum and download"),
+        link("Code", "code/index.html", "The analysis code, file by file")]))
     history_members = [] if mode.MODE == "public" else [
         link("Review cycles", "history.html", "Each release with its comments, plan items and commits"),
         link("Comments", "feedback.html", "All comments on the site")]
@@ -401,19 +421,24 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
             right.append(head)
     return (f"<nav class='topbar not-annotatable'><div class='trail'>{''.join(segments)}</div>"
             f"<button class='menu-button' aria-label='menu' hidden>&#9776;</button>"
-            f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>{version_pill()}"
-            f"<span class='user' data-help='{prefix}help.html' data-comments='{prefix}feedback.html'>"
-            f"<a href='{prefix}help.html' title='How to read this site, and about Kea'>Help</a></span>"
+            f"<div class='links'>{''.join(right)}</div><span class='page-tools'></span>"
+            f"<span class='user' data-help='{prefix}help.html' data-comments='{prefix}feedback.html' {version_data()}>"
+            f"<a href='{prefix}help.html' title='How to read this site, and about Kea. {esc(version_words())}'>Help</a></span>"
             f"</nav><script>{TOPBAR_JS}</script>")
 
 
-def version_pill() -> str:
-    """The Kea version that built this site (and the site's own version, when there is one); cycle.js adds the
-    comment server's or hub's Kea version from /api/status."""
+def version_words() -> str:
+    """'Built with Kea X; site version Y': on the Help link's hover, and in the reader's menu (cycle.js)."""
     from kea import __version__
-    site = f"; site version {PDF['version']}" if PDF and PDF.get("version") else ""
-    return (f"<span class='kea-version' data-kea='{esc(__version__)}' title='Built with Kea {esc(__version__)}{esc(site)}'>"
-            f"Kea {esc(__version__)}</span>")
+    return f"Built with Kea {__version__}" + (f"; site version {PDF['version']}" if PDF and PDF.get("version") else "")
+
+
+def version_data() -> str:
+    """The versions as data on the reader's slot in the menu bar: cycle.js shows them in the reader's menu, with the
+    comment server's or hub's Kea from /api/status (not in the bar itself: rarely needed)."""
+    from kea import __version__
+    site = PDF.get("version", "") if PDF else ""
+    return f"data-kea='{esc(__version__)}'" + (f" data-site-version='{esc(site)}'" if site else "")
 
 
 # Fold in steps until the page title has room: 1 menu into the button, 2 project, 3 experiment; the title
@@ -437,9 +462,12 @@ setTimeout(function(){link.textContent=shown;link.classList.remove('copied');},1
 function fallback(){var box=document.createElement('textarea');box.value=url;box.style.position='fixed';box.style.opacity='0';
 document.body.appendChild(box);box.select();try{document.execCommand('copy');done();}catch(error){}box.remove();}
 if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(url).then(done,fallback);}else{fallback();}});
-var here=location.href.split('#')[0].split('?')[0];
-nav.querySelectorAll('.links a').forEach(function(a){if(a.href.split('#')[0]===here){a.classList.add('cur');
-for(var g=a.parentElement;g&&g!==nav;g=g.parentElement){if(g.classList.contains('grp'))g.classList.add('open');}}});
+function mark(){var here=location.href.split('#')[0].split('?')[0];var links=[].slice.call(nav.querySelectorAll('.links a'));
+links.forEach(function(a){a.classList.remove('cur');});
+var exact=links.filter(function(a){return a.href.indexOf('#')>0&&a.href===here+location.hash;});
+(exact.length?exact:links.filter(function(a){return a.href.indexOf('#')<0&&a.href.split('?')[0]===here;})).forEach(function(a){a.classList.add('cur');
+for(var g=a.parentElement;g&&g!==nav;g=g.parentElement){if(g.classList.contains('grp'))g.classList.add('open');}});}
+mark();window.addEventListener('hashchange',mark);
 window.addEventListener('resize',fit);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();}
 window.keaFitTopbar=fit;})();"""
 
@@ -480,7 +508,8 @@ def page(title: str, body: str, prefix: str, project: str | None = None, tree: T
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{esc(title)}</title>"
             f"<link rel='icon' href='{prefix}_assets/kea-badge.ico'>"
-            f"<style>{font_faces(prefix)}{CSS}</style></head><body{' class=has-kindbar' if kindbar else ''}>{kindbar}"
+            f"<style>{font_faces(prefix)}{CSS}</style><script defer src='{prefix}_assets/kea.js'></script>"
+            f"<script>document.documentElement.classList.add('js')</script></head><body{' class=has-kindbar' if kindbar else ''}>{kindbar}"
             f"{topbar(prefix, project, tree, node, here)}{main}{body}</main></body></html>")
 
 

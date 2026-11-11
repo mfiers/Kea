@@ -248,17 +248,31 @@ def inject(site_dir: Path, pages: dict[str, tuple[str, Path | None]], events_pat
         extra = (history.replace("<h2>Changes to this page</h2>", "<h2>Changes to this page</h2>" + versionline, 1)
                  if history else versionline)
         page_threads = sorted(by_key.get(key, []), key=states.sort_key) if with_comments else []
+        comments_html, active = "", []
         if page_threads:
             active = [thread for thread in page_threads if states.state_of(thread)[0] != "resolved"]
             resolved = [thread for thread in page_threads if states.state_of(thread)[0] == "resolved"]
-            extra += ("<section class='fb-static not-annotatable'><h2>Comments on this page</h2>"
+            comments_html = ("<section class='fb-static not-annotatable'><h2>Comments on this page</h2>"
                       "<p class='help'>Copy made when the site was built; with the server running, live comments are in "
                       "the Comments panel. Open comments first, then those in a plan, those addressed in a version, "
                       "and the resolved ones.</p>" + "".join(thread_static_html(thread, prefix) for thread in active)
                       + (f"<details class='fb-resolved'><summary>{len(resolved)} resolved comment(s)</summary>"
                          + "".join(thread_static_html(thread, prefix) for thread in resolved) + "</details>"
                          if resolved else "") + "</section>")
-        text = text.replace("</main>", f"{extra}</main>", 1)
+        if "<!--kea:tab-panels-->" in text:     # a page of the graph: Changes and Comments as tabs (pages.tab_strip)
+            buttons = ("<button type='button' class='sep-tab' role='tab' data-tab='changes' aria-selected='false'>"
+                       "Changes</button>")
+            panels = f"<div class='tab-panel' role='tabpanel' data-tab='changes' data-label='Changes'>{extra}</div>"
+            if comments_html:
+                count = f"<span class='tab-count'>{len(active)}</span>" if active else ""
+                buttons += (f"<button type='button' class='sep-tab' role='tab' data-tab='comments' aria-selected='false'>"
+                            f"Comments{count}</button>")
+                panels += (f"<div class='tab-panel' role='tabpanel' data-tab='comments' data-label='Comments'>"
+                           f"{comments_html}</div>")
+            text = (text.replace("<!--kea:tab-buttons-->", buttons, 1)
+                    .replace("<!--kea:tab-panels-->", panels, 1))
+        else:
+            text = text.replace("</main>", f"{extra}{comments_html}</main>", 1)
         if with_comments:
             text = text.replace("</body>",
                                 f"<link rel='stylesheet' href='{prefix}_feedback/{RECOGITO_CSS}'>"

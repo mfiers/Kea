@@ -129,8 +129,10 @@ def test_figures_are_featured_embedded_and_provenance_folds(tmp_path):
 
 
 def test_experiment_lists_questions_then_answers_and_has_no_files(tmp_path):
-    """An experiment page: Questions (one line each), then Answers so far, then About; no Figures separator. An
-    artefact directly under the experiment is a problem."""
+    """An experiment page: after its text, tabs under one separator: Questions (one line each), Answers so far (the
+    answer and a link to the conclusion, not its text), About this page (its hypotheses, steps, results and
+    conclusions, filtered by kind; no terms), then Changes. No Figures separator. An artefact directly under the
+    experiment is a problem."""
     project = tmp_path / "example"
     project.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
@@ -138,23 +140,34 @@ def test_experiment_lists_questions_then_answers_and_has_no_files(tmp_path):
     pages = {
         "question/q-one.md": "id: q-one\ntype: question\ntitle: Does it work?\nshort: Whether it works.\nparent: home\n"
                              "status: answered\nanswer: It does, a little.",
-        "conclusion/c-one.md": "id: c-one\ntype: conclusion\ntitle: It works a little\nshort: So.\nparent: q-one\n"
-                               "status: supported\ncertainty: low\ncertainty_because: small.",
+        "conclusion/c-one.md": "id: c-one\ntype: conclusion\ntitle: It works a little\nshort: Conclusion summary text.\n"
+                               "parent: q-one\nstatus: supported\ncertainty: low\ncertainty_because: small.",
+        "term/t-word.md": "id: t-word\ntype: term\ntitle: Wordy\nshort: A word.\nparent: home",
     }
     for relative, header in pages.items():
         path = project / "doc" / "first" / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"---\n{header}\n---\n")
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "start"], cwd=project,
+                   check=True)
     built = run(["build", "--no-pdf"], project)
     assert built.returncode == 0, built.stdout + built.stderr
     home = (project / "report" / "site" / "first" / "home.html").read_text()
-    assert (home.index("</article>") < home.index(">Questions</span>") < home.index(">Answers so far</span>")
-            < home.index("It does, a little.") < home.index(">About this page</span>"))
-    listed = home.split("class='chips experiment-questions")[1].split("</ul>")[0]
     import re
-    listed = re.sub(r"title='[^']*'", "", listed)                       # the summary only on hover
+    tabs = re.findall(r"class='sep-tab[^']*' role='tab' data-tab='(\w+)'", home)
+    assert tabs == ["questions", "answers", "about", "changes"], tabs
+    assert home.count("class='node-data-sep") == 1                       # one separator, the rest are tabs
+    panel = lambda key: home.split(f"role='tabpanel' data-tab='{key}'")[1].split("role='tabpanel'")[0]
+    listed = re.sub(r"title='[^']*'", "", panel("questions"))           # the summary only on hover
     assert "Does it work?" in listed and "Whether it works." not in listed
+    answers = re.sub(r"title='[^']*'", "", panel("answers"))
+    assert "It does, a little." in answers and "c-one.html" in answers and "Conclusion summary text." not in answers
+    about = panel("about")
+    assert "Pages of this experiment" in about and "data-kind='conclusion'" in about and "t-word.html" not in about
     assert ">Figures" not in home
+    assert "_assets/kea.js" in home and (project / "report" / "site" / "_assets" / "kea.js").exists()
+    assert "objects.html#type=term'" in home                               # terms: under Map
     comments_page = (project / "report" / "site" / "comments.html").read_text()     # Plan → Current comments
     assert "id='comments-data'" in comments_page and "_assets/comments.js" in comments_page
     assert "href='../comments.html'" in home and (project / "report" / "site" / "_assets" / "comments.js").exists()

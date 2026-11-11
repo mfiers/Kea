@@ -712,7 +712,8 @@ def test_versions_are_shown(demo):
                 follow_redirects=False)
     status = client.get("/p/demo/api/status").json()
     assert status["server_version"] == __version__ and status["on_hub"] is True
-    assert f"Kea {__version__}" in render.version_pill()
+    assert f"data-kea='{__version__}'" in render.version_data()          # shown in the reader's menu (cycle.js)
+    assert f"Kea {__version__}" in render.version_words()
     apex = TestClient(hub.HubApp(the_hub), base_url="https://kea.example.org")
     assert f"Kea {__version__}" in apex.get("/").text
 

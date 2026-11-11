@@ -93,10 +93,10 @@ Every page has a type, shown as a coloured tag with an icon and a number (Q1, R2
 
 On a page:
 
-- The coloured bar on the left and the word above the title say the type. The page's own content (title, summary, text) is set in a serif face. Under the line "About this page" is what Kea knows about it: its permanent identifier (`kea:…`, which stays when the page is edited or moved, and `@…` for exactly this version, to cite), its sources, and its links to other pages as tables ("Tested by this step", "Supported by these results"), with the reason each link holds.
-- A page reads in this order: its title, summary and text, as written, in a typewriter face; on a question, the answer so far; then its figures and data files under their own separator (one tab per figure or file when there are several; the take-home under each figure, the rest of the caption under "Shows, method and statistics"; a question or conclusion also shows the figures of the results behind it as a row of small images); then About this page. An experiment page lists its questions after its text, then each question's answer so far. Under the text, conclusions and caveats are listed one per line; how the page was made (steps, data, sources) is folded under Provenance. "Changes to this page" lists one line per version; the exact changes are under History.
+- The coloured bar on the left and the word above the title say the type. The page's own content (title, summary, text) is set in a typewriter face, indented behind a line. After it, tabs hang under one thick line in the type's colour; one is open at a time. "About this page" holds what Kea knows about the page: its permanent identifier (`kea:…`, which stays when the page is edited or moved, and `@…` for exactly this version, to cite), its sources, and its links to other pages as tables ("Tested by this step", "Supported by these results"), with the reason each link holds; long tables come in pages of 12. "Changes" lists one line per version, "Comments" the comments when the site was built. Resources, terms and references are not listed on the pages: the menu has them under Map.
+- A page reads in this order: its title, summary and text, as written; on a question, the answer so far; then its figures and data files under their own separator (one tab per figure or file when there are several; the take-home under each figure, the rest of the caption under "Shows, method and statistics"; a question or conclusion also shows the figures of the results behind it as a row of small images); then the tabs. On an experiment page the first tabs are "Questions" (one line each) and "Answers so far" (each answer, with links to its conclusions), and "About this page" lists its hypotheses, steps, results and conclusions with a filter per kind. Under About, conclusions and caveats are listed one per line; how the page was made (steps, data, sources) is folded under Provenance; the exact changes per version are under History.
 - Pills next to the title: the status (green: supported, done or answered; amber: open, planned, assumed or inconclusive; dark red: not supported, deprecated or dropped); "exploratory"; on a hypothesis "written before its test" or "written after results"; on a conclusion its certainty; "waiting for approval", "approved", "confirmed", "recheck"; and the release in which the page last changed.
-- The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) with Relations (the graph of links) and Objects (every page in one table to search, filter and sort; Data and Code under it); Plan (the current review cycle); History (what changed per agent run; review cycles; all comments); PDF (the analysis as one document to read; with all records under it); Help.
+- The menu bar: the kea head goes home, then project / experiment / page. Map (the experiment as a tree) opens, in a light strip beside it, Relations (the graph of links), Objects (every page in one table to search, filter and sort), Resources, Terms, References, Data files and Code; Plan (the current review cycle; Current comments); History (what changed per agent run; review cycles; all comments); PDF (the analysis as one document to read; with all records under it); Help. The signed-in name opens a menu with your comments, help and sign-out, and at its foot the Kea versions of the site and of the server or hub.
 
 <!-- /help -->
 
@@ -132,7 +132,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.26.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -143,14 +143,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.26.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.27.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.26.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.0"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.26.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.27.0 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -164,8 +164,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.26.0 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.26.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.26.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.0
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

@@ -228,18 +228,18 @@
   /* The reader in the menu bar (render.py: <span class='user'>): the signed-in name opens a small menu with the
      reader's comments, help and sign out; a public site read without a login shows Help and Sign in. */
   let userKey = null;
-  /* The version pill in the menu bar (render.py): the Kea that built the site; here also the Kea of the comment
-     server or hub, marked when the two differ. */
-  function renderVersion(status) {
-    const pill = document.querySelector(".topbar .kea-version");
-    if (!pill || !status || !status.server_version || pill.dataset.server === status.server_version) return;
-    pill.dataset.server = status.server_version;
-    const built = pill.dataset.kea, where = status.on_hub ? "hub" : "server";
-    const same = built === status.server_version;
-    pill.textContent = same ? "Kea " + built : `Kea ${built} · ${where} ${status.server_version}`;
-    pill.classList.toggle("differs", !same);
-    pill.title = pill.title.replace(/\. The .*$/, "") + `. The ${status.on_hub ? "Kea hub" : "comment server"} runs Kea `
-      + status.server_version + (same ? "." : ": a different version; some features may not work until both match.");
+  /* The versions, at the foot of the reader's menu (render.py puts data-kea and data-site-version on the slot): the
+     Kea that built the site, the site's own version, and the Kea of the comment server or hub, marked when the two
+     differ (some features may then not work). */
+  function versionLine(slot, status) {
+    const built = slot.dataset.kea, server = status && status.server_version;
+    const where = status && status.on_hub ? "hub" : "server";
+    const parts = [`Kea ${built}`];
+    if (slot.dataset.siteVersion) parts.push(`site ${slot.dataset.siteVersion}`);
+    if (server) parts.push(server === built ? `${where} the same` : `${where} Kea ${server}`);
+    return el("div", { class: "versions" + (server && server !== built ? " differs" : ""),
+      title: server && server !== built ? `The site was built with Kea ${built}; the ${status.on_hub ? "Kea hub" : "comment server"} `
+        + `runs Kea ${server}: some features may not work until both match.` : "" }, parts.join(" · "));
   }
 
   function renderUser(status) {
@@ -247,7 +247,8 @@
     if (!slot) return;
     const name = status && status.signed_in ? (status.you || (status.account ? status.orcid : "") || "Signed in") : "";
     const hub = status && status.hub;                 // on a Kea hub: its front page and the reader's other projects
-    const key = status === null ? "anonymous" : name + "|" + (status && status.sign_out) + "|" + JSON.stringify(hub || null);
+    const key = status === null ? "anonymous" : name + "|" + (status && status.sign_out) + "|" + JSON.stringify(hub || null)
+      + "|" + (status && status.server_version);
     if (key === userKey) return;
     userKey = key;
     const help = el("a", { href: slot.dataset.help, title: "How to read this site, and about Kea" }, "Help");
@@ -268,7 +269,8 @@
           title: project.role ? "Your role: " + project.role : "Public project" },
           project.title, project.role ? el("span", { class: "role" }, project.role) : null))] : []),
       status.sign_out ? el("div", { class: "sep-line" }) : null,
-      status.sign_out ? el("a", { href: status.sign_out, role: "menuitem" }, "Sign out") : null);
+      status.sign_out ? el("a", { href: status.sign_out, role: "menuitem" }, "Sign out") : null,
+      el("div", { class: "sep-line" }), versionLine(slot, status));
     const button = el("button", { class: "user-name", type: "button", title: name, "aria-haspopup": "true",
       "aria-expanded": "false", onclick: event => {
         event.stopPropagation();
@@ -309,7 +311,6 @@
       if (!response.ok) return false;
       const status = await response.json();
       renderUser(status);
-      renderVersion(status);
       apply(status);
       return true;
     } catch (error) {

@@ -1122,6 +1122,7 @@
     }
     if (typeof RecogitoJS === "undefined" || !build()) return;
     for (const node of document.querySelectorAll(".fb-static")) node.hidden = true;
+    if (window.keaDropTab) window.keaDropTab("comments");   // live comments: the panel, not the build-time tab
     await reload();
     try {
       const probeSource = await fetch(BASE + "api/source?page=" + encodeURIComponent(PAGE), { credentials: "same-origin" });
