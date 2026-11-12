@@ -149,8 +149,10 @@ def history_html(source: Path, prefix: str) -> str:
         dates = sorted({date for _, date, _ in commits})
         when = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
         what = "; ".join(dict.fromkeys(subject for _, _, subject in commits))
+        from kea.docsite.changes import commit_page_shorts
         links = " ".join((f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(commit)}</code></a>"
-                          if mode.WITH_CHANGELOG else f"<code>{esc(commit)}</code>") for commit, _, _ in commits)
+                          if mode.WITH_CHANGELOG and commit in commit_page_shorts() else f"<code>{esc(commit)}</code>")
+                         for commit, _, _ in commits)
         badge = f"<span class='pill'>{esc(release)}</span>" if release else "<span class='pill'>not released yet</span>"
         items.append(f"<li>{badge} {esc(when)} · {esc(what)} <span class='help'>{links}</span></li>")
     return ("<section class='fb-history not-annotatable' id='history'><h2>Changes to this page</h2>"
@@ -197,7 +199,8 @@ def thread_static_html(thread: store.Thread, prefix: str, page_href: str | None 
 
 def version_box(version: str, prefix: str, source: Path | None, has_history: bool) -> str:
     commit = version.split("+")[0]
-    linked = mode.WITH_CHANGELOG and commit and commit != "uncommitted"
+    from kea.docsite.changes import commit_page_shorts
+    linked = mode.WITH_CHANGELOG and commit and commit != "uncommitted" and commit in commit_page_shorts()
     commit_html = (f"<a href='{prefix}commits/{esc(commit)}.html'><code>{esc(version)}</code></a>" if linked
                    else f"<code>{esc(version)}</code>")
     source_html = ""

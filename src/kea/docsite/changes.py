@@ -13,6 +13,7 @@ Output: HTML bodies for changes/<run>.html, changes/index.html, commits/<sha>.ht
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import re
 import subprocess
@@ -97,6 +98,12 @@ def all_commits() -> list[Commit]:
         commit.answers = re.findall(r"^Answers-comment:\s*(\S+)", commit.body, flags=re.M)
         commits.append(commit)
     return commits
+
+
+@functools.lru_cache(maxsize=1)
+def commit_page_shorts() -> frozenset[str]:
+    """Short hashes of the commits that get a page (after ``changes_since``); links to others would be broken."""
+    return frozenset(commit.short for commit in all_commits())
 
 
 def run_link(run_id: str, prefix: str) -> str:

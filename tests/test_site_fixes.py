@@ -107,3 +107,21 @@ def test_linkcheck_accepts_data_links(tmp_path):
                                       "<a href='../../data/missing.tsv'>m</a>")
     write(tmp_path / "data" / "y.tsv", "a\n")
     assert linkcheck.broken_links(site) == ["result/r.html: link to ../../data/missing.tsv (no such file in the site)"]
+
+
+def test_no_links_to_commits_before_changes_since(tmp_path, monkeypatch):
+    """Commits at or before changes_since have no page, so a page's version box shows them unlinked."""
+    from kea.docsite import comments, mode
+    repository = _repository(tmp_path)
+    first = _git(repository, "rev-list", "--max-parents=0", "HEAD").strip()
+    monkeypatch.setattr(changes, "PROJECT_ROOT", repository)
+    monkeypatch.setitem(config.SETTINGS, "changes_since", first)
+    monkeypatch.setattr(mode, "WITH_CHANGELOG", True)
+    changes.commit_page_shorts.cache_clear()
+    try:
+        old = _git(repository, "rev-parse", "--short", first).strip()
+        new = _git(repository, "rev-parse", "--short", "HEAD").strip()
+        assert "commits/" not in comments.version_box(old, "", None, False)
+        assert f"commits/{new}.html" in comments.version_box(new, "", None, False)
+    finally:
+        changes.commit_page_shorts.cache_clear()
