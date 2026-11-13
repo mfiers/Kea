@@ -10,8 +10,8 @@
   `KEA_REMOTE_KEY` in .env): `kea publish` after every build; ask the owner before data files go up
   (`kea publish --files`).
 - Pace: one step along the route, then stop for the owner's review (experiment → questions → hypotheses and
-  planned steps → results → conclusions); go further only when the owner says so in chat. Approval goes on the
-  page (`approved:`, or a Confirm on the site); `kea context` names the next step.
+  planned steps → results → conclusions); go further only when the owner says so in chat or presses Approve & go.
+  Sign-offs go on the page (`approved:`, a list: by, date, version, how); `kea context` names the next step.
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
   the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.
@@ -19,7 +19,9 @@
   comments into `doc/_cycles/cycle-NNN.md` (`kea reply … --status planned`), then always `kea cycle plan-updated
   --commit …` (it ends the harvest). Exit 20 (Implement) → `kea cycle start`, implement, run entry, replies with
   commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a
-  plan item before Implement unless the owner asks in chat.
+  plan item before Implement unless the owner asks in chat. Exit 40 (Approve & go on a page): sign it off, do that
+  page's next step only (`kea list` names it), tell readers with `kea progress "…" --page <page>` as you go, run
+  entry, commit, `make site`, `kea publish`, answer the thread with the commit, stop for review, watch again.
 - After any change, `kea recheck --list`: read every page downstream of a changed page against the change,
   update it if it is even slightly affected, then `kea recheck <id> --because "…"`; releases wait for this.
 - Versions: MAJOR = a conclusion changes direction or is withdrawn; MINOR = new results or pages; PATCH = wording

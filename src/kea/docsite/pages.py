@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts, changes, codepages, comments, history, mode, questions, versions
+from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, questions, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
@@ -640,12 +640,20 @@ class SiteRenderer:
             pills += (f" <span class='pill fb-pp-ok' title='Confirmed by {esc(by)}{(' on ' + esc(when)) if when else ''}"
                       f"{(', version ' + esc(str(confirmed.get('version', '')))) if isinstance(confirmed, dict) and confirmed.get('version') else ''}'>"
                       f"✓ confirmed{(' by ' + esc(by)) if by else ''}</span>")
+        signed = graph.signatures(node)
+        if signed:              # sign-offs (Approve on the site, or the owner in chat): who, which version, when
+            names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
+            detail = "; ".join(f"{item.get('by') or '?'}" + (f", version {item.get('version')}" if item.get("version") else "")
+                               + (f", {item.get('date')}" if item.get("date") else "")
+                               + (" (in chat)" if item.get("how") == "chat" else "") for item in signed)
+            pills += f" <span class='pill fb-pp-ok' title='Signed off: {esc(detail)}'>✓ approved by {esc(names)}</span>"
         kind_html = (f"{icons.svg(node.type)}Experiment" if node.type == "experiment" else fullname_inner(node))
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
         parts = [crumbs(self.trail(node, prefix), prefix),
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
+                 f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"
                  f" style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
@@ -1077,6 +1085,106 @@ class SiteRenderer:
                 + "<script src='_assets/comments.js'></script>")
         self.write("comments.html", page("Current comments", body, "", None, self.tree, wide=True))
 
+    ROUTE_ORDER = {"experiment": 0, "question": 1, "hypothesis": 2, "step": 3, "result": 4, "conclusion": 5}
+    STAGE_TEXT = {"done": ("✓", "done"), "you": ("●", "waiting for you"), "agent": ("▶", "the agent's turn"),
+                  "running": ("⟳", "running"), "later": ("·", ""), "closed": ("–", "closed"),
+                  "free": ("–", "not needed")}
+
+    def waiting_pages(self) -> list[Node]:
+        """Pages that wait for a sign-off (pace: guided), in route order."""
+        return sorted((node for node in self.tree.nodes.values() if node.waiting),
+                      key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
+
+    def progress_page(self) -> None:
+        """progress.html (Plan → Progress): one view of where the analysis stands and what waits for whom: the pages
+        that wait for a sign-off (with what Approve & go would start), the route of every question (question, plan,
+        run, results, conclusions), and who signed off on what. The agent's status and the open Approve & go
+        requests are filled in live by _feedback/cycle.js (#progress-live)."""
+        prefix = ""
+        tree = self.tree
+        link = lambda node: node_link(node, prefix, node.title if node.tag else None)   # noqa: E731
+        hrefs = {key: relative for relative, (key, _) in self.pages.items() if key in tree.nodes}
+        parts = [crumbs([("Plan", "plan.html"), ("Progress", None)], prefix), "<h1>Progress</h1>",
+                 "<div class='short'>Where each question stands on the route (question, plan, run, results, "
+                 "conclusions) and what waits for whom. <b>Approve</b> signs a page off: your name and the version you "
+                 "read. <b>Approve &amp; go</b> also asks the agent to take the next step now (write the plan, run the "
+                 "step, …).</div>",
+                 f"<div id='progress-live' class='progress-live not-annotatable' data-pages='{esc(json.dumps(hrefs))}'>"
+                 "<p class='help'>The agent's status "
+                 "and the open Approve &amp; go requests show here when the site is served with comments.</p></div>"]
+        if tree.pace != "guided":
+            parts.append("<p class='help not-annotatable'>This project runs with <code>pace: free</code>: no page waits "
+                         "for a sign-off; Approve records a signature only.</p>")
+        waiting = self.waiting_pages()
+        parts.append(f"<h2>Waiting for a sign-off <span class='count'>{len(waiting)}</span></h2>")
+        if waiting:
+            rows = []
+            for node in waiting:
+                action = graph.go_action(tree, node)
+                signed = graph.signatures(node)
+                rows.append(f"<tr data-page='{esc(node.key)}'><td>{link(node)}</td><td>{esc(TYPE_LABELS.get(node.type, node.type))}"
+                            + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
+                            + f"</td><td>{('Approve &amp; ' + esc(action)) if action else '<span class=help>Approve</span>'}</td>"
+                            f"<td class='live-cell'>{esc(', '.join(str(item.get('by') or '?') for item in signed))}</td></tr>")
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Kind</th>"
+                         "<th>The button that moves it on</th><th>Request</th></tr></thead><tbody>"
+                         + "".join(rows) + "</tbody></table></div>")
+        else:
+            parts.append("<p class='help'>Nothing waits for a sign-off.</p>")
+        ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
+                       key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
+        parts.append(f"<h2>Ready for the next step <span class='count'>{len(ready)}</span></h2>"
+                     "<p class='help'>Signed off, or needing no sign-off: the next step is the agent's. "
+                     "<b>Approve &amp; go</b> on the page asks for it now.</p>")
+        if ready:
+            rows = [f"<tr data-page='{esc(node.key)}'><td>{link(node)}</td><td>{esc(TYPE_LABELS.get(node.type, node.type))}</td>"
+                    f"<td>Approve &amp; {esc(graph.go_action(tree, node))}</td><td class='live-cell'></td></tr>" for node in ready]
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Kind</th>"
+                         "<th>The button that moves it on</th><th>Request</th></tr></thead><tbody>"
+                         + "".join(rows) + "</tbody></table></div>")
+        for project, home in tree.projects.items():
+            found = questions.questions(tree, project)
+            title = f"Route · {home.title}" if len(tree.projects) > 1 else "Route of each question"
+            parts.append(f"<h2>{esc(title)}</h2>")
+            if home.waiting:
+                parts.append(f"<p class='route-note'><span class='rs rs-you'>● waiting for you</span> the experiment "
+                             f"itself: {link(home)}</p>")
+            if not found:
+                parts.append("<p class='help'>No questions yet.</p>")
+                continue
+            head = "".join(f"<th>{esc(label)}</th>" for _, label in graph.STAGES)
+            rows = []
+            for question in found:
+                route = graph.question_route(tree, question)
+                cells = []
+                for stage in route["stages"]:
+                    icon, word = self.STAGE_TEXT[stage["state"]]
+                    shown = [node for node in stage["pages"] if node.tag and node is not question]
+                    pages = " ".join(node_link(node, prefix) for node in shown[:6])
+                    more = f" +{len(shown) - 6}" if len(shown) > 6 else ""
+                    cells.append(f"<td class='rs-cell rs-{stage['state']}' title='{esc(stage['note'] or word)}'>"
+                                 f"<span class='rs rs-{stage['state']}'>{icon}{(' ' + esc(word)) if word else ''}</span>"
+                                 + (f"<div class='rs-pages'>{pages}{more}</div>" if pages and stage['state'] != 'done' else "")
+                                 + "</td>")
+                rows.append(f"<tr><td class='rq'>{link(question)}</td>{''.join(cells)}</tr>")
+            parts.append(f"<div class='scroll'><table class='progress-table route'><thead><tr><th>Question</th>{head}"
+                         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+        signed = [(item, node) for node in tree.nodes.values() for item in graph.signatures(node)]
+        signed.sort(key=lambda pair: str(pair[0].get("date") or ""), reverse=True)
+        parts.append(f"<h2>Sign-offs <span class='count'>{len(signed)}</span></h2>")
+        if signed:
+            rows = [f"<tr><td>{link(node)}</td><td>{esc(str(item.get('by') or '?'))}</td>"
+                    f"<td>{esc(str(item.get('version') or ''))}</td><td class='nowrap'>{esc(str(item.get('date') or ''))}</td>"
+                    f"<td>{'in chat' if item.get('how') == 'chat' else 'on the site' if item.get('how') == 'site' else esc(str(item.get('how') or ''))}</td></tr>"
+                    for item, node in signed[:60]]
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Signed by</th>"
+                         "<th>Version</th><th>Date</th><th>How</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+                         + (f"<p class='help'>The {len(signed) - 60} older sign-offs are on the pages themselves.</p>"
+                            if len(signed) > 60 else ""))
+        else:
+            parts.append("<p class='help'>No page is signed off yet.</p>")
+        self.write("progress.html", page("Progress", "".join(parts), prefix, None, self.tree, wide=True))
+
     def plan_pages(self) -> None:
         """plan.html (current cycle) and cycles/<cycle>.html for every plan in doc/_cycles/."""
         from kea.feedback import cycle as review_cycle
@@ -1159,6 +1267,13 @@ class SiteRenderer:
                 f"unchanged for {versions.SETTLED_AFTER}+ releases, amber = changed in the latest release or now.'>"
                 f"{esc(info.text)}</span>")
 
+    def page_version(self, node: Node) -> str:
+        """The page's version id (as in its permanent identifier), '' without a uid."""
+        if not node.header.get("uid"):
+            return ""
+        from kea.docsite import identity
+        return str(identity.version_of(node))
+
     def version_note(self, node: Node) -> str:
         """' (v0.2.0)': the site release in which the page first appeared, '' before its first release."""
         created = self.stability.of(node.source).created_in
@@ -1186,6 +1301,7 @@ class SiteRenderer:
         runs = self.change_pages() if mode.WITH_CHANGELOG else []
         if mode.MODE != "public":
             self.plan_pages()
+            self.progress_page()
         self.site_listing = self.site_pages()
         self.home_page(runs)
         if render.SOLE_PROJECT:        # the experiment page is the start: again, now with what the project page had

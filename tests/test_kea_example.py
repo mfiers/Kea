@@ -36,6 +36,9 @@ def test_init_and_build_example_project(tmp_path):
                  "history.html", "feedback.html"):
         assert (site / page).exists(), page
     assert "Example" in (site / "index.html").read_text()
+    progress = (site / "progress.html").read_text()                     # Plan → Progress
+    assert "Route of each question" in progress and "Approve &amp; propose questions" in progress
+    assert "progress.html" in (site / "first" / "home.html").read_text()
 
 
 def test_build_modes(tmp_path):

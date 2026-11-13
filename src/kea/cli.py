@@ -6,7 +6,7 @@
                                       add an experiment to the project (doc/<name>/experiment/home.md)
     kea build [--strict]              build the site (report/site/ by default)
     kea serve [--host H --port P]     serve it with comments (password in .env: SITE_PASSWORD)
-    kea list | show | reply | status | cycle | watch | apply-suggestion | tags …
+    kea list | show | reply | status | cycle | watch | progress | apply-suggestion | tags …
                                       the review cycle (see `kea list --help` etc.)
     kea pdf [--out FILE]               one PDF of all pages (needs Typst; writes the .typ source without it)
     kea cite [--write] [ID …]         full citations (Nature style) for reference pages, from Europe PMC
@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import sys
 
-FEEDBACK_COMMANDS = {"list", "show", "reply", "status", "cycle", "watch", "apply-suggestion", "lease", "tags"}
+FEEDBACK_COMMANDS = {"list", "show", "reply", "status", "cycle", "watch", "apply-suggestion", "lease", "tags",
+                     "progress"}
 
 
 def main(argv: list[str] | None = None) -> int:

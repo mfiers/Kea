@@ -172,7 +172,7 @@ def pace_rules(tree: Tree) -> None:
                                  "yet (pace: guided): stop after proposing the question and let it be reviewed")
         if node.type == "step" and node.status in RUNNING and not approved(node):
             tree.problems.append(f"{where}: step is {node.status} but was not approved (pace: guided): a planned "
-                                 "step runs only after the owner approves it (Confirm on its page, or in chat: "
+                                 "step runs only after the owner approves it (Approve or Approve & go on its page, or in chat: "
                                  "approved: {by, date, how: chat})")
         if node.type == "conclusion" and node.status not in ("deprecated", "superseded"):
             unread = [item.label for item in evidence(tree, node) if item.type in EVIDENCE_TYPES and not approved(item)]
@@ -240,6 +240,123 @@ def drop_set(tree: Tree, key: str) -> list[str]:
     return dropped
 
 
+def signatures(node: Node) -> list[dict]:
+    """Who signed the page off: approved: as one mapping (before 1.28) or a list of them ({by, orcid, date,
+    version, how}); a bare string counts as a name."""
+    value = node.header.get("approved")
+    items = value if isinstance(value, list) else [value] if value else []
+    return [item if isinstance(item, dict) else {"by": str(item)} for item in items]
+
+
+def question_steps(tree: Tree, question: Node, hypotheses: list[Node]) -> list[Node]:
+    keys = {hypothesis.key for hypothesis in hypotheses}
+    return sorted((node for node in tree.nodes.values() if node.type == "step" and node.project == question.project
+                   and (node.parent == question.id or keys & set(node.relations.get("tests", [])))),
+                  key=lambda node: node.number or node.id)
+
+
+STAGES = (("question", "Approved"), ("plan", "Plan"), ("run", "Run"), ("results", "Results"),
+          ("conclusions", "Conclusions"))
+
+
+def question_route(tree: Tree, question: Node) -> dict:
+    """Where a question stands on the route, stage by stage (pace: guided): each stage is done, you (pages wait
+    for a sign-off), agent (the agent's turn: Approve & go, or the owner in chat, starts it), later, or running.
+    {question, stages: [{key, label, state, pages, note}], hypotheses, steps, results, conclusions}."""
+    from kea.docsite import questions
+    hypotheses, results, conclusions = questions.evidence(tree, question)
+    steps = question_steps(tree, question, hypotheses)
+    guided = tree.pace == "guided"
+    approved = globals()["approved"] if guided else (lambda node: True)    # pace: free: nothing waits for a sign-off
+    live_results = [node for node in results if node.status != "deprecated"]
+    planned = [node for node in hypotheses + steps if node.status == "planned"]
+    stages = []
+
+    def add(key: str, state: str, pages: list[Node] = (), note: str = "") -> None:
+        stages.append({"key": key, "label": dict(STAGES)[key], "state": state, "pages": list(pages), "note": note})
+    closed = question.status in ("dropped", "answered")
+    if not guided:
+        add("question", "free", [], "pace: free: no sign-off needed")
+    else:
+        add("question", "done" if approved(question) or closed else "you", [] if approved(question) else [question],
+            "" if approved(question) else "sign off on the question")
+    if not approved(question):
+        state = "later"
+        add("plan", state); add("run", state); add("results", state); add("conclusions", state)
+        return {"question": question, "stages": stages, "hypotheses": hypotheses, "steps": steps,
+                "results": live_results, "conclusions": conclusions}
+    unsigned_plan = [node for node in planned if not approved(node)]
+    if not hypotheses and not steps:
+        add("plan", "agent", [question], "the agent writes hypotheses and planned steps")
+    elif unsigned_plan:
+        add("plan", "you", unsigned_plan, "sign off on the planned hypotheses and steps")
+    else:
+        add("plan", "done", [])
+    ready = [node for node in steps if node.status == "planned" and approved(node)]
+    running = [node for node in steps if node.status == "in_progress"]
+    if stages[-1]["state"] != "done" and not running and not [n for n in steps if n.status == "done"]:
+        add("run", "later")
+    elif running:
+        add("run", "running", running, "steps in progress")
+    elif ready:
+        add("run", "agent", ready, "approved steps wait to be run")
+    elif steps:
+        add("run", "done", [])
+    else:
+        add("run", "later")
+    unread = [node for node in live_results if not approved(node)]
+    if unread:
+        add("results", "you", unread, "review the results")
+    elif live_results:
+        add("results", "done", [])
+    else:
+        add("results", "later")
+    if live_results and not unread and not conclusions:
+        add("conclusions", "agent", unread or live_results[-1:], "the agent draws conclusions")
+    elif conclusions:
+        add("conclusions", "done", [])
+    else:
+        add("conclusions", "later")
+    if question.status in ("answered", "dropped"):           # a closed question: nothing more is asked of anyone
+        for stage in stages:
+            if stage["state"] in ("you", "agent", "running"):
+                stage.update(state="closed", pages=[], note=f"the question is {question.status}")
+    return {"question": question, "stages": stages, "hypotheses": hypotheses, "steps": steps,
+            "results": live_results, "conclusions": conclusions}
+
+
+def go_action(tree: Tree, node: Node) -> str:
+    """What an Approve & go on this page asks the agent to do next, when that step is the agent's turn ('' when
+    there is none): an experiment without questions → propose questions; an open question without hypotheses or
+    steps → write the plan; a planned hypothesis no step tests → plan its steps; a planned step → run the step; the
+    last unreviewed result of a question without conclusions → draw conclusions. Signed off already or not: the
+    button signs the page off (again, for another reader) and asks for the step."""
+    from kea.docsite import questions
+    members = [other for other in tree.nodes.values() if other.project == node.project]
+    if node.type == "experiment" and node.id == "home":
+        return "" if any(other.type == "question" for other in members) else "propose questions"
+    if node.type == "question":
+        if node.status in ("answered", "dropped"):
+            return ""
+        hypotheses, _, _ = questions.evidence(tree, node)
+        return "" if hypotheses or question_steps(tree, node, hypotheses) else "write the plan"
+    if node.type == "step":
+        return "run the step" if node.status == "planned" else ""
+    if node.type == "hypothesis":
+        if node.status != "planned":
+            return ""
+        tested = any(node.key in other.relations.get("tests", []) for other in members if other.type == "step")
+        return "" if tested else "plan its steps"
+    if node.type == "result" and node.status != "deprecated":
+        for question in questions.questions(tree, node.project):
+            _, results, conclusions = questions.evidence(tree, question)
+            if node in results:
+                others = [item for item in results if item is not node and item.status != "deprecated"
+                          and tree.pace == "guided" and not approved(item)]
+                return "" if others or conclusions else "draw conclusions"
+    return ""
+
+
 def next_steps(tree: Tree, project: str) -> list[str]:
     """Where each question stands on the route, and the one next step (for kea context; pace: guided)."""
     from kea.docsite import questions
@@ -254,7 +371,7 @@ def next_steps(tree: Tree, project: str) -> list[str]:
                                                         for key in node.relations.get("tests", [])))]
         label = question.number or question.label
         if not approved(question):
-            lines.append(f"{label}: waiting for the owner to review the question (Confirm on the site, or in chat).")
+            lines.append(f"{label}: waiting for the owner to sign off on the question (Approve on the site, or in chat).")
         elif not hypotheses and not steps:
             lines.append(f"{label}: next, write hypotheses (prediction, criterion, fixed_before_results) and planned "
                          "steps; then stop for review. Do not run anything.")

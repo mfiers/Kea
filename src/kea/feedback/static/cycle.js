@@ -6,6 +6,9 @@
  *   Claude folds them into the plan, which then stands until the next harvest; the plan page counts the comments
  *   made since; "Implement the plan" (after a harvest) pauses comments until the release (a banner on every page,
  *   comment controls hidden; the server refuses them with 423 anyway).
+ * - Approve & go (since 1.28): while a request waits or the agent works on it, a line on every page says so (what,
+ *   for which page, by whom, the agent's last word from `kea progress`), polling every FAST_MS; the Progress page
+ *   (#progress-live) lists the requests; a "kea-status" event hands each status to feedback.js (the page's buttons).
  * - On the plan page (#fb-plan-actions) shows the buttons and a live indicator: are all comments in the plan,
  *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
  *   since the last heartbeat. When the session stopped unexpectedly ("gone"), readers who may steer get a banner
@@ -67,8 +70,8 @@
       const error = el("p", { class: "fb-steer-error" });
       const dialog = el("dialog", { class: "fb-steer not-annotatable" },
         el("p", {}, el("strong", {}, "Iteration password")),
-        el("p", { class: "fb-steer-help" }, "Harvesting the comments into the plan and asking Claude to implement it " +
-          "need the iteration password (not the site password). Ask the site owner for it."),
+        el("p", { class: "fb-steer-help" }, "Harvesting the comments into the plan, asking Claude to implement it, and " +
+          "Approve & go need the iteration password (not the site password). Ask the site owner for it."),
         input, error,
         el("div", { class: "fb-steer-buttons" },
           el("button", { class: "fb-secondary", onclick: () => { dialog.close(); resolve(false); } }, "Cancel"),
@@ -86,6 +89,8 @@
       input.focus();
     });
   }
+
+  window.keaAskSteer = askSteerPassword;            // feedback.js: Approve & go
 
   async function post(action, retried) {
     const response = await fetch(BASE + "api/cycle/" + action, { method: "POST", credentials: "same-origin" });
@@ -112,11 +117,13 @@
     const watcher = status.watcher || { state: "none" };
     const last = watcher.seen_at ? `last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)})` : "";
     const until = deadlineText(watcher);
-    const doing = { planning: "harvesting the comments into the plan", implementing: "implementing the plan" }[watcher.exit] || watcher.exit;
+    const doing = watcher.doing || { planning: "harvesting the comments into the plan", implementing: "implementing the plan",
+      going: "taking the next step a reader asked for" }[watcher.exit] || watcher.exit;
     const parts = {
       none: ["○", "Claude's watcher has not run on this site yet."],
       watching: ["●", `Claude is watching: ${last}.` + (until ? ` Session until ${until}.` : "")],
-      working: ["●", `Claude is ${doing}: the watcher paused ${duration(watcher.seconds)} ago and comes back afterwards.`],
+      working: ["●", watcher.doing ? `Claude is working: ${watcher.doing} (last word ${duration(watcher.seconds)} ago).`
+        : `Claude is ${doing}: the watcher paused ${duration(watcher.seconds)} ago and comes back afterwards.`],
       ended: ["○", `No Claude session at the moment: the last one ended (${last}). Comments wait until the next session.`],
       gone: ["⚠", watcher.exit && watcher.exit !== "deadline"
         ? `The Claude session seems to have stopped: it has been ${doing} for ${duration(watcher.seconds)}, longer than expected. Comments wait until someone restarts it.`
@@ -191,6 +198,58 @@
     return true;
   }
 
+  /* Approve & go (feedback/tags.py go): the request, then the agent's work on it, said on every page so a click is
+     never followed by silence; the Progress page lists them (#progress-live). */
+  function pageTitle(item) { return item.title || item.page; }
+  function goBanner(status) {
+    const goes = status.goes || [], watcher = status.watcher || {};
+    const working = watcher.state === "working" && watcher.exit === "going";
+    if (!goes.length && !working) return false;
+    const progress = el("a", { href: PREFIX + "progress.html" }, "Progress");
+    if (working) {
+      showBanner("go", el("b", {}, "Claude is working: "), watcher.doing || "the next step a reader asked for",
+        ` (last word ${duration(watcher.seconds)} ago)` + (goes.length > 1 ? `; ${goes.length - 1} more request(s) waiting` : "") + ". ",
+        progress, ".");
+      return true;
+    }
+    const first = goes[0];
+    const watching = watcher.state === "watching";
+    showBanner("go", el("b", {}, `Approve & ${first.text.replace(/^Approve & /i, "") || "go"}: `),
+      `${pageTitle(first)}, asked by ${first.by} ${when(first.at)}. `,
+      watching ? "Claude picks it up within a minute. " : "No Claude session is watching now: the request waits until one starts. ",
+      goes.length > 1 ? `${goes.length - 1} more waiting. ` : "", progress, ".");
+    return true;
+  }
+  function progressLive(status) {
+    const box = document.getElementById("progress-live");
+    if (!box) return;
+    const goes = status.goes || [], watcher = status.watcher || {};
+    const pages = JSON.parse(box.dataset.pages || "{}");
+    const parts = [sessionLine(status)];
+    if (goes.length) {
+      const rows = goes.map((item, index) => {
+        const busy = index === 0 && watcher.state === "working" && watcher.exit === "going";
+        const href = pages[item.page];
+        return el("tr", {}, el("td", {}, href ? el("a", { href: PREFIX + href }, pageTitle(item)) : pageTitle(item)),
+          el("td", {}, item.text || "the next step"), el("td", {}, `${item.by}, ${when(item.at)}`),
+          el("td", {}, el("span", { class: "rs " + (busy ? "rs-running" : "rs-agent") },
+            busy ? "⟳ " + (watcher.doing || "working") : index === 0 && watcher.state === "watching" ? "▶ being picked up"
+              : "▶ waiting for the agent")));
+      });
+      parts.push(el("table", { class: "progress-table" }, el("thead", {}, el("tr", {}, el("th", {}, "Approve & go on"),
+        el("th", {}, "Asked for"), el("th", {}, "By"), el("th", {}, "State"))), el("tbody", {}, ...rows)));
+    } else {
+      parts.push(el("p", { class: "help" }, "No Approve & go request is open."));
+    }
+    box.replaceChildren(...parts);
+    const signing = new Set(status.signing || []), going = new Set(goes.map(item => item.page));
+    for (const row of document.querySelectorAll(".progress-table tr[data-page]")) {
+      const cell = row.querySelector(".live-cell");
+      const key = row.dataset.page;
+      if (cell) cell.textContent = going.has(key) ? "Approve & go asked" : signing.has(key) ? "signed; applied at the next harvest" : "";
+    }
+  }
+
   function apply(status) {
     const cycle = status.cycle;
     const onPlan = !!document.getElementById("fb-plan-actions");
@@ -208,6 +267,10 @@
       showBanner("frozen", el("b", {}, "Claude is implementing the plan. "),
         "Comments are paused; this page reloads when the new version is released. ",
         el("a", { href: PREFIX + "plan.html" }, "See the plan"), ".");
+    } else if (newBuild && !typing() && lastState !== null) {
+      location.reload(); return;
+    } else if (goBanner(status)) {
+      /* shown: an Approve & go is waiting or being worked on */
     } else if (newBuild) {
       if (!typing() && lastState !== null) { location.reload(); return; }
       showBanner("new", el("b", {}, "A new version of the site is available. "),
@@ -222,7 +285,10 @@
       pill.className = "pill s-" + cycle.state;
     }
     planActions(status);
+    progressLive(status);
     lastState = cycle.state;
+    window.keaStatus = status;
+    window.dispatchEvent(new CustomEvent("kea-status", { detail: status }));
   }
 
   /* The reader in the menu bar (render.py: <span class='user'>): the signed-in name opens a small menu with the
@@ -318,8 +384,18 @@
     }
   }
 
+  /* every POLL_MS; every FAST_MS while an Approve & go waits or runs (the reader who clicked sees it move) */
+  const FAST_MS = 6000;
+  function busy() {
+    const status = window.keaStatus;
+    return !!(status && ((status.goes || []).length || (status.watcher && status.watcher.exit === "going"
+      && status.watcher.state === "working")));
+  }
   async function start() {
-    if (await poll()) setInterval(poll, POLL_MS);
+    if (!await poll()) return;
+    const next = () => setTimeout(async () => { await poll(); next(); }, busy() ? FAST_MS : POLL_MS);
+    next();
+    window.keaPollNow = poll;                        // feedback.js: right after an Approve & go
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

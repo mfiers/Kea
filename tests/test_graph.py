@@ -125,7 +125,7 @@ def test_next_steps_say_what_waits(tmp_path):
     tree = nodes.load_tree(doc)
     assert graph.next_steps(tree, "p")[0].startswith("Next: propose questions")
     _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open")
-    assert "waiting for the owner to review the question" in graph.next_steps(nodes.load_tree(doc), "p")[0]
+    assert "waiting for the owner to sign off on the question" in graph.next_steps(nodes.load_tree(doc), "p")[0]
     _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open\n"
           "approved: {by: Mark, date: 2026-11-09}")
     assert "write hypotheses" in graph.next_steps(nodes.load_tree(doc), "p")[0]
@@ -176,3 +176,50 @@ def test_one_or_more_experiments_and_the_project_summary(tmp_path):
     _page(doc, "q/experiment/home.md", "id: home\ntype: experiment\ntitle: Second\nshort: Another.\nstatus: open")
     (doc / "_summary.md").unlink()
     assert any("2 experiments but no summary" in problem for problem in nodes.load_tree(doc).problems)
+
+
+def test_signatures_route_and_the_go_button(tmp_path):
+    """approved: as a list of signatures (or the older single mapping); question_route stage by stage; go_action names
+    the step an Approve & go asks for, also on a page that is signed off already."""
+    doc = tmp_path / "doc"
+    doc.mkdir()
+    (doc / "_schema.yaml").write_text(SCHEMA)
+    (tmp_path / "kea.yaml").write_text("pace: guided\n")
+    _page(doc, "p/experiment/home.md", "id: home\ntype: experiment\ntitle: E\nshort: An experiment.\nstatus: open\n"
+          "approved:\n  - {by: Ann, date: 2026-11-12, version: v1, how: site}\n  - {by: Bob, date: 2026-11-13}")
+    _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open")
+    tree = nodes.load_tree(doc)
+    home, question = tree.nodes["p:home"], tree.nodes["p:q-a"]
+    assert [item["by"] for item in graph.signatures(home)] == ["Ann", "Bob"] and graph.approved(home)
+    assert graph.go_action(tree, home) == "" and graph.go_action(tree, question) == "write the plan"
+    states = {stage["key"]: stage["state"] for stage in graph.question_route(tree, question)["stages"]}
+    assert states == {"question": "you", "plan": "later", "run": "later", "results": "later", "conclusions": "later"}
+    _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open\n"
+          "approved: {by: Ann, date: 2026-11-13}")
+    tree = nodes.load_tree(doc)
+    assert not tree.nodes["p:q-a"].waiting and graph.go_action(tree, tree.nodes["p:q-a"]) == "write the plan"
+    assert graph.question_route(tree, tree.nodes["p:q-a"])["stages"][1]["state"] == "agent"
+    _page(doc, "p/step/s-a.md", "id: s-a\ntype: step\ntitle: Run\nshort: Runs.\nparent: q-a\nstatus: planned")
+    tree = nodes.load_tree(doc)
+    route = {stage["key"]: stage for stage in graph.question_route(tree, tree.nodes["p:q-a"])["stages"]}
+    assert route["plan"]["state"] == "you" and [node.id for node in route["plan"]["pages"]] == ["s-a"]
+    assert graph.go_action(tree, tree.nodes["p:s-a"]) == "run the step" and graph.go_action(tree, tree.nodes["p:q-a"]) == ""
+    _page(doc, "p/step/s-a.md", "id: s-a\ntype: step\ntitle: Run\nshort: Runs.\nparent: q-a\nstatus: done\n"
+          "approved: {by: Ann, date: 2026-11-13}")
+    _page(doc, "p/result/r-a.md", "id: r-a\ntype: result\ntitle: Found\nshort: Found.\nparent: q-a\nstatus: done\n"
+          "sources: [x.tsv]\nrelations:\n  made_by: [s-a]")
+    tree = nodes.load_tree(doc)
+    route = {stage["key"]: stage["state"] for stage in graph.question_route(tree, tree.nodes["p:q-a"])["stages"]}
+    assert route == {"question": "done", "plan": "done", "run": "done", "results": "you", "conclusions": "later"}
+    assert graph.go_action(tree, tree.nodes["p:r-a"]) == "draw conclusions"
+    (tmp_path / "kea.yaml").write_text("pace: free\n")
+    tree = nodes.load_tree(doc)
+    assert graph.question_route(tree, tree.nodes["p:q-a"])["stages"][0]["state"] == "free"
+
+
+def test_approve_is_a_signature_and_go_asks_for_the_step():
+    from kea.feedback import tags
+    known = {tag["name"]: tag for tag in tags.vocabulary({})["tags"]}
+    assert "version" in known["approve"]["instruction"] and "no further work" in known["approve"]["instruction"]
+    assert known["go"]["scope"] == "page" and known["go"].get("hidden") and "exit 40" in known["go"]["instruction"]
+    assert "kea progress" in known["go"]["instruction"]

@@ -205,6 +205,9 @@ body:not(.fb-can-edit) .fb-sel-edit{display:none}
 .fb-dpill.fb-d-reject{color:#8c1d18;border-color:#e6b3ae}
 .fb-dpill.fb-d-confirm.fb-active{background:#2e7d32;border-color:#2e7d32;color:#fff}
 .fb-dpill.fb-d-confirm.fb-pending{background:#dff0e0;border:2px dashed #2e7d32}
+.fb-dpill.fb-d-go{background:#1f5fa8;border-color:#1f5fa8;color:#fff;font-weight:600}.fb-dpill.fb-d-go:hover{background:#174b86}
+.fb-dpill.fb-d-go.fb-pending{background:#e2ecf8;color:#163f73;border:2px dashed #1f5fa8;font-weight:600}
+.fb-dpill.fb-d-go.fb-working{background:#cfe0f5;color:#163f73;border:2px solid #1f5fa8;cursor:default}
 .fb-dpill.fb-d-confirm.fb-pending-off{background:#fff3c4;border:2px dashed #7a5a00;color:#7a5a00}
 .fb-dpill.fb-d-reject.fb-pending{background:#b3261e;border-color:#b3261e;color:#fff}
 .fb-dpill.fb-d-next{color:#5e2a73;border-color:#e3c8ea}.fb-dpill.fb-d-ms{color:#0d47a1;border-color:#bcdcf7}
@@ -253,6 +256,8 @@ html.fb-panel-open .fb-dock{right:406px}@media (max-width:820px){html.fb-panel-o
 .fb-session-ended,.fb-session-none{color:#666}
 .fb-session-gone{background:#fdecea;border:1px solid #b3261e;color:#7a1b14;border-radius:6px;padding:7px 11px;font-weight:500}
 .fb-banner-gone{background:#fdecea;color:#7a1b14;border-bottom-color:#b3261e}
+.fb-banner-go{background:#e8f0fa;color:#163f73;border-bottom-color:#9dbbe0}
+@media (max-width: 760px) { .fb-banner { position: relative; } }   /* the menu bar is the sticky one on phones */
 /* below a banner (cycle.js sets --fb-banner-h): the panel and the type bar are fixed to the window's top */
 .fb-panel, body .kindbar { top: var(--fb-banner-h, 0px); }
 body.has-kindbar .fb-banner { margin-left: -30px; }

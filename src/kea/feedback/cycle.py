@@ -170,6 +170,12 @@ def needs_attention(thread) -> bool:
     return thread.status != "resolved" and last_author != "claude"
 
 
+def go_requests(threads: list) -> list:
+    """Approve & go requests the agent has not taken up: open threads tagged go (oldest first)."""
+    return sorted((thread for thread in threads if "go" in thread.tags and thread.status == "open"),
+                  key=lambda thread: thread.created_at)
+
+
 def last_activity(thread) -> str:
     times = [thread.created_at, thread.status_at] + [reply.created_at for reply in thread.replies]
     return max(time for time in times if time)
@@ -202,15 +208,15 @@ def read_heartbeat_info(path: Path | None = None) -> dict:
 # A crash, a closed terminal, a sleeping machine or a lost network sends nothing: the heartbeats just stop, and the
 # hub infers "gone" from the silence (a dead-man's switch).
 STALE_SECONDS = 180                      # no heartbeat for this long (or 3 x the watcher's slow interval): not watching
-WORKING_LIMITS = {"planning": 30 * 60, "implementing": 4 * 3600}   # a deliberate pause longer than this: gone
-EXIT_REASONS = ("planning", "implementing", "deadline")
+WORKING_LIMITS = {"planning": 30 * 60, "implementing": 4 * 3600, "going": 4 * 3600}   # a deliberate pause longer than this: gone
+EXIT_REASONS = ("planning", "implementing", "going", "deadline")
 
 
 def watcher_status(info: dict, now: float | None = None) -> dict:
-    """The agent's session as seen from its heartbeats: {state, seen_at, seconds, deadline, exit, text}.
+    """The agent's session as seen from its heartbeats: {state, seen_at, seconds, deadline, exit, text, doing, page}.
 
     state: none (never ran), watching (heartbeat fresh), working (stopped on purpose to plan comments or implement,
-    within WORKING_LIMITS), ended (deadline reached or passed), gone (heartbeats stopped without a reason while the
+    within WORKING_LIMITS; going = the next step of a page after an Approve & go), ended (deadline reached or passed), gone (heartbeats stopped without a reason while the
     deadline is ahead, or a deliberate pause ran past its limit)."""
     import datetime as dt
     import time as time_module
@@ -241,13 +247,15 @@ def watcher_status(info: dict, now: float | None = None) -> dict:
     else:
         state = "gone"
     minutes = _duration(seconds)
+    doing, page = str(info.get("doing") or "")[:300], str(info.get("page") or "")[:200]
     text = {"watching": f"watching; last heartbeat {minutes} ago",
-            "working": f"working ({reason}); the watcher paused {minutes} ago and comes back after",
+            "working": (f"working: {doing}; last word {minutes} ago" if doing
+                        else f"working ({reason}); the watcher paused {minutes} ago and comes back after"),
             "ended": f"session ended; last heartbeat {minutes} ago",
             "gone": (f"stopped unexpectedly: {reason} for {minutes} (longer than expected)" if reason in WORKING_LIMITS
                      else f"stopped unexpectedly: no heartbeat for {minutes}, the session's deadline is still ahead")}[state]
     return {"state": state, "seen_at": seen_at, "seconds": seconds, "deadline": deadline, "exit": reason,
-            "text": text}
+            "text": text, "doing": doing if state == "working" else "", "page": page if state == "working" else ""}
 
 
 def _duration(seconds: float) -> str:

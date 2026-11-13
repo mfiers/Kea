@@ -178,6 +178,21 @@ table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-le
 .node-data-sep .sep-tab.on{background:var(--kc,#556);color:#fff;padding-bottom:8px;cursor:default}
 .node-data-sep .sep-tab span.tab-count{display:inline-block;margin-left:7px;padding:0 6px;border-radius:8px;font:600 10.5px/1.5 system-ui,sans-serif;letter-spacing:0;background:color-mix(in srgb,var(--kc,#556) 22%,#fff);color:inherit}
 .node-data-sep .sep-tab.on span.tab-count{background:#fff3;color:#fff}
+/* progress.html (pages.progress_page): what waits for whom, the route of each question, the sign-offs */
+.progress-table{display:table;width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 4px}.progress-table th,.progress-table td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--line)}
+.progress-table th{font:600 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.progress-table.route td.rq{min-width:220px}.progress-table .rs{display:inline-block;white-space:nowrap;font:600 12.5px system-ui,sans-serif;border-radius:10px;padding:1px 8px}
+.rs-done .rs,.rs.rs-done{color:#1e5e22;background:#e3f2e5}.rs-you .rs,.rs.rs-you{color:#6d4a00;background:#fff0c7;box-shadow:inset 0 0 0 1px #e8c15a}
+.rs-agent .rs,.rs.rs-agent{color:#163f73;background:#e2ecf8}.rs-running .rs,.rs.rs-running{color:#163f73;background:#cfe0f5}.rs-later .rs,.rs-closed .rs,.rs-free .rs{color:#8a93a3;background:none;font-weight:500}
+.rs-pages{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px}.rs-pages .tag{font-size:11.5px}
+h2 .count{font:600 12px system-ui,sans-serif;color:var(--muted);background:var(--soft);border-radius:9px;padding:1px 8px;vertical-align:2px}
+.progress-table th,.progress-table td{background:none}.progress-live{margin:14px 0 6px}.progress-live .fb-session{margin:0 0 8px}.progress-live table{margin-top:4px}
+.route-note{margin:4px 0 8px}.scroll{overflow-x:auto;max-width:100%}
+@media (max-width:640px){.progress-table:not(.route) thead{display:none}
+ .progress-table:not(.route),.progress-table:not(.route) tbody,.progress-table:not(.route) tr,.progress-table:not(.route) td{display:block;width:auto}
+ .progress-table:not(.route) tr{border:1px solid var(--line);border-radius:7px;padding:6px 10px;margin:0 0 7px}
+ .progress-table:not(.route) td{border:0;padding:2px 0}.progress-table:not(.route) td:empty{display:none}
+ .progress-table.route td.rq{min-width:180px}}
 .node-data-sep .sep-tab span.tab-long,.node-data-sep .sep-tab span.tab-short{display:inline;padding:0;background:none;border-radius:0;font:inherit;letter-spacing:inherit;color:inherit;text-transform:inherit}.node-data-sep .sep-tab span.tab-short{display:none}
 @media (max-width:640px){.node-data-sep .sep-tab span.tab-long{display:none}.node-data-sep .sep-tab span.tab-short{display:inline}
  .node-data-sep .sep-tabs .sep-tab{letter-spacing:.03em;padding:3px 7px 4px;font-size:11px}.node-data-sep .sep-tabs .sep-tab.on{padding-bottom:7px}
@@ -426,8 +441,16 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         link("Review cycles", "history.html", "Each release with its comments, plan items and commits"),
         link("Comments", "feedback.html", "All comments on the site")]
     if mode.MODE != "public":
+        waiting = 0
+        if tree is not None:
+            if "_waiting_count" not in tree.__dict__:
+                tree.__dict__["_waiting_count"] = sum(1 for item in tree.nodes.values() if item.waiting)
+            waiting = tree.__dict__["_waiting_count"]
         right.append(group(link("Plan", "plan.html", "The plan of the current review cycle: what the next run does"),
-                           [link("Current comments", "comments.html", "Who commented what, and where: open and "
+                           [link("Progress" + (f" · {waiting}" if waiting else ""), "progress.html",
+                                 "Where each question stands, and what waits for whom"
+                                 + (f": {waiting} page(s) wait for a sign-off" if waiting else "")),
+                            link("Current comments", "comments.html", "Who commented what, and where: open and "
                                  "planned comments, by person")]))
     if mode.WITH_CHANGELOG or history_members:
         head = (link("History", "changes/index.html", "What changed, per working session") if mode.WITH_CHANGELOG

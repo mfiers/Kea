@@ -84,7 +84,11 @@
     const response = await fetch(url, { method, credentials: "same-origin", headers, body: payload });
     let data = {};
     try { data = await response.json(); } catch (error) { /* not JSON */ }
-    if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
+    if (!response.ok) {
+      const error = new Error(data.error || ("HTTP " + response.status));
+      error.needSteer = !!data.need_steer;
+      throw error;
+    }
     return data;
   }
 
@@ -217,7 +221,7 @@
   }
   async function tagThread(selection, names, text) {
     const created = await sendQuiet(() => api("POST", API, { page: PAGE, page_title: TITLE, page_commit: COMMIT,
-      text: text || "", tags: names, ...(selection || {}) }));
+      page_version: pageVersion(), text: text || "", tags: names, ...(selection || {}) }));
     return created && created.thread;
   }
   async function retag(threadId, names) {
@@ -349,6 +353,33 @@
     return sendQuiet(() => api("POST", API + "/" + thread.thread_id + "/status", { status: "resolved", note }));
   }
   const pageConfirmed = () => !!(container && container.querySelector(".node-content[data-confirmed]"));
+  const contentData = () => { const content = container && container.querySelector(".node-content"); return content ? content.dataset : {}; };
+  const pageVersion = () => contentData().version || "";
+  /* Approve & go: a sign-off that also asks Claude for the next step of this page now (data-go: write the plan, run
+     the step, …). Needs the right to steer: the server answers need_steer and cycle.js asks for the password. */
+  async function approveAndGo(action) {
+    const version = pageVersion();
+    if (!confirm_(`Sign off on this page${version ? " (version " + version + ")" : ""} and ask Claude to ${action} now?\n\n`
+      + "Claude does only that, publishes, and stops for your review. The banner at the top shows when it picks the request up and what it is doing.")) return;
+    if (!getName()) {
+      const name = (prompt("Your name (shown with your sign-off):") || "").trim();
+      if (!name) return;
+      setName(name);
+    }
+    const body = { page: PAGE, page_title: TITLE, page_commit: COMMIT, page_version: version,
+      text: "Approve & " + action, tags: ["go"] };
+    try {
+      await api("POST", API, body);
+    } catch (error) {
+      if (!error.needSteer || !window.keaAskSteer || !await window.keaAskSteer()) {
+        if (!error.needSteer) toast("Could not save: " + error.message);
+        return;
+      }
+      try { await api("POST", API, body); } catch (again) { toast("Could not save: " + again.message); return; }
+    }
+    await reload();
+    if (window.keaPollNow) window.keaPollNow();
+  }
   function buildDock() {
     const dock = el("div", { class: "fb-dock " + NOT });
     const items = el("div", { class: "fb-dock-items" });
@@ -360,12 +391,14 @@
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
       const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
+      const go = pill("fb-d-go", "▶ Approve & go", "", () => {});
+      go.hidden = true;
       const revise = pill("fb-d-revise", "↻ Revise ▸", "Rewrite this page: say what to change; this branch is reworked", () => toggleDockPop(revise, "revise"));
       const reject = pill("fb-d-reject", "✕ Drop", "", () => {});
       const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
       const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
       const propose = pill("fb-d-propose", "Propose ▸", "Propose the next step of the reasoning: a question, hypothesis, step, conclusion, caveat …", () => toggleDockPop(propose, "propose"));
-      items.append(el("span", { class: "fb-dock-gap" }), confirm, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
+      items.append(el("span", { class: "fb-dock-gap" }), confirm, go, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
       onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
@@ -402,12 +435,15 @@
     const done = !waitingPage && pageConfirmed();
     const when = waitingPage ? "at the next harvest" : "in the next plan";
     const word = waitingPage ? "Approve" : "Confirm";
+    const going = openThread("go");
+    confirm.hidden = waitingPage && !!going;                 // an Approve & go signs the page off too
     confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked ? " fb-pending" : unasked ? " fb-pending-off" : "");
-    confirm.textContent = asked ? `✓ ${word} · ${waitingPage ? "next harvest" : "next plan"}` : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ " + word;
-    confirm.title = asked ? `Goes in ${when}; click to take it back`
+    confirm.textContent = asked ? (waitingPage ? "✓ Signed · recorded at the next harvest" : "✓ Confirm · next plan")
+      : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ " + word;
+    confirm.title = asked ? `Your sign-off is recorded on the page ${when}; click to take it back`
       : unasked ? "The confirmation is withdrawn in the next plan; click to keep it"
       : done ? "This page is confirmed; click to withdraw the confirmation (in the next plan)"
-      : waitingPage ? "Go ahead: the next step may build on this page (applied at the next harvest)"
+      : waitingPage ? `Sign off on this version${pageVersion() ? " (" + pageVersion() + ")" : ""}: your name and the version are recorded on the page at the next harvest. It asks for no further work; Approve & go also does.`
       : "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
     confirm.onclick = async () => {
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
@@ -416,6 +452,7 @@
       if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());
       await tagThread(null, [waitingPage ? "approve" : "confirm"]);
     };
+    renderGo(waitingPage, dropped);
     const revise = dockEl.querySelector(".fb-d-revise");
     revise.className = "fb-dpill fb-d-revise" + (revising ? " fb-pending" : "");
     revise.textContent = revising ? "↻ Revise · " + (waitingPage ? "next harvest" : "next plan") : "↻ Revise ▸";
@@ -438,6 +475,36 @@
     dockEl.querySelector(".fb-d-ms").textContent = "Manuscript" + (section ? ": " + tagInfo(section.tags[0]).label : "") + " ▸";
     if (!dockPop.hidden) fillDockPop();
   }
+  /* The Approve & go pill: what it asks for (data-go), then the request's fate from cycle.js's status: waiting for
+     Claude, Claude working on it (its last word from kea progress), or no session watching. */
+  function renderGo(waitingPage, dropped) {
+    const go = dockEl && dockEl.querySelector(".fb-d-go");
+    if (!go) return;
+    const action = contentData().go || "";
+    const going = openThread("go");
+    go.hidden = (!action && !going) || !!dropped;
+    if (go.hidden) return;
+    const status = window.keaStatus || {}, watcher = status.watcher || {};
+    if (!going) {
+      go.className = "fb-dpill fb-d-go";
+      go.textContent = "▶ Approve & " + action;
+      go.title = `Sign off on this page and ask Claude to ${action} now; Claude does only that, then stops for your review`;
+      go.onclick = () => approveAndGo(action);
+      return;
+    }
+    const asked = going.text.replace(/^Approve & /i, "") || action;
+    const working = watcher.state === "working" && watcher.exit === "going" && (!watcher.page || watcher.page === PAGE);
+    go.className = "fb-dpill fb-d-go " + (working ? "fb-working" : "fb-pending");
+    go.textContent = working ? `⟳ Claude: ${watcher.doing || asked}` : `▶ ${asked[0].toUpperCase() + asked.slice(1)} · asked, waiting for Claude`;
+    go.title = working ? `Claude is working on it (last word ${Math.round((watcher.seconds || 0) / 60)} min ago); the page reloads when the new version is published`
+      : watcher.state === "watching" ? `Asked by ${going.author}; Claude picks it up within a minute. Click to take the request back.`
+      : `Asked by ${going.author}; no Claude session is watching now, so it waits until one starts. Click to take the request back.`;
+    go.onclick = working ? null : () => withdraw(going, "Approve & go taken back");
+  }
+  window.addEventListener("kea-status", () => {
+    const content = container && container.querySelector(".node-content");
+    if (dockEl && content) renderGo(!!content.dataset.waiting, openThread("drop") || openThread("reject"));
+  });
   const confirm_ = text => window.confirm(text);
   /* The popup of Next run / Manuscript chips, to the left of its pill. */
   let dockPop = null, dockPopGroup = "", dockPopAnchor = null;

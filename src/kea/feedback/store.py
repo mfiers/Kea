@@ -66,6 +66,7 @@ class Thread:
     text: str
     created_at: str
     page_commit: str = ""
+    page_version: str = ""             # the page's version id when the thread was made (a sign-off names it)
     page_title: str = ""
     quote: str = ""
     prefix: str = ""
@@ -166,6 +167,7 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> dict[str, A
                 "page": _clean(event.get("page"), MAX_PAGE, "page", required=True),
                 "page_title": _clean(event.get("page_title"), MAX_PAGE, "page_title"),
                 "page_commit": _clean(event.get("page_commit"), 64, "page_commit"),
+                "page_version": _clean(event.get("page_version"), 40, "page_version"),
                 "quote": _clean(event.get("quote"), MAX_QUOTE, "quote"),
                 "prefix": _clean(event.get("prefix"), MAX_CONTEXT, "prefix"),
                 "suffix": _clean(event.get("suffix"), MAX_CONTEXT, "suffix"),
@@ -241,7 +243,8 @@ def fold(events: list[dict[str, Any]]) -> dict[str, Thread]:
             result[thread_id] = Thread(
                 thread_id=thread_id, page=event.get("page", ""), author=event.get("author", ""),
                 text=event.get("text", ""), created_at=event.get("created_at", ""),
-                page_commit=event.get("page_commit", ""), page_title=event.get("page_title", ""),
+                page_commit=event.get("page_commit", ""), page_version=event.get("page_version", ""),
+                page_title=event.get("page_title", ""),
                 quote=event.get("quote", ""), prefix=event.get("prefix", ""), suffix=event.get("suffix", ""),
                 start=event.get("start"), end=event.get("end"), suggestion=event.get("suggestion"),
                 author_id=event.get("author_id", ""))

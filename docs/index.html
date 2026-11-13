@@ -76,7 +76,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <li>Conclusions are drawn from results only, with the evidence for and against, a reason per link and a certainty. The question's answer and the summaries change in the same commit. The reason on each link is Toulmin's warrant (why this evidence bears on this claim); the certainty uses GRADE's four labels (high, moderate, low, very low), though Kea does not apply GRADE's rating method.</li>
 <li>After each run the caveats are read again: addressed by this run, or still limiting the new result.</li>
 </ul>
-<p>One step at a time (<code>pace: guided</code>, the default of <code>kea init</code>). The agent takes one step along the route and stops for the owner's review: it proposes questions and waits; for an approved question it proposes hypotheses and planned steps and waits; it runs approved steps, writes the results and waits; it concludes from reviewed results. A page that waits carries a "waiting for approval" pill. The reader's verdicts on it are Approve (the next step may build on it), Revise (say what to change; it is rewritten and waits again) and Drop (remove it, with every page that rests only on it). On a settled page the verdicts are Confirm (keep it as it is; recorded on the page), Revise and Drop. Approval can also be given in the agent's chat; either way it is written on the page (<code>approved:</code>), and <code>kea check</code> refuses work built on unapproved pages.</p>
+<p>One step at a time (<code>pace: guided</code>, the default of <code>kea init</code>). The agent takes one step along the route and stops for the owner's review: it proposes questions and waits; for an approved question it proposes hypotheses and planned steps and waits; it runs approved steps, writes the results and waits; it concludes from reviewed results. A page that waits carries a "waiting for approval" pill. The reader's verdicts on it are Approve (a sign-off: your name and the version you read, recorded on the page), Approve &amp; go (the same, and the agent takes the next step now: write the plan, run the step, …), Revise (say what to change; it is rewritten and waits again) and Drop (remove it, with every page that rests only on it). On a settled page the verdicts are Confirm (keep it as it is; recorded on the page), Revise and Drop. Approval can also be given in the agent's chat; either way it is written on the page (<code>approved:</code>, one signature per person), and <code>kea check</code> refuses work built on unapproved pages.</p>
 <p>What Kea checks on every build (<code>kea check</code>; <code>kea build --strict</code> fails on a problem): a conclusion rests on at least one result or figure, not on a hypothesis or a question; no conclusions support each other in a loop; a live conclusion does not rest on deprecated evidence; a confirmatory conclusion does not rest on exploratory results only; a hypothesis with an outcome names the result that tested it; a hypothesis fixed before its results states its prediction and criterion; every relation connects the right kinds of page; every linked page and file exists.</p>
 <p>When a page upstream changes (a premise is revised, a result redone, a decision changed), every page that rests on it, directly or further down, gets a red "recheck" pill. The agent reads each against the change, updates it when it is even slightly affected, and records the check (<code>kea recheck</code>, ledger <code>doc/_checks.yaml</code>). A version is not released while pages wait for a recheck.</p>
 <p>Versions. Each release is a semantic version and a git tag: MAJOR when a conclusion changes direction or is withdrawn, MINOR for new results or pages, PATCH for wording only; before 1.0 a major change counts as minor. Each page shows the release in which it last changed, so settled parts stand out from parts in flux. The site and the PDF are two views of one version.</p>
@@ -170,7 +170,7 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>On a site served with comments, sign in with the site password and your name, or with ORCID on a hub that offers it. Then:</p>
 <ul>
 <li>Select any text for Comment, Edit (just that passage) or a one-click tag: a request for the next run (explain, expand, shorten, delete, challenge, needs source) or the manuscript section the passage belongs in.</li>
-<li>The buttons at the bottom right act on the whole page: Comment, Edit, the verdicts (Approve, Revise, Drop; Confirm on a settled page), Propose (the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …), Next run and Manuscript.</li>
+<li>The buttons at the bottom right act on the whole page: Comment, Edit, the verdicts (Approve, Approve &amp; go, Revise, Drop; Confirm on a settled page), Propose (the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …), Next run and Manuscript.</li>
 <li>The pencils in the left margin edit the title or summary in place; the pencil after a section heading edits that section. Every edit is saved as a suggestion, shown as a diff, and goes into the next plan.</li>
 </ul>
 <p>Nothing changes until the comments are harvested:</p>
@@ -180,6 +180,8 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <li>Implement. A PI presses "Implement the plan". Comments pause. The agent changes the pages item by item, checks every number against its file, works through the rechecks, commits each change and answers each comment with its commit: page changed, answered, or won't fix with the reason.</li>
 <li>Release. A new version and git tag, with the run's change log. Open pages reload and comments reopen. Comments left out of the plan stay for the next cycle. The History page links each comment to its plan item, commit and pages. Plan → Current comments lists who commented what and where, with a filter per person.</li>
 </ol>
+<p>Approve &amp; go does not wait for a harvest. It signs the page off like Approve and asks the agent to take that page's next step now; the button names the step (propose questions, write the plan, plan its steps, run the step, draw conclusions). It needs the iteration password, like Harvest. A line at the top of every page then says what was asked, whether a session is watching, and, once the agent has picked it up, what it is doing ("running S2: 3 of 8 donors"); the page reloads when the new version is published. The agent takes only that one step and stops for your review.</p>
+<p>Plan → Progress is the overview: the pages that wait for a sign-off and the button that moves each on, the pages ready for their next step, the route of every question (approved, plan, run, results, conclusions: done, waiting for you, the agent's turn, running), the open Approve &amp; go requests with the agent's status, and every sign-off with its name, version and date.</p>
 <p>The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.</p>
 <!-- /help -->
 
@@ -188,20 +190,20 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
 <p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
 <p>For Claude Code, the skill is one file:</p>
-<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.2/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.28.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 </code></pre>
 <p>Other agents: put <code>skill/SKILL.md</code> where the agent reads its instructions, for example in the project's agent instructions file.</p>
 <h2 id="install">Install</h2>
 <p>Kea is not on PyPI; install it from this repository with <a href="https://docs.astral.sh/uv/">uv</a> (it fetches Python ≥ 3.11 if needed). Always name a tag (see <a href="https://github.com/mfiers/Kea/tags">tags</a>), so a project does not change when Kea does. The agent normally does this itself.</p>
 <pre><code># as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
+uv tool install git+https://github.com/mfiers/Kea.git@v1.28.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.2&quot;
+uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.28.0&quot;
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.27.2 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.28.0 kea --help
 </code></pre>
 <ul>
 <li>Upgrade: run the same command with the new tag (<code>uv tool install --force git+…@vX.Y.Z</code>, or <code>uv add</code> again). <code>uv tool upgrade kea</code> does not move a pinned tag.</li>
@@ -212,8 +214,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.27.2 kea --help
 </ul>
 <h2 id="reference">Reference</h2>
 <h3 id="what-the-agent-runs-in-a-project">What the agent runs in a project</h3>
-<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.2&quot;     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
+<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.28.0&quot;     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.28.0
 kea init --title &quot;My project&quot; --author &quot;Your Name&quot; --experiment first-experiment --question &quot;What does it ask?&quot;
 make site &amp;&amp; make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

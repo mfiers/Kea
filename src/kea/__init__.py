@@ -7,4 +7,4 @@ plan, implements it when a reader presses Implement, and releases a new version.
 """
 TAGLINE = ("Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. "
            "You and your AI agent work through them one at a time, reviewing each before moving on.")
-__version__ = "1.27.2"
+__version__ = "1.28.0"

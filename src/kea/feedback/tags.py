@@ -142,11 +142,20 @@ DEFAULT_TAGS: list[dict] = [
      "instruction": "The reader withdraws the confirmation of this page: remove `confirmed:` from its front matter "
                     "in the next plan."},
     {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
-     "help": "Go ahead: the next step may build on this page",
-     "instruction": "The reader approves this page (pace: guided): the next step may build on it. Apply it at the "
-                    "harvest itself, not at Implement: write `approved:` into its front matter (`by:` the reader's "
-                    "name, `orcid:` their ORCID iD when the thread has one, `date:` the thread's date, `how: site`) "
-                    "and change nothing else. Then the next step is open; do it only when the owner asks."},
+     "help": "Sign off on this version of the page: it may be built on",
+     "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill). Apply it "
+                    "at the harvest itself, not at Implement: add a signature to `approved:` in its front matter, a "
+                    "list with one entry per person (`by:` the reader's name, `orcid:` their ORCID iD when the thread "
+                    "has one, `date:` the thread's date, `version:` the thread's page_version (else its page "
+                    "commit), `how: site`); keep earlier signatures, and change nothing else. A sign-off asks for no "
+                    "further work: the next step waits for an Approve & go, or for the owner in chat."},
+    {"name": "go", "group": "verdict", "task": True, "scope": "page", "label": "approve & go", "hidden": True,
+     "help": "Sign off on this page and ask the agent to take the next step now",
+     "instruction": "The reader signs off on this page and asks for the next step now; the thread's text names it "
+                    "(write the plan, run the step, …). `kea watch` stops for it (exit 40). Add the signature to "
+                    "`approved:` as for approve, then do that one step for this page only (the skill's pace table), "
+                    "reporting as you go with `kea progress \"…\" --page <page>`; write the run entry, commit, build, "
+                    "publish, and answer the thread with the commit. Then stop for review and watch again."},
     {"name": "revise", "group": "verdict", "task": True, "scope": "page", "label": "revise", "needs_text": True,
      "help": "Rewrite this page (say what to change): this branch is reworked",
      "instruction": "The reader asks to revise this page; their text says what to change. A page that waits for "
