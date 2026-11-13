@@ -1096,7 +1096,7 @@ class SiteRenderer:
                       key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
 
     def progress_page(self) -> None:
-        """progress.html (Plan → Progress): one view of where the analysis stands and what waits for whom: the pages
+        """progress.html (Progress in the menu bar): one view of where the analysis stands and what waits for whom: the pages
         that wait for a sign-off (with what Approve & go would start), the route of every question (question, plan,
         run, results, conclusions), and who signed off on what. The agent's status and the open Approve & go
         requests are filled in live by _feedback/cycle.js (#progress-live)."""
@@ -1104,44 +1104,52 @@ class SiteRenderer:
         tree = self.tree
         link = lambda node: node_link(node, prefix, node.title if node.tag else None)   # noqa: E731
         hrefs = {key: relative for relative, (key, _) in self.pages.items() if key in tree.nodes}
-        parts = [crumbs([("Plan", "plan.html"), ("Progress", None)], prefix), "<h1>Progress</h1>",
-                 "<div class='short'>Where each question stands on the route (question, plan, run, results, "
-                 "conclusions) and what waits for whom. <b>Approve</b> signs a page off: your name and the version you "
-                 "read. <b>Approve &amp; go</b> also asks the agent to take the next step now (write the plan, run the "
-                 "step, …).</div>",
+        parts = [crumbs([("Progress", None)], prefix), "<h1>Progress</h1>",
+                 "<div class='short'>What waits for whom, and where each question stands on its route: question, "
+                 "plan, run, results, conclusions.</div>",
                  f"<div id='progress-live' class='progress-live not-annotatable' data-pages='{esc(json.dumps(hrefs))}'>"
                  "<p class='help'>The agent's status "
                  "and the open Approve &amp; go requests show here when the site is served with comments.</p></div>"]
         if tree.pace != "guided":
             parts.append("<p class='help not-annotatable'>This project runs with <code>pace: free</code>: no page waits "
                          "for a sign-off; Approve records a signature only.</p>")
+        order = lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id))  # noqa: E731
         waiting = self.waiting_pages()
-        parts.append(f"<h2>Waiting for a sign-off <span class='count'>{len(waiting)}</span></h2>")
-        if waiting:
+        ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
+                       key=order)
+        parts.append(f"<h2>Waiting for you <span class='count'>{len(waiting) + len(ready)}</span></h2>")
+        if waiting or ready:
+            parts.append("<p class='help'>Every page here waits for a click from a reader; nothing moves until then. "
+                     "<b>Needs your sign-off</b>: the page is new and nobody has approved it; <b>Approve</b> signs it "
+                     "off and stops there. <b>Signed off, not started</b>: the page is approved (or needs no sign-off) "
+                     "and its next step is Claude's, waiting for a go. <b>▶ Approve &amp; …</b> signs the page off and "
+                     "asks Claude to take that step now; on a page signed off already the button is just "
+                     "<b>▶ Run the step</b> (or Write the plan, …).</p>")
+        if waiting or ready:
             rows = []
-            for node in waiting:
+            for node in waiting + ready:
                 action = graph.go_action(tree, node)
                 signed = graph.signatures(node)
-                rows.append(f"<tr data-page='{esc(node.key)}'><td>{link(node)}</td><td>{esc(TYPE_LABELS.get(node.type, node.type))}"
+                if node.waiting:
+                    stands = "<span class='rs rs-you'>● needs your sign-off</span>"
+                elif signed:
+                    names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
+                    stands = f"<span class='rs rs-done'>✓ signed off</span> <span class='help'>by {esc(names)} · not started</span>"
+                else:
+                    stands = "<span class='rs rs-free'>no sign-off needed</span> <span class='help'>· not started</span>"
+                if not action:
+                    button = "<b>✓ Approve</b>"
+                elif node.waiting:
+                    button = f"<b>▶ Approve &amp; {esc(action)}</b> <span class='help'>or ✓ Approve</span>"
+                else:
+                    button = f"<b>▶ {esc(action[0].upper() + action[1:])}</b>"
+                rows.append(f"<tr data-page='{esc(node.key)}'><td class='rq'>{link(node)}"
                             + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
-                            + f"</td><td>{('Approve &amp; ' + esc(action)) if action else '<span class=help>Approve</span>'}</td>"
-                            f"<td class='live-cell'>{esc(', '.join(str(item.get('by') or '?') for item in signed))}</td></tr>")
-            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Kind</th>"
-                         "<th>The button that moves it on</th><th>Request</th></tr></thead><tbody>"
-                         + "".join(rows) + "</tbody></table></div>")
+                            + f"</td><td>{stands}<div class='live-cell help'></div></td><td>{button}</td></tr>")
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Where it stands</th>"
+                         "<th>The button on the page</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
         else:
-            parts.append("<p class='help'>Nothing waits for a sign-off.</p>")
-        ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
-                       key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
-        parts.append(f"<h2>Ready for the next step <span class='count'>{len(ready)}</span></h2>"
-                     "<p class='help'>Signed off, or needing no sign-off: the next step is the agent's. "
-                     "<b>Approve &amp; go</b> on the page asks for it now.</p>")
-        if ready:
-            rows = [f"<tr data-page='{esc(node.key)}'><td>{link(node)}</td><td>{esc(TYPE_LABELS.get(node.type, node.type))}</td>"
-                    f"<td>Approve &amp; {esc(graph.go_action(tree, node))}</td><td class='live-cell'></td></tr>" for node in ready]
-            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Kind</th>"
-                         "<th>The button that moves it on</th><th>Request</th></tr></thead><tbody>"
-                         + "".join(rows) + "</tbody></table></div>")
+            parts.append("<p class='help'>Nothing waits for you.</p>")
         for project, home in tree.projects.items():
             found = questions.questions(tree, project)
             title = f"Route · {home.title}" if len(tree.projects) > 1 else "Route of each question"
@@ -1152,12 +1160,15 @@ class SiteRenderer:
             if not found:
                 parts.append("<p class='help'>No questions yet.</p>")
                 continue
-            head = "".join(f"<th>{esc(label)}</th>" for _, label in graph.STAGES)
+            free = tree.pace != "guided"
+            head = "".join(f"<th>{esc(label)}</th>" for index, (_, label) in enumerate(graph.STAGES) if not (free and index == 0))
             rows = []
             for question in found:
                 route = graph.question_route(tree, question)
                 cells = []
-                for stage in route["stages"]:
+                for index, stage in enumerate(route["stages"]):
+                    if free and index == 0:
+                        continue
                     icon, word = self.STAGE_TEXT[stage["state"]]
                     shown = [node for node in stage["pages"] if node.tag and node is not question]
                     pages = " ".join(node_link(node, prefix) for node in shown[:6])

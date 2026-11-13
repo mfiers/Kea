@@ -214,7 +214,8 @@
     }
     const first = goes[0];
     const watching = watcher.state === "watching";
-    showBanner("go", el("b", {}, `Approve & ${first.text.replace(/^Approve & /i, "") || "go"}: `),
+    const label = (first.text || "").replace(/^(Approve & |Go: )/i, "") || "the next step";
+    showBanner("go", el("b", {}, `${/^Approve & /i.test(first.text || "") ? "Approve & " + label : label[0].toUpperCase() + label.slice(1)}: `),
       `${pageTitle(first)}, asked by ${first.by} ${when(first.at)}. `,
       watching ? "Claude picks it up within a minute. " : "No Claude session is watching now: the request waits until one starts. ",
       goes.length > 1 ? `${goes.length - 1} more waiting. ` : "", progress, ".");
@@ -246,7 +247,7 @@
     for (const row of document.querySelectorAll(".progress-table tr[data-page]")) {
       const cell = row.querySelector(".live-cell");
       const key = row.dataset.page;
-      if (cell) cell.textContent = going.has(key) ? "Approve & go asked" : signing.has(key) ? "signed; applied at the next harvest" : "";
+      if (cell) cell.textContent = going.has(key) ? "asked: see the top of the page" : signing.has(key) ? "signed on the site; written onto the page at the next harvest" : "";
     }
   }
 

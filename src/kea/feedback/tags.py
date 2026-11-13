@@ -152,8 +152,9 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "go", "group": "verdict", "task": True, "scope": "page", "label": "approve & go", "hidden": True,
      "help": "Sign off on this page and ask the agent to take the next step now",
      "instruction": "The reader signs off on this page and asks for the next step now; the thread's text names it "
-                    "(write the plan, run the step, …). `kea watch` stops for it (exit 40). Add the signature to "
-                    "`approved:` as for approve, then do that one step for this page only (the skill's pace table), "
+                    "(write the plan, run the step, …). `kea watch` stops for it (exit 40). When the text starts "
+                    "with \"Approve &\", add the signature to `approved:` as for approve; \"Go:\" (a page signed off "
+                    "already, or needing no sign-off) adds none. Then do that one step for this page only (the skill's pace table), "
                     "reporting as you go with `kea progress \"…\" --page <page>`; write the run entry, commit, build, "
                     "publish, and answer the thread with the commit. Then stop for review and watch again."},
     {"name": "revise", "group": "verdict", "task": True, "scope": "page", "label": "revise", "needs_text": True,

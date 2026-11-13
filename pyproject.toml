@@ -1,6 +1,6 @@
 [project]
 name = "kea"
-version = "1.28.0"
+version = "1.28.1"
 description = "Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. You and your AI agent work through them one at a time, reviewing each before moving on."
 readme = "README.md"
 requires-python = ">=3.11"

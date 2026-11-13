@@ -213,8 +213,17 @@ def test_signatures_route_and_the_go_button(tmp_path):
     assert route == {"question": "done", "plan": "done", "run": "done", "results": "you", "conclusions": "later"}
     assert graph.go_action(tree, tree.nodes["p:r-a"]) == "draw conclusions"
     (tmp_path / "kea.yaml").write_text("pace: free\n")
+    _page(doc, "p/result/r-b.md", "id: r-b\ntype: result\ntitle: Found more\nshort: More.\nparent: q-a\nstatus: done\n"
+          "sources: [x.tsv]\nrelations:\n  made_by: [s-a]")
     tree = nodes.load_tree(doc)
     assert graph.question_route(tree, tree.nodes["p:q-a"])["stages"][0]["state"] == "free"
+    # only the newest result offers "draw conclusions", and none once the question is closed
+    assert [graph.go_action(tree, tree.nodes[key]) for key in ("p:r-a", "p:r-b")] == ["", "draw conclusions"]
+    _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\n"
+          "status: answered\napproved: {by: Ann, date: 2026-11-13}")
+    tree = nodes.load_tree(doc)
+    assert graph.go_action(tree, tree.nodes["p:r-b"]) == ""
+    assert {stage["state"] for stage in graph.question_route(tree, tree.nodes["p:q-a"])["stages"][1:]} <= {"done", "closed"}
 
 
 def test_approve_is_a_signature_and_go_asks_for_the_step():

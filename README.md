@@ -117,9 +117,9 @@ Nothing changes until the comments are harvested:
 3. Implement. A PI presses "Implement the plan". Comments pause. The agent changes the pages item by item, checks every number against its file, works through the rechecks, commits each change and answers each comment with its commit: page changed, answered, or won't fix with the reason.
 4. Release. A new version and git tag, with the run's change log. Open pages reload and comments reopen. Comments left out of the plan stay for the next cycle. The History page links each comment to its plan item, commit and pages. Plan → Current comments lists who commented what and where, with a filter per person.
 
-Approve & go does not wait for a harvest. It signs the page off like Approve and asks the agent to take that page's next step now; the button names the step (propose questions, write the plan, plan its steps, run the step, draw conclusions). It needs the iteration password, like Harvest. A line at the top of every page then says what was asked, whether a session is watching, and, once the agent has picked it up, what it is doing ("running S2: 3 of 8 donors"); the page reloads when the new version is published. The agent takes only that one step and stops for your review.
+Approve & go does not wait for a harvest. It signs the page off like Approve and asks the agent to take that page's next step now; the button names the step (propose questions, write the plan, plan its steps, run the step, draw conclusions). On a page that is signed off already, or needs no sign-off, the button is just ▶ Run the step (or Write the plan, …): it asks for the step without adding a signature; a second reader signs with Approve. It needs the iteration password, like Harvest. A line at the top of every page then says what was asked, whether a session is watching, and, once the agent has picked it up, what it is doing ("running S2: 3 of 8 donors"); the page reloads when the new version is published. The agent takes only that one step and stops for your review.
 
-Plan → Progress is the overview: the pages that wait for a sign-off and the button that moves each on, the pages ready for their next step, the route of every question (approved, plan, run, results, conclusions: done, waiting for you, the agent's turn, running), the open Approve & go requests with the agent's status, and every sign-off with its name, version and date.
+Progress, in the menu bar (with the number of pages that wait for a click), is the overview. Waiting for you lists every page that waits for a reader, in one table: a page that needs your sign-off (Approve signs it off and stops there) and a page that is signed off, or needs no sign-off, whose next step is Claude's but not started (▶ Run the step, or the step named, asks for it); each row names the button and the step it starts. Below: the route of every question (approved, plan, run, results, conclusions: done, waiting for you, the agent's turn, running, closed), the open Approve & go requests with the agent's status, and every sign-off with its name, version and date.
 
 The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.
 
@@ -136,7 +136,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.28.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.28.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -147,14 +147,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.28.0
+uv tool install git+https://github.com/mfiers/Kea.git@v1.28.1
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.0"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.1"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.28.0 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.28.1 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -168,8 +168,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.28.0 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.0"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.28.0
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.1"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.28.1
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

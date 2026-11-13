@@ -74,7 +74,8 @@ question approves that question only; `how: chat`), or a reader presses on the s
   signature, change no claim), not deferred to Implement; it asks for no further work.
 - **Approve & go** (needs the right to steer): the same signature, plus a request to take that page's next step
   now; the button says which (propose questions, write the plan, plan its steps, run the step, draw conclusions).
-  `kea watch` stops with exit 40; see the review cycle.
+  `kea watch` stops with exit 40; see the review cycle. On a page signed off already (or under `pace: free`) the
+  button is just **▶ Run the step** (Write the plan, …): the thread's text starts with `Go:` and adds no signature.
 With `pace: guided` in `kea.yaml` (the default of `kea init`) `kea check` enforces this: hypotheses or steps under an
 unapproved question, a step in progress or done without approval, and conclusions from unreviewed results are
 problems. `kea context` starts with "Next step on the route": what to do now, or what waits for the owner.
@@ -366,7 +367,8 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    (and `kea publish`), and watch again. The plan then stands until the next harvest; comments go on, and the plan
    page counts those made since.
 3. **Approve & go (exit 40):** a reader signed a page off and asked for its next step now; `kea list` shows the
-   thread (tag `go`, its text names the step, its page version). Add the signature to the page's `approved:`, then
+   thread (tag `go`, its text names the step, its page version). If its text starts with `Approve &`, add the signature to the page's `approved:` (`Go:`
+   adds none); then
    do **that one step for that page only**, as in the pace table (write the plan → hypotheses and planned steps;
    run the step → run it and write the results; draw conclusions → conclusions, outcomes, answer). Tell readers what
    you are doing at each stage, so the click is never followed by silence: `kea progress "writing H1 and S1–S3"

@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-from kea.docsite.nodes import Node, Tree, analysis_of
+from kea.docsite.nodes import Node, Tree, analysis_of, natural
 
 LEDGER_NAME = "_checks.yaml"
 OUTCOMES = ("supported", "not_supported", "inconclusive")
@@ -319,7 +319,7 @@ def question_route(tree: Tree, question: Node) -> dict:
         add("conclusions", "later")
     if question.status in ("answered", "dropped"):           # a closed question: nothing more is asked of anyone
         for stage in stages:
-            if stage["state"] in ("you", "agent", "running"):
+            if stage["state"] in ("you", "agent", "running", "later"):
                 stage.update(state="closed", pages=[], note=f"the question is {question.status}")
     return {"question": question, "stages": stages, "hypotheses": hypotheses, "steps": steps,
             "results": live_results, "conclusions": conclusions}
@@ -351,9 +351,13 @@ def go_action(tree: Tree, node: Node) -> str:
         for question in questions.questions(tree, node.project):
             _, results, conclusions = questions.evidence(tree, question)
             if node in results:
-                others = [item for item in results if item is not node and item.status != "deprecated"
-                          and tree.pace == "guided" and not approved(item)]
-                return "" if others or conclusions else "draw conclusions"
+                if question.status in ("answered", "dropped") or conclusions:
+                    return ""
+                live = [item for item in results if item.status != "deprecated"]
+                if tree.pace == "guided" and any(not approved(item) for item in live if item is not node):
+                    return ""                                     # the other results still wait for their sign-off
+                newest = max(live, key=lambda item: (natural(item.number or item.id)))
+                return "draw conclusions" if newest is node else ""
     return ""
 
 

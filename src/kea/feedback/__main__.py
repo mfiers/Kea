@@ -118,8 +118,8 @@ def watch(args: argparse.Namespace) -> int:
             first = goes[0]
             asked = first.text or "the next step"
             print(f"approve & go: {len(goes)} request(s); first {first.thread_id} by {first.author} at "
-                  f"{first.created_at} on {first.page} ({first.page_title}): {asked}. Sign the page off, do that "
-                  "step only, report with `kea progress \"…\" --page <page>`, publish, answer the thread, watch again")
+                  f"{first.created_at} on {first.page} ({first.page_title}): {asked}. If it starts with "
+                  "'Approve &', sign the page off ('Go:' adds no signature); do that step only, report with `kea progress \"…\" --page <page>`, publish, answer the thread, watch again")
             extra.update({"doing": f"starting: {asked} ({first.page_title or first.page})", "page": first.page,
                           "thread": first.thread_id})
             return leave("going", GO_EXIT)

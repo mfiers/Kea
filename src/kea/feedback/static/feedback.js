@@ -357,17 +357,18 @@
   const pageVersion = () => contentData().version || "";
   /* Approve & go: a sign-off that also asks Claude for the next step of this page now (data-go: write the plan, run
      the step, …). Needs the right to steer: the server answers need_steer and cycle.js asks for the password. */
-  async function approveAndGo(action) {
+  async function approveAndGo(action, sign) {
     const version = pageVersion();
-    if (!confirm_(`Sign off on this page${version ? " (version " + version + ")" : ""} and ask Claude to ${action} now?\n\n`
-      + "Claude does only that, publishes, and stops for your review. The banner at the top shows when it picks the request up and what it is doing.")) return;
+    const ask = sign ? `Sign off on this page${version ? " (version " + version + ")" : ""} and ask Claude to ${action} now?`
+      : `Ask Claude to ${action} now? The page is signed off already; this adds no signature.`;
+    if (!confirm_(ask + "\n\nClaude does only that, publishes, and stops for your review. The banner at the top shows when it picks the request up and what it is doing.")) return;
     if (!getName()) {
       const name = (prompt("Your name (shown with your sign-off):") || "").trim();
       if (!name) return;
       setName(name);
     }
     const body = { page: PAGE, page_title: TITLE, page_commit: COMMIT, page_version: version,
-      text: "Approve & " + action, tags: ["go"] };
+      text: (sign ? "Approve & " : "Go: ") + action, tags: ["go"] };
     try {
       await api("POST", API, body);
     } catch (error) {
@@ -487,19 +488,23 @@
     const status = window.keaStatus || {}, watcher = status.watcher || {};
     if (!going) {
       go.className = "fb-dpill fb-d-go";
-      go.textContent = "▶ Approve & " + action;
-      go.title = `Sign off on this page and ask Claude to ${action} now; Claude does only that, then stops for your review`;
-      go.onclick = () => approveAndGo(action);
+      /* a page that waits for a sign-off: Approve & <step> signs and asks; a page signed off already (or needing no
+         sign-off): ▶ <Step> only asks; a second reader's signature is the plain Approve */
+      const Action = action[0].toUpperCase() + action.slice(1);
+      go.textContent = waitingPage ? "▶ Approve & " + action : "▶ " + Action;
+      go.title = waitingPage ? `Sign off on this page and ask Claude to ${action} now; Claude does only that, then stops for your review`
+        : `Ask Claude to ${action} now (the page needs no further sign-off); Claude does only that, then stops for your review`;
+      go.onclick = () => approveAndGo(action, waitingPage);
       return;
     }
-    const asked = going.text.replace(/^Approve & /i, "") || action;
+    const asked = going.text.replace(/^(Approve & |Go: )/i, "") || action;
     const working = watcher.state === "working" && watcher.exit === "going" && (!watcher.page || watcher.page === PAGE);
     go.className = "fb-dpill fb-d-go " + (working ? "fb-working" : "fb-pending");
     go.textContent = working ? `⟳ Claude: ${watcher.doing || asked}` : `▶ ${asked[0].toUpperCase() + asked.slice(1)} · asked, waiting for Claude`;
     go.title = working ? `Claude is working on it (last word ${Math.round((watcher.seconds || 0) / 60)} min ago); the page reloads when the new version is published`
       : watcher.state === "watching" ? `Asked by ${going.author}; Claude picks it up within a minute. Click to take the request back.`
       : `Asked by ${going.author}; no Claude session is watching now, so it waits until one starts. Click to take the request back.`;
-    go.onclick = working ? null : () => withdraw(going, "Approve & go taken back");
+    go.onclick = working ? null : () => withdraw(going, "request taken back");
   }
   window.addEventListener("kea-status", () => {
     const content = container && container.querySelector(".node-content");
