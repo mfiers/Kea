@@ -188,20 +188,20 @@ footer{margin-top:50px;color:var(--muted);font-size:13px;text-align:center}
 <p>Kea is meant to be run by an AI coding agent: Claude Code, or another harness that reads a skill file and runs shell commands. Give the agent the skill (<code>skill/SKILL.md</code>) and say "use Kea" in your project. It installs a tagged version of Kea, asks for a short outline (title, first experiment, data, premises, author) unless that is already clear, writes the first pages, builds the site, agrees with you on where to host it, gives you the link and starts watching for comments. Then it stops: you read and approve the questions on the site, and it takes the next step. Before each run it reads what the site already holds for the question (<code>kea context</code>).</p>
 <p>Running Kea by hand is possible, but keeping pages, hypotheses, change logs and cycles consistent is the agent's job.</p>
 <p>For Claude Code, the skill is one file:</p>
-<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+<pre><code>mkdir -p ~/.claude/skills/kea &amp;&amp; curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.2/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 </code></pre>
 <p>Other agents: put <code>skill/SKILL.md</code> where the agent reads its instructions, for example in the project's agent instructions file.</p>
 <h2 id="install">Install</h2>
 <p>Kea is not on PyPI; install it from this repository with <a href="https://docs.astral.sh/uv/">uv</a> (it fetches Python ≥ 3.11 if needed). Always name a tag (see <a href="https://github.com/mfiers/Kea/tags">tags</a>), so a project does not change when Kea does. The agent normally does this itself.</p>
 <pre><code># as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.27.1
+uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.1&quot;
+uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.2&quot;
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.27.1 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.27.2 kea --help
 </code></pre>
 <ul>
 <li>Upgrade: run the same command with the new tag (<code>uv tool install --force git+…@vX.Y.Z</code>, or <code>uv add</code> again). <code>uv tool upgrade kea</code> does not move a pinned tag.</li>
@@ -212,8 +212,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.27.1 kea --help
 </ul>
 <h2 id="reference">Reference</h2>
 <h3 id="what-the-agent-runs-in-a-project">What the agent runs in a project</h3>
-<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.1&quot;     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.1
+<pre><code>uv add &quot;kea @ git+https://github.com/mfiers/Kea.git@v1.27.2&quot;     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
 kea init --title &quot;My project&quot; --author &quot;Your Name&quot; --experiment first-experiment --question &quot;What does it ask?&quot;
 make site &amp;&amp; make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement
@@ -294,7 +294,7 @@ kea publish --files                  # what would go up, and why not
 kea publish                          # after every build: sends only files the hub lacks, in resumable chunks
 </code></pre>
 <ul>
-<li>Readers open <code>https://kea.example.org/p/trajectories/</code>. The site password lets them comment under any name; the iteration password also lets them harvest the comments into the plan and ask the agent to implement it.</li>
+<li>Readers open <code>https://kea.example.org/p/trajectories/</code>. The site password lets them comment under any name; the iteration password also lets them harvest the comments into the plan and ask the agent to implement it. Until the project's first <code>kea publish</code> its address shows a page saying the site is not published yet (with the setup steps for the owner), not a login or an error.</li>
 <li>The agent publishes the built site (with the Markdown for the editor), and <code>kea watch</code>, <code>list</code>, <code>reply</code> and <code>cycle</code> read and write the hub's record. The local <code>data/feedback/*.jsonl</code> stay an exact mirror.</li>
 <li>Data stays home unless chosen: files that may hold identifiers (donor, subject, sample … columns) or that kea cannot inspect (h5ad, parquet, npz) are flagged and go up only when named in <code>upload_include</code>. On the hub a file that stayed home has no download link and no preview.</li>
 <li>One agent per project: the hub keeps the lease. A second agent (another session, another machine) is refused until the first one's lease expires (2 h after its last action) or the owner says to take over (<code>kea lease take --force</code>).</li>

@@ -82,7 +82,7 @@ import urllib.request
 from pathlib import Path
 
 from starlette.requests import Request
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 from kea.feedback import accounts, agent, cycle, landing, server, store
 
@@ -558,6 +558,20 @@ class HubApp:
         self.sites[name] = (stamp, app)
         return app
 
+    def unpublished(self, name: str, rest: str, scope) -> Response | None:
+        """Before a project's first publish there is no site: its address says so instead of failing (the agent
+        API, the comment API and sign-in routes are not affected)."""
+        if scope.get("method") not in ("GET", "HEAD") or rest.startswith("/api/"):
+            return None                          # the comment API keeps its own access rules
+        if (self.hub.project_dir(name) / "current" / "site").is_dir():
+            return None
+        config = self.hub.config(name) or {}
+        title = str(config.get("title") or name) if config.get("public") else name   # a private title stays private
+        address = self.hub.site_url(name).split("://", 1)[-1]
+        return HTMLResponse(landing.unpublished_page(str(self.hub.settings().get("title") or "Kea hub"),
+                                                     self.apex_url().rstrip("/") + "/", address, title),
+                            status_code=404, headers={"Cache-Control": "no-store"})
+
     async def route(self, scope, receive, send):
         if scope["type"] == "lifespan":
             while True:
@@ -587,6 +601,9 @@ class HubApp:
                 return
             if path in ("/auth/finish", "/auth/logout"):
                 await self.site_auth(name, path, Request(scope, receive), "/")(scope, receive, send)
+                return
+            if (waiting := self.unpublished(name, path, scope)) is not None:
+                await waiting(scope, receive, send)
                 return
             await self.site_app(name)(scope, receive, send)
             return
@@ -635,6 +652,9 @@ class HubApp:
             return
         if rest is None:
             await RedirectResponse(f"/p/{name}/", status_code=308)(scope, receive, send)
+            return
+        if (waiting := self.unpublished(name, rest, scope)) is not None:
+            await waiting(scope, receive, send)
             return
         inner = dict(scope, root_path=scope.get("root_path", "") + f"/p/{name}")
         await self.site_app(name)(inner, receive, send)

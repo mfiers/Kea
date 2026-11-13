@@ -93,6 +93,10 @@ td.date{white-space:nowrap;color:#333a47}td .sub.date{margin-top:4px}.nowrap{whi
 .pill.private{background:#eef0f4;color:#4a5160}
 .pill.pending{background:#fff3cf;border-color:#ecd48a;color:#6d5300}
 .empty{color:var(--muted);font-style:italic}
+.waiting{max-width:62ch;margin:6vh auto 0;text-align:center}.waiting img{width:96px;height:96px;opacity:.9}
+.waiting h1{font-size:26px;margin:14px 0 6px}.waiting .address{color:var(--muted);font-size:14px;margin:0 0 18px}
+.waiting p{color:#333a47}.waiting .owner{text-align:left;background:#fff;border:1px solid var(--line);border-radius:8px;
+padding:12px 16px;margin-top:26px;font-size:14px}.waiting .owner code{background:#eef0f4;padding:1px 4px;border-radius:4px;font-size:13px}
 footer{color:var(--muted);font-size:12.5px;margin-top:36px}
 @media (max-width:640px){
  .hero{flex-direction:column;align-items:flex-start;gap:14px}.hero img{width:84px;height:84px}.hero h1{font-size:25px}
@@ -107,16 +111,17 @@ def _esc(value: object) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
-def _page(title: str, hub_title: str, domain: str, right: str, body: str) -> str:
+def _page(title: str, hub_title: str, domain: str, right: str, body: str, home: str = "/") -> str:
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{_esc(title)}</title>"
-            f"<link rel='icon' href='{LOGO}' type='image/png'><style>{STYLE}</style></head><body>"
-            f"<header class='topbar'><a class='brand' href='/'><img src='{LOGO}' alt=''>{_esc(hub_title)}</a>"
+            f"<link rel='icon' href='{_esc(home.rstrip('/'))}{LOGO}' type='image/png'><style>{STYLE}</style></head><body>"
+            f"<header class='topbar'><a class='brand' href='{_esc(home)}'><img src='{_esc(home.rstrip('/'))}{LOGO}' alt=''>"
+            f"{_esc(hub_title)}</a>"
             f"<span class='domain'>{_esc(domain)}</span><span class='version' title='This hub runs Kea {_esc(__version__)}'>"
             f"Kea {_esc(__version__)}</span><span class='right'>{right}</span></header>"
             f"<main>{body}<footer>Kea: {_esc(TAGLINE)} "
             f"<a href='{GITHUB}'>Kea on GitHub</a> · <a href='{GITHUB}#readme'>documentation</a> · "
-            f"<a href='/help'>help</a></footer></main></body></html>")
+            f"<a href='{_esc(home.rstrip('/'))}/help'>help</a></footer></main></body></html>")
 
 
 def _orcid_button(url: str) -> str:
@@ -214,3 +219,18 @@ def reader_page(hub_title: str, domain: str, person: dict, rows: list[dict], pub
         parts.append(public_table(public_rows, "<p class='note' style='margin-bottom:8px'>Readable without a role; "
                                                "to comment, ask the hub's administrator for one.</p>"))
     return _page(f"{name} · {hub_title}", hub_title, domain, right, "".join(parts))
+
+
+def unpublished_page(hub_title: str, home: str, address: str, title: str) -> str:
+    """A project's address before its first publish: the hub knows the project, there is no site yet."""
+    root = home.rstrip("/")
+    body = (f"<section class='waiting'><img src='{_esc(root)}{LOGO}' alt=''>"
+            f"<h1>{_esc(title)} is not published yet</h1><p class='address'>{_esc(address)}</p>"
+            "<p>This project has a place on the hub, but its site has not been sent here yet. The pages appear at "
+            "this address as soon as the project publishes; there is nothing to sign in to until then.</p>"
+            f"<p><a href='{_esc(home)}'>Other projects on {_esc(hub_title)}</a> · <a href='{_esc(root)}/help'>What is "
+            "Kea?</a></p>"
+            "<div class='owner'><b>Setting up this project?</b> In the project folder: <code>remote:</code> in "
+            "<code>kea.yaml</code> points at this hub, the project key goes in <code>.env</code> as "
+            "<code>KEA_REMOTE_KEY</code>, then <code>kea build</code> and <code>kea publish</code>.</div></section>")
+    return _page(f"{title} · not published yet", hub_title, address, "", body, home)

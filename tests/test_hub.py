@@ -785,3 +785,28 @@ def test_manifest_release_refuses_unsafe_paths_and_wrong_checksums(demo):
     assert not hub.blob_path(the_hub, "demo", wrong).exists()
     result = hub.install_manifest(the_hub, "demo", {"site/index.html": sha}, {"files": []})
     assert (the_hub.project_dir("demo") / "releases" / result["release"] / "site" / "index.html").read_bytes() == data
+
+
+def test_unpublished_project_says_so_instead_of_failing(demo):
+    """After `kea hub add`, before the first publish: a page saying the site is not there yet (no login, no 500);
+    a private project's title is not shown; the agent API still works."""
+    the_hub, secrets = demo
+    import yaml
+    settings = the_hub.settings()
+    settings["project_domain"] = "keahub.example"
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    site = TestClient(hub.HubApp(the_hub), base_url="https://demo.keahub.example")
+    page = site.get("/some/page.html", follow_redirects=False)
+    assert page.status_code == 404 and "demo is not published yet" in page.text and "Demo project" not in page.text
+    assert "KEA_REMOTE_KEY" in page.text and "demo.keahub.example" in page.text
+    assert site.get("/api/threads").status_code == 401                 # the comment API keeps its access rules
+    assert site.get("/hub/lease", headers=agent_headers(secrets["key"])).status_code == 200
+    the_hub.set_public("demo", True)
+    assert "Demo project is not published yet" in site.get("/").text
+    the_hub.set_public("demo", False)
+    plain = TestClient(hub.HubApp(hub.Hub(the_hub.folder)), base_url="https://testserver")
+    settings.pop("project_domain")
+    (the_hub.folder / "hub.yaml").write_text(yaml.safe_dump(settings))
+    assert "not published yet" in plain.get("/p/demo/").text
+    publish_files(plain, secrets["key"], site_with_ids("v" * 20, "---\nid: r-a\n---\ntext\n"))
+    assert "not published yet" not in plain.get("/p/demo/", follow_redirects=False).text

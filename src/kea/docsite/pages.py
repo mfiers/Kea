@@ -132,13 +132,23 @@ INDEX_KINDS = ["hypothesis", "step", "result", "conclusion"]      # the experime
 PAGE_ROWS = 12                                                     # rows per page of a long table (kea.js)
 
 
+SHORT_TABS = {"About this page": "About", "Answers so far": "Answers"}     # their labels on a phone
+
+
+def tab_label(label: str) -> str:
+    short = SHORT_TABS.get(label)
+    if not short:
+        return esc(label)
+    return f"<span class='tab-long'>{esc(label)}</span><span class='tab-short' aria-hidden='true'>{esc(short)}</span>"
+
+
 def tab_strip(colour: str, tabs: list[tuple[str, str, str, str]], pid: str = "") -> str:
     """The sections after a page's text as tabs hanging under one separator (the fat line in the type's colour):
     (key, label, count, html) each. The first tab is open; without scripts, and in print, every panel shows.
     comments.inject adds the Changes and Comments tabs at the two markers."""
     buttons = "".join(
         f"<button type='button' class='sep-tab{' on' if index == 0 else ''}' role='tab' data-tab='{key}' "
-        f"aria-selected='{'true' if index == 0 else 'false'}'>{esc(label)}"
+        f"aria-selected='{'true' if index == 0 else 'false'}'>{tab_label(label)}"
         + (f"<span class='tab-count'>{esc(count)}</span>" if count else "") + "</button>"
         for index, (key, label, count, _) in enumerate(tabs))
     panels = "".join(f"<div class='tab-panel{' on' if index == 0 else ''}' role='tabpanel' data-tab='{key}' "

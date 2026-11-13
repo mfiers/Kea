@@ -132,7 +132,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.27.2/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -143,14 +143,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.27.1
+uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.1"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.2"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.27.1 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.27.2 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -164,8 +164,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.27.1 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.1"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.1
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.27.2"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.27.2
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement
@@ -262,7 +262,7 @@ kea publish --files                  # what would go up, and why not
 kea publish                          # after every build: sends only files the hub lacks, in resumable chunks
 ```
 
-- Readers open `https://kea.example.org/p/trajectories/`. The site password lets them comment under any name; the iteration password also lets them harvest the comments into the plan and ask the agent to implement it.
+- Readers open `https://kea.example.org/p/trajectories/`. The site password lets them comment under any name; the iteration password also lets them harvest the comments into the plan and ask the agent to implement it. Until the project's first `kea publish` its address shows a page saying the site is not published yet (with the setup steps for the owner), not a login or an error.
 - The agent publishes the built site (with the Markdown for the editor), and `kea watch`, `list`, `reply` and `cycle` read and write the hub's record. The local `data/feedback/*.jsonl` stay an exact mirror.
 - Data stays home unless chosen: files that may hold identifiers (donor, subject, sample … columns) or that kea cannot inspect (h5ad, parquet, npz) are flagged and go up only when named in `upload_include`. On the hub a file that stayed home has no download link and no preview.
 - One agent per project: the hub keeps the lease. A second agent (another session, another machine) is refused until the first one's lease expires (2 h after its last action) or the owner says to take over (`kea lease take --force`).
