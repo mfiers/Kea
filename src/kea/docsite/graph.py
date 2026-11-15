@@ -152,9 +152,17 @@ RUNNING = ("in_progress", "done")
 
 
 def approved(node: Node) -> bool:
-    """The owner (or a reader with the right) reviewed the page: approved: (in chat, or applied at a harvest) or
-    confirmed: (a Confirm on the site)."""
-    return bool(node.header.get("approved") or node.header.get("confirmed"))
+    """A sign-off that still holds for what the page says now (signing.py): approved: (Approve on the site, or the
+    owner in chat, applied with kea sign) or confirmed:. A page edited after its sign-off is not approved, unless
+    every edit since was recorded as minor."""
+    from kea.docsite import signing
+    return signing.approved(node)
+
+
+def signed_once(node: Node) -> bool:
+    """Signed off at some point, even if the page changed since (the pace rules then note it; it waits again)."""
+    from kea.docsite import signing
+    return signing.ever_signed(node)
 
 
 def pace_rules(tree: Tree) -> None:
@@ -163,39 +171,47 @@ def pace_rules(tree: Tree) -> None:
     for node in tree.nodes.values():
         where = _where(node)
         parent = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
-        if node.type == "question" and parent is not None and parent.type == "experiment" and not approved(parent):
+        if node.type == "question" and parent is not None and parent.type == "experiment" and not signed_once(parent):
             tree.problems.append(f"{where}: written under an experiment the owner has not approved yet (pace: "
                                  "guided): write the experiment's summary and scope, stop, and let it be reviewed")
         if node.type in ("hypothesis", "step") and parent is not None and parent.type == "question" \
-                and not approved(parent):
+                and not signed_once(parent):
             tree.problems.append(f"{where}: written under question {parent.label}, which the owner has not approved "
                                  "yet (pace: guided): stop after proposing the question and let it be reviewed")
-        if node.type == "step" and node.status in RUNNING and not approved(node):
+        if node.type == "step" and node.status in RUNNING and not signed_once(node):
             tree.problems.append(f"{where}: step is {node.status} but was not approved (pace: guided): a planned "
                                  "step runs only after the owner approves it (Approve or Approve & go on its page, or in chat: "
                                  "approved: {by, date, how: chat})")
         if node.type == "conclusion" and node.status not in ("deprecated", "superseded"):
-            unread = [item.label for item in evidence(tree, node) if item.type in EVIDENCE_TYPES and not approved(item)]
+            unread = [item.label for item in evidence(tree, node) if item.type in EVIDENCE_TYPES and not signed_once(item)]
             if unread:
                 tree.problems.append(f"{where}: drawn from result(s) {', '.join(unread)} that the owner has not "
                                      "reviewed yet (pace: guided): write the results, stop, and conclude after review")
 
 
-WAITING_TYPES = ("experiment", "question", "hypothesis", "step", "result")
+WAITING_TYPES = ("experiment", "question", "premise", "decision", "hypothesis", "step", "result", "conclusion")
+GONE = ("deprecated", "superseded", "dropped")
 
 
 def waiting(node: Node) -> bool:
-    """Under pace: guided, a page waiting for the owner's approval before the next step builds on it: a question, a
-    planned hypothesis or step, or a result, without approved:/confirmed:."""
-    if node.type not in WAITING_TYPES or approved(node):
+    """Under pace: guided, a page waiting for a sign-off before the next step builds on it: a question, a premise,
+    a decision, a planned hypothesis or step, a result or a conclusion without a signature that holds; and any page
+    of these types edited (beyond minor edits) after its sign-off. One Approve signs a whole stage
+    (signing.bundle), so this costs one click per stage, not per page."""
+    from kea.docsite import signing
+    if node.type not in WAITING_TYPES or approved(node) or node.status in GONE:
         return False
+    if signing.stale(node):                                  # signed, then changed: the signature no longer holds
+        return True
     if node.type in ("hypothesis", "step"):
         return node.status == "planned"
     if node.type == "question":
         return node.status not in ("dropped", "answered")
     if node.type == "experiment":
         return node.status == "open"
-    return node.status != "deprecated"                       # a result
+    if node.type == "premise":
+        return node.status != "questioned"                   # a questioned premise is being checked
+    return True                                              # a result, a decision, a conclusion
 
 
 CARRIED_BY = {"conclusion": ("supported_by",), "result": ("made_by", "from_artefact"),
@@ -242,10 +258,9 @@ def drop_set(tree: Tree, key: str) -> list[str]:
 
 def signatures(node: Node) -> list[dict]:
     """Who signed the page off: approved: as one mapping (before 1.28) or a list of them ({by, orcid, date,
-    version, how}); a bare string counts as a name."""
-    value = node.header.get("approved")
-    items = value if isinstance(value, list) else [value] if value else []
-    return [item if isinstance(item, dict) else {"by": str(item)} for item in items]
+    version, how, thread, content, minor}); a bare string counts as a name."""
+    from kea.docsite import signing
+    return signing.signatures(node)
 
 
 def question_steps(tree: Tree, question: Node, hypotheses: list[Node]) -> list[Node]:
@@ -311,14 +326,19 @@ def question_route(tree: Tree, question: Node) -> dict:
         add("results", "done", [])
     else:
         add("results", "later")
+    unsigned = [node for node in conclusions if node.status not in GONE and not approved(node)]
     if live_results and not unread and not conclusions:
         add("conclusions", "agent", unread or live_results[-1:], "the agent draws conclusions")
+    elif unsigned:
+        add("conclusions", "you", unsigned, "sign off on the conclusions (and the answer)")
     elif conclusions:
         add("conclusions", "done", [])
     else:
         add("conclusions", "later")
     if question.status in ("answered", "dropped"):           # a closed question: nothing more is asked of anyone
         for stage in stages:
+            if stage["key"] == "conclusions" and stage["state"] == "you":
+                continue                                     # the conclusions behind the answer still need a sign-off
             if stage["state"] in ("you", "agent", "running", "later"):
                 stage.update(state="closed", pages=[], note=f"the question is {question.status}")
     return {"question": question, "stages": stages, "hypotheses": hypotheses, "steps": steps,
@@ -392,6 +412,10 @@ def next_steps(tree: Tree, project: str) -> list[str]:
         elif results and not conclusions:
             lines.append(f"{label}: next, write conclusions from the reviewed results, set the hypotheses' outcomes "
                          "and the answer; then stop for review.")
+        elif [item for item in conclusions if item.status not in GONE and not approved(item)]:
+            waiting = [item.number for item in conclusions if item.status not in GONE and not approved(item)]
+            lines.append(f"{label}: waiting for the owner to sign off on the conclusion(s) {', '.join(waiting)} "
+                         "and the answer.")
         else:
             lines.append(f"{label}: nothing waiting on the route; follow the comments and caveats.")
     return lines
@@ -538,6 +562,10 @@ def apply(tree: Tree, doc: Path, write_baseline: bool) -> None:
         pace_rules(tree)
         for node in tree.nodes.values():
             node.waiting = waiting(node)
+    from kea.docsite import signing
+    sign_problems, sign_notes = signing.problems_and_notes(tree)
+    tree.problems.extend(sign_problems)
+    tree.notes.extend(sign_notes)
     ledger = read_ledger(doc)
     if write_baseline and baseline(tree, ledger):
         write_ledger(doc, ledger)

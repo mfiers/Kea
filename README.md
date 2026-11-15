@@ -56,6 +56,10 @@ Every analysis follows one route, and each page is a stop on it: experiment → 
 
 One step at a time (`pace: guided`, the default of `kea init`). The agent takes one step along the route and stops for the owner's review: it proposes questions and waits; for an approved question it proposes hypotheses and planned steps and waits; it runs approved steps, writes the results and waits; it concludes from reviewed results. A page that waits carries a "waiting for approval" pill. The reader's verdicts on it are Approve (a sign-off: your name and the version you read, recorded on the page), Approve & go (the same, and the agent takes the next step now: write the plan, run the step, …), Revise (say what to change; it is rewritten and waits again) and Drop (remove it, with every page that rests only on it). On a settled page the verdicts are Confirm (keep it as it is; recorded on the page), Revise and Drop. Approval can also be given in the agent's chat; either way it is written on the page (`approved:`, one signature per person), and `kea check` refuses work built on unapproved pages.
 
+One click per stage, not per page. When several pages wait together (the proposed questions with their premises; a question's hypotheses and planned steps; its results; its conclusions and answer), Approve reads "✓ Approve all 5" and lists what you sign before you confirm; "✓ This page only" signs one. A simple question costs about four clicks: the question, the plan, the results, the conclusions.
+
+A sign-off holds for the wording you saw. If the agent later changes what a signed page says (a prediction, a criterion, a method, a number, a link), your signature stops holding: the page shows "changed since you signed" and waits for you again; History shows the difference. Progress (status, outcome, the answer) does not count as a change. The agent may record an edit as minor (a typo, clearer wording) with its reason; Kea refuses that when a number, a negation, a direction or other meaning-bearing word, a link or more than a few words changed. Minor edits are listed with your signature ("✓ approved by you · 1 minor edit since", the reasons on hover); if you disagree, press Revise.
+
 What Kea checks on every build (`kea check`; `kea build --strict` fails on a problem): a conclusion rests on at least one result or figure, not on a hypothesis or a question; no conclusions support each other in a loop; a live conclusion does not rest on deprecated evidence; a confirmatory conclusion does not rest on exploratory results only; a hypothesis with an outcome names the result that tested it; a hypothesis fixed before its results states its prediction and criterion; every relation connects the right kinds of page; every linked page and file exists.
 
 When a page upstream changes (a premise is revised, a result redone, a decision changed), every page that rests on it, directly or further down, gets a red "recheck" pill. The agent reads each against the change, updates it when it is even slightly affected, and records the check (`kea recheck`, ledger `doc/_checks.yaml`). A version is not released while pages wait for a recheck.
@@ -136,7 +140,7 @@ Running Kea by hand is possible, but keeping pages, hypotheses, change logs and 
 For Claude Code, the skill is one file:
 
 ```
-mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.28.1/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
+mkdir -p ~/.claude/skills/kea && curl -fsSL https://raw.githubusercontent.com/mfiers/Kea/v1.29.0/skill/SKILL.md -o ~/.claude/skills/kea/SKILL.md
 ```
 
 Other agents: put `skill/SKILL.md` where the agent reads its instructions, for example in the project's agent instructions file.
@@ -147,14 +151,14 @@ Kea is not on PyPI; install it from this repository with [uv](https://docs.astra
 
 ```
 # as a command on this machine (any project; also the hub host): puts `kea` in ~/.local/bin
-uv tool install git+https://github.com/mfiers/Kea.git@v1.28.1
+uv tool install git+https://github.com/mfiers/Kea.git@v1.29.0
 kea --help
 
 # or as a dependency of a Python/uv project (pinned in its uv.lock); run it as `uv run kea …`
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.1"
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.29.0"
 
 # or once, without installing
-uvx --from git+https://github.com/mfiers/Kea.git@v1.28.1 kea --help
+uvx --from git+https://github.com/mfiers/Kea.git@v1.29.0 kea --help
 ```
 
 - Upgrade: run the same command with the new tag (`uv tool install --force git+…@vX.Y.Z`, or `uv add` again). `uv tool upgrade kea` does not move a pinned tag.
@@ -168,8 +172,8 @@ uvx --from git+https://github.com/mfiers/Kea.git@v1.28.1 kea --help
 ### What the agent runs in a project
 
 ```
-uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.28.1"     # a Python/uv project
-#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.28.1
+uv add "kea @ git+https://github.com/mfiers/Kea.git@v1.29.0"     # a Python/uv project
+#   or, for any other project:  uv tool install git+https://github.com/mfiers/Kea.git@v1.29.0
 kea init --title "My project" --author "Your Name" --experiment first-experiment --question "What does it ask?"
 make site && make serve                                       # the password is in .env
 kea watch --deadline 3d                                       # waits for Harvest or Implement

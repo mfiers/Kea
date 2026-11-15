@@ -143,17 +143,17 @@ DEFAULT_TAGS: list[dict] = [
                     "in the next plan."},
     {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
      "help": "Sign off on this version of the page: it may be built on",
-     "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill). Apply it "
-                    "at the harvest itself, not at Implement: add a signature to `approved:` in its front matter, a "
-                    "list with one entry per person (`by:` the reader's name, `orcid:` their ORCID iD when the thread "
-                    "has one, `date:` the thread's date, `version:` the thread's page_version (else its page "
-                    "commit), `how: site`); keep earlier signatures, and change nothing else. A sign-off asks for no "
-                    "further work: the next step waits for an Approve & go, or for the owner in chat."},
+     "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill), or on every "
+                    "page its `Signs:` line names (one click for a whole stage). Apply it at the harvest itself, not at "
+                    "Implement, with `kea sign --thread <this thread>`: it records each signature bound to the version "
+                    "the reader saw (never edit `approved:` by hand), keeps earlier signatures, and changes nothing "
+                    "else. A sign-off asks for no further work: the next step waits for an Approve & go, or for the "
+                    "owner in chat."},
     {"name": "go", "group": "verdict", "task": True, "scope": "page", "label": "approve & go", "hidden": True,
      "help": "Sign off on this page and ask the agent to take the next step now",
      "instruction": "The reader signs off on this page and asks for the next step now; the thread's text names it "
                     "(write the plan, run the step, …). `kea watch` stops for it (exit 40). When the text starts "
-                    "with \"Approve &\", add the signature to `approved:` as for approve; \"Go:\" (a page signed off "
+                    "with \"Approve &\", apply the signature(s) with `kea sign --thread <this thread>`; \"Go:\" (a page signed off "
                     "already, or needing no sign-off) adds none. Then do that one step for this page only (the skill's pace table), "
                     "reporting as you go with `kea progress \"…\" --page <page>`; write the run entry, commit, build, "
                     "publish, and answer the thread with the commit. Then stop for review and watch again."},

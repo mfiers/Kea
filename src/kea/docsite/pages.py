@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, questions, versions
+from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, questions, signing, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
@@ -641,12 +641,21 @@ class SiteRenderer:
                       f"{(', version ' + esc(str(confirmed.get('version', '')))) if isinstance(confirmed, dict) and confirmed.get('version') else ''}'>"
                       f"✓ confirmed{(' by ' + esc(by)) if by else ''}</span>")
         signed = graph.signatures(node)
-        if signed:              # sign-offs (Approve on the site, or the owner in chat): who, which version, when
-            names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
-            detail = "; ".join(f"{item.get('by') or '?'}" + (f", version {item.get('version')}" if item.get("version") else "")
-                               + (f", {item.get('date')}" if item.get("date") else "")
-                               + (" (in chat)" if item.get("how") == "chat" else "") for item in signed)
-            pills += f" <span class='pill fb-pp-ok' title='Signed off: {esc(detail)}'>✓ approved by {esc(names)}</span>"
+        if signed:              # sign-offs (Approve on the site, or the owner in chat), bound to the wording (signing.py)
+            holding = [item for item in signed if signing.holds(item, node)]
+            detail = "; ".join(signing.describe(item, node) for item in signed)
+            if holding:
+                names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
+                minor = sum(len(item.get("minor") or []) for item in holding if signing.state(item, node) == "minor")
+                pills += (f" <span class='pill fb-pp-ok' title='Signed off: {esc(detail)}'>✓ approved by {esc(names)}"
+                          + (f" · {minor} minor edit{'s' if minor > 1 else ''} since" if minor else "") + "</span>")
+            else:
+                names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
+                pills += (f" <span class='pill s-recheck' title='{esc(detail)}. Compare the versions under History; "
+                          f"Approve signs the new wording.'>changed since {esc(names)} signed</span>")
+        bundle = signing.bundle(self.tree, node) if self.tree.pace == "guided" else []
+        bundle_data = json.dumps([{"key": item.key, "label": item.label or item.title, "title": item.title,
+                                   "type": item.type, "version": self.page_version(item)} for item in bundle])
         kind_html = (f"{icons.svg(node.type)}Experiment" if node.type == "experiment" else fullname_inner(node))
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
@@ -654,6 +663,7 @@ class SiteRenderer:
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"
+                 f"{(' data-bundle=' + chr(39) + esc(bundle_data) + chr(39)) if len(bundle) > 1 else ''}"
                  f" style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
@@ -1137,7 +1147,13 @@ class SiteRenderer:
                     stands = f"<span class='rs rs-done'>✓ signed off</span> <span class='help'>by {esc(names)} · not started</span>"
                 else:
                     stands = "<span class='rs rs-free'>no sign-off needed</span> <span class='help'>· not started</span>"
-                if not action:
+                together = signing.bundle(tree, node) if node.waiting else []
+                if node.waiting and signing.stale(node):
+                    stands = "<span class='rs rs-you'>● changed since signed</span>"
+                if len(together) > 1 and not action:
+                    button = (f"<b>✓ Approve all {len(together)}</b> <span class='help'>("
+                              + ", ".join(esc(item.label) for item in together) + ")</span>")
+                elif not action:
                     button = "<b>✓ Approve</b>"
                 elif node.waiting:
                     button = f"<b>▶ Approve &amp; {esc(action)}</b> <span class='help'>or ✓ Approve</span>"
@@ -1184,12 +1200,15 @@ class SiteRenderer:
         signed.sort(key=lambda pair: str(pair[0].get("date") or ""), reverse=True)
         parts.append(f"<h2>Sign-offs <span class='count'>{len(signed)}</span></h2>")
         if signed:
+            state_text = {"current": "holds", "minor": "holds, minor edits since", "legacy": "before 1.29, unbound",
+                          "changed": "page changed since: no longer holds"}
             rows = [f"<tr><td>{link(node)}</td><td>{esc(str(item.get('by') or '?'))}</td>"
+                    f"<td title='{esc(signing.describe(item, node))}'>{state_text[signing.state(item, node)]}</td>"
                     f"<td>{esc(str(item.get('version') or ''))}</td><td class='nowrap'>{esc(str(item.get('date') or ''))}</td>"
-                    f"<td>{'in chat' if item.get('how') == 'chat' else 'on the site' if item.get('how') == 'site' else esc(str(item.get('how') or ''))}</td></tr>"
+                    f"<td>{'in chat (recorded by the agent)' if item.get('how') == 'chat' else 'on the site' if item.get('how') == 'site' else esc(str(item.get('how') or ''))}</td></tr>"
                     for item, node in signed[:60]]
             parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Signed by</th>"
-                         "<th>Version</th><th>Date</th><th>How</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+                         "<th>State</th><th>Version</th><th>Date</th><th>How</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
                          + (f"<p class='help'>The {len(signed) - 60} older sign-offs are on the pages themselves.</p>"
                             if len(signed) > 60 else ""))
         else:

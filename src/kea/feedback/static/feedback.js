@@ -355,11 +355,16 @@
   const pageConfirmed = () => !!(container && container.querySelector(".node-content[data-confirmed]"));
   const contentData = () => { const content = container && container.querySelector(".node-content"); return content ? content.dataset : {}; };
   const pageVersion = () => contentData().version || "";
+  /* The stage this page waits in (signing.bundle at build time): one Approve signs every page in it. */
+  const bundle = () => { try { return JSON.parse(contentData().bundle || "[]"); } catch (error) { return []; } };
+  const signsLine = items => "Signs: " + items.map(item => item.key + "@" + item.version).join(", ");
+  const bundleList = items => items.map(item => "  " + item.label + "  " + item.title).join("\n");
   /* Approve & go: a sign-off that also asks Claude for the next step of this page now (data-go: write the plan, run
      the step, …). Needs the right to steer: the server answers need_steer and cycle.js asks for the password. */
   async function approveAndGo(action, sign) {
     const version = pageVersion();
-    const ask = sign ? `Sign off on this page${version ? " (version " + version + ")" : ""} and ask Claude to ${action} now?`
+    const ask = sign && bundle().length > 1 ? `Sign off on these ${bundle().length} pages and ask Claude to ${action} now?\n\n${bundleList(bundle())}`
+      : sign ? `Sign off on this page${version ? " (version " + version + ")" : ""} and ask Claude to ${action} now?`
       : `Ask Claude to ${action} now? The page is signed off already; this adds no signature.`;
     if (!confirm_(ask + "\n\nClaude does only that, publishes, and stops for your review. The banner at the top shows when it picks the request up and what it is doing.")) return;
     if (!getName()) {
@@ -368,7 +373,7 @@
       setName(name);
     }
     const body = { page: PAGE, page_title: TITLE, page_commit: COMMIT, page_version: version,
-      text: (sign ? "Approve & " : "Go: ") + action, tags: ["go"] };
+      text: (sign ? "Approve & " : "Go: ") + action + (sign && bundle().length > 1 ? "\n" + signsLine(bundle()) : ""), tags: ["go"] };
     try {
       await api("POST", API, body);
     } catch (error) {
@@ -392,6 +397,8 @@
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
       const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
+      const one = pill("fb-d-confirm-one", "✓ This page only", "Sign off on this page alone; the others keep waiting", () => {});
+      one.hidden = true;
       const go = pill("fb-d-go", "▶ Approve & go", "", () => {});
       go.hidden = true;
       const revise = pill("fb-d-revise", "↻ Revise ▸", "Rewrite this page: say what to change; this branch is reworked", () => toggleDockPop(revise, "revise"));
@@ -399,7 +406,7 @@
       const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
       const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
       const propose = pill("fb-d-propose", "Propose ▸", "Propose the next step of the reasoning: a question, hypothesis, step, conclusion, caveat …", () => toggleDockPop(propose, "propose"));
-      items.append(el("span", { class: "fb-dock-gap" }), confirm, go, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
+      items.append(el("span", { class: "fb-dock-gap" }), confirm, one, go, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
       onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
@@ -446,8 +453,25 @@
       : done ? "This page is confirmed; click to withdraw the confirmation (in the next plan)"
       : waitingPage ? `Sign off on this version${pageVersion() ? " (" + pageVersion() + ")" : ""}: your name and the version are recorded on the page at the next harvest. It asks for no further work; Approve & go also does.`
       : "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
+    const together = waitingPage ? bundle() : [];
+    const one = dockEl.querySelector(".fb-d-confirm-one");
+    if (one) {
+      one.hidden = !(together.length > 1) || !!asked || !!going;
+      one.onclick = async () => { if (dropped) await withdraw(dropped, "drop replaced by approve"); await tagThread(null, ["approve"]); };
+    }
+    if (together.length > 1 && !asked) {
+      confirm.textContent = `✓ Approve all ${together.length}`;
+      confirm.title = "One sign-off for every page that waits in this stage:\n" + bundleList(together)
+        + "\nYour name and the version of each page are recorded. If a page changes later (beyond a minor edit), it waits again.";
+    }
     confirm.onclick = async () => {
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
+      if (together.length > 1) {
+        if (!confirm_(`You sign off on these ${together.length} pages, as you see them now:\n\n${bundleList(together)}\n\nIf one of them changes later (beyond a minor edit), it waits for you again.`)) return;
+        if (dropped) await withdraw(dropped, "drop replaced by approve");
+        await tagThread(null, ["approve"], signsLine(together));
+        return;
+      }
       if (unasked) return withdraw(unasked, "withdrawal taken back");
       if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
       if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());

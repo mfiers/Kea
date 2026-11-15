@@ -11,7 +11,7 @@
   (`kea publish --files`).
 - Pace: one step along the route, then stop for the owner's review (experiment → questions → hypotheses and
   planned steps → results → conclusions); go further only when the owner says so in chat or presses Approve & go.
-  Sign-offs go on the page (`approved:`, a list: by, date, version, how); `kea context` names the next step.
+  Sign-offs go on the page with `kea sign` (never by hand): bound to the wording signed; minor edits with `kea sign <id> --minor --because …`; `kea context` names the next step.
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
   the run, re-check the caveats and update `answer:` and the summaries. `kea context <experiment>` shows open work.

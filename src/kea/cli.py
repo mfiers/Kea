@@ -14,6 +14,8 @@
     kea context <question|experiment> what to take into account before working on it (premises, decisions,
                                       caveats, evidence so far, open comments, gaps)
     kea check                         validate doc/ against doc/_schema.yaml and the graph rules without building
+    kea sign --thread T | <id> … --by NAME | <id> --minor --because "…" | --adopt | --list
+                                      sign-offs bound to the page's wording; minor edits that keep them
     kea recheck --list | <id> … --because "…"
                                       pages to recheck after an upstream change; record that one was checked
     kea drop <id>                     what a Drop of that page removes (it and what rests only on it)
@@ -62,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == "drop":
         from kea.docsite import graph
         return graph.drop_main(rest)
+    if command == "sign":
+        from kea.docsite import signing
+        return signing.main(rest)
     if command == "recheck":
         from kea.docsite import graph
         return graph.main(rest)

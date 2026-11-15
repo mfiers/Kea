@@ -156,7 +156,7 @@ def test_waiting_pages_under_guided_pace(tmp_path):
     tree = nodes.load_tree(doc)
     assert tree.nodes["p:q-a"].waiting and tree.nodes["p:h-a"].waiting and tree.nodes["p:r-a"].waiting
     assert not tree.nodes["p:s-a"].waiting                                  # done, not planned (a problem instead)
-    assert not tree.nodes["p:c-a"].waiting and "waiting for approval" in render.status_pill(tree.nodes["p:q-a"])
+    assert tree.nodes["p:c-a"].waiting and "waiting for approval" in render.status_pill(tree.nodes["p:q-a"])  # 1.29: conclusions wait too
     (tmp_path / "kea.yaml").write_text("pace: free\n")
     assert not nodes.load_tree(doc).nodes["p:q-a"].waiting
 
