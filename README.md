@@ -125,7 +125,7 @@ Approve & go does not wait for a harvest. It signs the page off like Approve and
 
 Progress, in the menu bar (with the number of pages that wait for a click), is the overview. Waiting for you lists every page that waits for a reader, in one table: a page that needs your sign-off (Approve signs it off and stops there) and a page that is signed off, or needs no sign-off, whose next step is Claude's but not started (▶ Run the step, or the step named, asks for it); each row names the button and the step it starts. Below: the route of every question (approved, plan, run, results, conclusions: done, waiting for you, the agent's turn, running, closed), the open Approve & go requests with the agent's status, and every sign-off with its name, version and date.
 
-The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs.
+The plan page shows the agent's session (watching, with the time since its last heartbeat; working; ended; stopped unexpectedly) and offers Harvest and Implement to PIs. PIs (readers who may steer) also get one button in the menu bar that follows the cycle: Harvest · N when comments wait outside the plan, ▶ Implement once the plan stands, and what Claude is doing while it works; the plan page keeps the other controls (Harvest again, Cancel).
 
 <!-- /help -->
 

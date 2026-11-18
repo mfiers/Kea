@@ -93,6 +93,14 @@
   window.keaAskSteer = askSteerPassword;            // feedback.js: Approve & go
 
   async function post(action, retried) {
+    // the server records who asked: a reader without a name (no account, no comment yet) gives it first, as for a
+    // comment (the same fb_name cookie as feedback.js)
+    const named = window.keaStatus && (window.keaStatus.you || window.keaStatus.account);
+    if (!named && !/(?:^|; )fb_name=[^;]/.test(document.cookie)) {
+      const name = (prompt("Your name (shown with your comments and requests):") || "").trim();
+      if (!name) return;
+      document.cookie = "fb_name=" + encodeURIComponent(name) + "; max-age=" + 365 * 86400 + "; path=/; samesite=lax";
+    }
     const response = await fetch(BASE + "api/cycle/" + action, { method: "POST", credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
     if (response.status === 403 && data.need_steer && !retried) {
@@ -180,6 +188,52 @@
     } else if (state === "implementing") {
       box.append(el("span", { class: "fb-help" }, `Claude is implementing this plan (since ${when(status.cycle.since)}).`));
     }
+  }
+
+  /* The review cycle in the menu bar, for readers who may steer (status.can_steer: a PI or director account on a
+     hub, the iteration password, or a site without one): one button that follows the cycle. Harvest when comments
+     wait outside the plan; ▶ Implement once the plan stands and has items; a state while Claude works on either.
+     The plan page keeps the full controls (Harvest again, Cancel). */
+  function menuCycle(status) {
+    const bar = document.querySelector(".topbar");
+    if (!bar) return;
+    let slot = bar.querySelector(".cycle-tool");
+    if (!status.can_steer) { if (slot) slot.remove(); return; }
+    if (!slot) {
+      slot = el("span", { class: "cycle-tool" });
+      bar.insertBefore(slot, bar.querySelector(".page-tools") || bar.querySelector(".user"));
+    }
+    const cycle = status.cycle, waiting = status.unplanned || 0;
+    const known = status.build && status.build.plan_items;
+    const items = known ? Number(known[String(cycle.cycle)] || 0) : null;      // null: a build before 1.29.3
+    const button = (cls, label, title, onclick) => el("button", { class: cls, title, onclick }, label);
+    const toPlan = () => { location.href = PREFIX + "plan.html"; };
+    const harvest = (label) => button("ct-harvest", label, `Claude folds the ${waiting} comment(s) not yet in the plan into it`,
+      () => post("harvest"));
+    let content = null;
+    if (cycle.state === "collecting") {
+      if (waiting) content = harvest(`⇣ Harvest · ${waiting}`);
+    } else if (cycle.state === "harvest-requested") {
+      content = button("ct-busy", "⟳ Harvesting", `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude folds the comments into the plan`, toPlan);
+    } else if (cycle.state === "harvested") {
+      if (items === null || items > 0) {
+        content = button("ct-implement", "▶ Implement", "Ask Claude to implement the plan (comments pause until the release)" +
+          (waiting ? `; ${waiting} comment(s) made after the harvest stay for the next cycle (Harvest again on the plan page)` : ""), () => {
+            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next cycle.` : "";
+            if (confirm("Ask Claude to implement the plan now? Comments are paused until the new version is released." + left)) post("implement");
+          });
+      } else if (waiting) content = harvest(`⇣ Harvest again · ${waiting}`);
+    } else if (cycle.state === "implement-requested") {
+      content = button("ct-busy", "▶ Implement asked", `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
+    } else if (cycle.state === "implementing") {
+      content = button("ct-busy", "⟳ Implementing", `Claude is implementing the plan (since ${when(cycle.since)})`, toPlan);
+    }
+    const label = content ? content.textContent + "|" + content.title : "";
+    if (slot.dataset.label === label) return;          // unchanged: keep the button (and any focus on it)
+    slot.dataset.label = label;
+    slot.replaceChildren(...(content ? [content] : []));
+    slot.hidden = !content;
+    window.dispatchEvent(new Event("resize"));          // the menu bar fits itself again (render.TOPBAR_JS)
   }
 
   function goneBanner(status) {
@@ -286,6 +340,7 @@
       pill.className = "pill s-" + cycle.state;
     }
     planActions(status);
+    menuCycle(status);
     progressLive(status);
     lastState = cycle.state;
     window.keaStatus = status;

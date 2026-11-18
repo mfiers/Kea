@@ -47,6 +47,7 @@ cursor:pointer;flex:0 0 auto}
 .topbar.folded .links{display:none}
 .topbar.folded.open .links{display:flex;flex-direction:column;gap:8px;position:absolute;right:12px;top:100%;
 background:#1d2330;padding:10px 16px;border-radius:0 0 8px 8px;z-index:2000;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.topbar .cycle-tool{display:flex;flex:0 0 auto}.topbar .cycle-tool[hidden]{display:none}.topbar .cycle-tool button{border:1px solid #4a5468;background:#2c3446;color:#fff;border-radius:5px;cursor:pointer;font:600 13px system-ui,sans-serif;padding:2px 10px;white-space:nowrap}.topbar .cycle-tool button:hover{background:#3d475b}.topbar .cycle-tool .ct-implement{background:#24453a;border-color:#3f7a63}.topbar .cycle-tool .ct-implement:hover{background:#2e5a4b}.topbar .cycle-tool .ct-busy{background:none;color:#c9d2e3;font-weight:500}
 .topbar .page-tools{display:flex;gap:8px;flex:0 0 auto}.topbar .page-tools:empty{display:none}
 .topbar .page-tools button{background:#2c3446;border:1px solid #4a5468;color:#fff;border-radius:5px;cursor:pointer;
 display:inline-flex;align-items:center;gap:5px;font:600 13px system-ui,sans-serif;padding:2px 9px}

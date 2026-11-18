@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -84,7 +85,12 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     (site / "_sources.json").write_text(json.dumps(editable, indent=1, sort_keys=True))   # pages with an Edit button
     from kea.docsite import identity
     (site / "_ids.json").write_text(json.dumps(identity.index(tree), indent=1, sort_keys=True))   # /id/<uid> resolver
+    plan_items = {}                                   # items per cycle plan (the menu bar's Implement button)
+    for plan in sorted((PROJECT_ROOT / "doc" / "_cycles").glob("cycle-*.md")):
+        number = plan.stem.split("-")[-1].lstrip("0") or "0"
+        plan_items[number] = len(re.findall(r"^### ", plan.read_text(encoding="utf-8"), flags=re.M))
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
+                                                  "plan_items": plan_items,
                                                   "previews_marked": True,      # kea publish relies on this
                                                   "built_at": dt.datetime.now().isoformat(timespec="seconds")}))
     from kea.docsite import linkcheck
