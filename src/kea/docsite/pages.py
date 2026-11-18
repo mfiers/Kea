@@ -664,6 +664,7 @@ class SiteRenderer:
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"
                  f"{(' data-bundle=' + chr(39) + esc(bundle_data) + chr(39)) if len(bundle) > 1 else ''}"
+                 f"{(' data-stage-go=' + chr(39) + esc(graph.stage_action(self.tree, bundle)) + chr(39)) if len(bundle) > 1 else ''}"
                  f" style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
@@ -1132,8 +1133,9 @@ class SiteRenderer:
         parts.append(f"<h2>Waiting for you <span class='count'>{len(waiting) + len(ready)}</span></h2>")
         if waiting or ready:
             parts.append("<p class='help'>Every page here waits for a click from a reader; nothing moves until then. "
-                     "<b>Needs your sign-off</b>: the page is new and nobody has approved it; <b>Approve</b> signs it "
-                     "off and stops there. <b>Signed off, not started</b>: the page is approved (or needs no sign-off) "
+                     "<b>Needs your sign-off</b>: the page is new and nobody has approved it; <b>▶ Approve &amp; …</b> "
+                     "signs it (with the other pages of its stage) and starts the next step; <b>✓ Approve only</b> signs "
+                     "and stops there. <b>Signed off, not started</b>: the page is approved (or needs no sign-off) "
                      "and its next step is Claude's, waiting for a go. <b>▶ Approve &amp; …</b> signs the page off and "
                      "asks Claude to take that step now; on a page signed off already the button is just "
                      "<b>▶ Run the step</b> (or Write the plan, …).</p>")
@@ -1150,15 +1152,19 @@ class SiteRenderer:
                 else:
                     stands = "<span class='rs rs-free'>no sign-off needed</span> <span class='help'>· not started</span>"
                 together = signing.bundle(tree, node) if node.waiting else []
+                if len(together) > 1:
+                    action = graph.stage_action(tree, together)
                 if node.waiting and signing.stale(node):
                     stands = "<span class='rs rs-you'>● changed since signed</span>"
+                listed = (" <span class='help'>(" + ", ".join(esc(item.label) for item in together) + ")</span>"
+                          if len(together) > 1 else "")
                 if len(together) > 1 and not action:
-                    button = (f"<b>✓ Approve all {len(together)}</b> <span class='help'>("
-                              + ", ".join(esc(item.label) for item in together) + ")</span>")
+                    button = f"<b>✓ Approve all {len(together)}</b>{listed}"
                 elif not action:
                     button = "<b>✓ Approve</b>"
                 elif node.waiting:
-                    button = f"<b>▶ Approve &amp; {esc(action)}</b> <span class='help'>or ✓ Approve</span>"
+                    all_ = f"all {len(together)} " if len(together) > 1 else ""
+                    button = f"<b>▶ Approve {all_}&amp; {esc(action)}</b>{listed} <span class='help'>or ✓ Approve only</span>"
                 else:
                     button = f"<b>▶ {esc(action[0].upper() + action[1:])}</b>"
                 rows.append(f"<tr data-page='{esc(node.key)}'><td class='rq'>{link(node)}"

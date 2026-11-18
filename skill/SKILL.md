@@ -72,16 +72,18 @@ support). **Never write or edit `approved:` by hand: use `kea sign`.** The owner
 (name the pages they approved; "looks good" about one question approves that question only):
 `kea sign <id> … --by "<name>"` (recorded as `how: chat`, shown as recorded by you). A reader presses on the site:
 
-- **Approve**: a sign-off only. On a page that waits with others in the same stage, the button signs them all
-  ("✓ Approve all 5": the experiment with its proposed questions, premises and decisions; a question's plan; its
-  results; its conclusions), and the thread's text has a `Signs:` line naming each page and the version seen;
-  "✓ This page only" signs one. Apply it at the next harvest with `kea sign --thread <thread>` (it reads the
-  bundle and the versions; change no claim); it asks for no further work.
-- **Approve & go** (needs the right to steer): the same signature (`kea sign --thread <thread>`), plus a request
-  to take that page's next step now; the button says which (propose questions, write the plan, plan its steps, run
-  the step, draw conclusions). `kea watch` stops with exit 40; see the review cycle. On a page signed off already
-  (or under `pace: free`) the button is just **▶ Run the step** (Write the plan, …): the thread's text starts with
-  `Go:` and adds no signature.
+- **▶ Approve & <next step>** (the main button on a page that waits; needs the right to steer): signs every page
+  that waits in the same stage ("▶ Approve all 3 & run the plan": the experiment with its proposed questions,
+  premises and decisions; a question's plan; its results; its conclusions) and asks for the stage's next step now
+  (propose questions, write the plan, plan its steps, run the step, run the plan, draw conclusions). The thread's
+  text starts with `Approve &` and has a `Signs:` line naming each page and the version seen. `kea watch` stops
+  with exit 40; see the review cycle. On a page signed off already (or under `pace: free`) the button is just
+  **▶ Run the step** (Write the plan, …): the text starts with `Go:` and adds no signature.
+- **✓ Approve only**: the same sign-off, without asking for the next step (on a stage: all its pages, or "this page
+  only"). `kea watch` stops with exit 50: apply it at once with `kea sign --pending` (it reads the bundles and the
+  versions; change no claim), commit, build, publish, answer each thread, and start nothing else.
+- **Revise** and **Drop** on a page that waits carry the hidden tag `route`: they also stop `kea watch` with exit
+  50 (`kea sign --pending` lists them); do them at once, as at a harvest, and stop.
 
 **A signature holds only for the wording signed.** When you change a signed page's title, summary, text or fields
 (not its status or outcome), the signature stops holding: the page waits for a new sign-off and the site shows
@@ -385,10 +387,15 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    `### N. title` item per change, the threads it answers, the kind of change and the proposed version (front
    matter `version:`). Reply to each thread with its item (`kea reply <thread> "…" --status planned`), commit, run
    `kea cycle plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest; before it,
-   apply Approve, Revise and Drop on pages that wait for approval, see Tags), `make site`
+   apply any Approve, Revise and Drop on pages that wait that are still open: normally exit 50 took them, see Tags), `make site`
    (and `kea publish`), and watch again. The plan then stands until the next harvest; comments go on, and the plan
    page counts those made since.
-3. **Approve & go (exit 40):** a reader signed a page off and asked for its next step now; `kea list` shows the
+3. **Sign-off (exit 50):** a reader pressed Approve only, or Revise / Drop on a page that waits. Run `kea sign
+   --pending`: it writes every open site sign-off onto its pages (bound to the version seen) and lists the Revise
+   and Drop requests on waiting pages; do those as at a harvest. Commit (run entry), `make site`, `kea publish`,
+   answer each thread with the commit (`kea reply <thread> "Signed off in <sha>" --status answered`; a revise or
+   drop: `--status page-changed --commit <sha>`), start nothing else, and watch again.
+4. **Approve & go (exit 40):** a reader signed a page off and asked for its next step now; `kea list` shows the
    thread (tag `go`, its text names the step, its page version). If its text starts with `Approve &`, apply the signature(s) with `kea sign --thread <thread>` (`Go:`
    adds none); then
    do **that one step for that page only**, as in the pace table (write the plan → hypotheses and planned steps;
@@ -397,14 +404,15 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
    --page <page>`, `kea progress "running S2: 3 of 8 donors"`, `kea progress "publishing"`. Then the run entry,
    commit, `make site`, `kea publish`, answer the thread with the commit (`kea reply <thread> "…" --status
    page-changed --commit <sha>`), stop for review and start `kea watch` again. Several requests: one at a time,
-   oldest first. A request you cannot do (the step needs data you lack, the route is not there yet): answer the
+   oldest first. Apply any other open sign-off first (`kea sign --pending`). "Run the plan": every approved planned step of
+   the question, then its results. A request you cannot do (the step needs data you lack, the route is not there yet): answer the
    thread saying why (`--status wont-fix`) and watch again; never leave it open.
-4. **Implement (exit 20):** a PI pressed Implement (only possible after a harvest); comments made after the
+5. **Implement (exit 20):** a PI pressed Implement (only possible after a harvest); comments made after the
    harvest are not in the plan and stay for the next cycle. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
    `kea apply-suggestion <thread>`, then check every number against its source and commit with the reader as
    co-author. After the changes, work through `kea recheck --list` (see "The graph as a whole") before the
    release. Never implement before Implement unless the owner asks in chat.
-5. **Release:**
+6. **Release:**
    - Reply to each thread with its commit (`--status page-changed --commit <sha>`).
    - Set the plan's `status: implemented` and `run:`.
    - Write the run entry and commit.

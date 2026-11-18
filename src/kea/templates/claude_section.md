@@ -19,8 +19,9 @@
   comments into `doc/_cycles/cycle-NNN.md` (`kea reply … --status planned`), then always `kea cycle plan-updated
   --commit …` (it ends the harvest). Exit 20 (Implement) → `kea cycle start`, implement, run entry, replies with
   commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a
-  plan item before Implement unless the owner asks in chat. Exit 40 (Approve & go on a page): sign it off, do that
-  page's next step only (`kea list` names it), tell readers with `kea progress "…" --page <page>` as you go, run
+  plan item before Implement unless the owner asks in chat. Exit 50 (a sign-off, or Revise / Drop on a waiting page):
+  `kea sign --pending`, do the revisions or drops it lists, commit, build, publish, answer, start nothing else, watch
+  again. Exit 40 (Approve & go on a page): sign it off (and `kea sign --pending`), do that page's (or stage's) next step only (`kea list` names it), tell readers with `kea progress "…" --page <page>` as you go, run
   entry, commit, `make site`, `kea publish`, answer the thread with the commit, stop for review, watch again.
 - After any change, `kea recheck --list`: read every page downstream of a changed page against the change,
   update it if it is even slightly affected, then `kea recheck <id> --because "…"`; releases wait for this.

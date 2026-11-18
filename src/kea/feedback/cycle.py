@@ -176,6 +176,27 @@ def go_requests(threads: list) -> list:
                   key=lambda thread: thread.created_at)
 
 
+def _answered(thread) -> bool:
+    """Claude has had the last word (it answered the request; the thread may still show as open)."""
+    return bool(thread.replies) and thread.replies[-1].author == "claude"
+
+
+def sign_requests(threads: list) -> list:
+    """Sign-offs given on the site that Claude has not written onto the pages: open Approve threads (an Approve & go
+    is a go request), oldest first."""
+    return sorted((thread for thread in threads if "approve" in thread.tags and "go" not in thread.tags
+                   and thread.status == "open" and not _answered(thread)), key=lambda thread: thread.created_at)
+
+
+def route_requests(threads: list) -> list:
+    """Decisions on pages that wait for a sign-off, taken up at once (kea watch exit 50): open sign-offs, and Revise
+    or Drop on a waiting page (the site adds the route tag), oldest first."""
+    route = [thread for thread in threads if "route" in thread.tags and "go" not in thread.tags
+             and thread.status == "open" and not _answered(thread)]
+    return sorted({thread.thread_id: thread for thread in sign_requests(threads) + route}.values(),
+                  key=lambda thread: thread.created_at)
+
+
 def last_activity(thread) -> str:
     times = [thread.created_at, thread.status_at] + [reply.created_at for reply in thread.replies]
     return max(time for time in times if time)
@@ -279,6 +300,8 @@ def read_heartbeat(path: Path | None = None) -> str:
 
 def needs_planning(threads: list, current: CycleState) -> list:
     """Threads not in the plan: needing attention, with activity after the moment the last harvest covers."""
+    direct = {thread.thread_id for thread in route_requests(threads)} | {thread.thread_id for thread in go_requests(threads)}
+    threads = [thread for thread in threads if thread.thread_id not in direct]   # taken up at once, not harvested
     cutoff = current.harvested_until or current.plan_updated_at
     if not cutoff:
         return [thread for thread in threads if needs_attention(thread)]

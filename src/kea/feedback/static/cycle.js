@@ -126,7 +126,7 @@
     const last = watcher.seen_at ? `last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)})` : "";
     const until = deadlineText(watcher);
     const doing = watcher.doing || { planning: "harvesting the comments into the plan", implementing: "implementing the plan",
-      going: "taking the next step a reader asked for" }[watcher.exit] || watcher.exit;
+      going: "taking the next step a reader asked for", signing: "writing a sign-off onto the pages" }[watcher.exit] || watcher.exit;
     const parts = {
       none: ["○", "Claude's watcher has not run on this site yet."],
       watching: ["●", `Claude is watching: ${last}.` + (until ? ` Session until ${until}.` : "")],
@@ -307,7 +307,7 @@
       if (stands) {
         stands.textContent = signing.has(key) && !going.has(key) ? "✓ signed on the site" : stands.dataset.was;
         stands.className = "rs " + (signing.has(key) && !going.has(key) ? "rs-done" : "rs-you");
-        if (cell && signing.has(key) && !going.has(key)) cell.textContent = "Claude writes it onto the page at the next harvest or step";
+        if (cell && signing.has(key) && !going.has(key)) cell.textContent = "Claude writes it onto the page when it picks it up";
       }
       row.classList.toggle("signed-live", signing.has(key) || going.has(key));
       const button = row.cells[2];

@@ -298,3 +298,10 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 .kindrow .kind:hover .fb-kind-pencil,.fb-kind-pencil:focus-visible{opacity:1}.fb-kind-pencil:hover{color:#1d2330}
 @media (hover:none){.fb-kind-pencil{opacity:.5}}
 .fb-readonly .fb-kind-pencil{display:none}
+/* the dock's groups (Change ▸, More ▸): pills that open in place, indented under their head */
+.fb-dgroup{display:flex;flex-direction:column;align-items:stretch;gap:5px}
+.fb-dgroup-items{display:flex;flex-direction:column;align-items:stretch;gap:5px;padding-left:14px;border-left:2px solid #dde2ea;margin-left:8px}
+.fb-dgroup-head{color:#3b4252}.fb-dgroup-head[aria-expanded=true]{background:#eef1f5;font-weight:600}
+.fb-dgroup-head.fb-pending{background:#fdecea;border:2px dashed #b3261e;color:#8c1d18}
+/* Approve, when there is no next step to ask for: the main button of the page */
+.fb-dpill.fb-d-confirm.fb-main{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:600}.fb-dpill.fb-d-confirm.fb-main:hover{background:#256a29}

@@ -263,4 +263,12 @@ def test_approve_and_go_needs_steering_wakes_the_watcher_and_reports_progress(tm
     store.append_event({"type": "status", "thread_id": thread.thread_id, "status": "page-changed", "commit": "abc1234",
                         "author": "claude"}, events)
     assert client.get("/api/status").json()["goes"] == []                     # answered: no longer open
+    # the plain sign-off is still open: it wakes the watcher too (exit 50), and kea sign --pending applies it
+    assert cli.main(common + ["--deadline", str(time.time() + 5)]) == 50
+    assert "kea sign --pending" in capsys.readouterr().out
+    plain = [item for item in store.threads(events) if item.tags == ["approve"]][0]
+    assert [item.thread_id for item in cycle.sign_requests(store.threads(events))] == [plain.thread_id]
+    assert plain.thread_id not in [item.thread_id for item in cycle.needs_planning(store.threads(events), cycle.state(log))]
+    store.append_event({"type": "reply", "thread_id": plain.thread_id, "text": "Signed off in abc1234",
+                        "author": "claude"}, events)
     assert cli.main(common + ["--deadline", str(time.time() + 0.3)]) == 30

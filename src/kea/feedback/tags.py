@@ -144,19 +144,27 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
      "help": "Sign off on this version of the page: it may be built on",
      "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill), or on every "
-                    "page its `Signs:` line names (one click for a whole stage). Apply it at the harvest itself, not at "
-                    "Implement, with `kea sign --thread <this thread>`: it records each signature bound to the version "
-                    "the reader saw (never edit `approved:` by hand), keeps earlier signatures, and changes nothing "
-                    "else. A sign-off asks for no further work: the next step waits for an Approve & go, or for the "
-                    "owner in chat."},
+                    "page its `Signs:` line names (one click for a whole stage). `kea watch` stops for it (exit 50): apply "
+                    "every open sign-off with `kea sign --pending` (or one with `kea sign --thread <this thread>`): "
+                    "it records each signature bound to the version the reader saw (never edit `approved:` by hand), "
+                    "keeps earlier signatures, and changes nothing else. Then build, publish, answer the thread with "
+                    "the commit (`--status answered`) and watch again. A sign-off asks for no further work: the next step waits "
+                    "for an Approve & go, or for the owner in chat."},
     {"name": "go", "group": "verdict", "task": True, "scope": "page", "label": "approve & go", "hidden": True,
      "help": "Sign off on this page and ask the agent to take the next step now",
      "instruction": "The reader signs off on this page and asks for the next step now; the thread's text names it "
                     "(write the plan, run the step, …). `kea watch` stops for it (exit 40). When the text starts "
                     "with \"Approve &\", apply the signature(s) with `kea sign --thread <this thread>`; \"Go:\" (a page signed off "
-                    "already, or needing no sign-off) adds none. Then do that one step for this page only (the skill's pace table), "
+                    "already, or needing no sign-off) adds none; apply other open sign-offs too (`kea sign --pending`). "
+                    "Then do that one step (the skill's pace table; \"run the plan\": every approved planned step of the "
+                    "question, then its results), "
                     "reporting as you go with `kea progress \"…\" --page <page>`; write the run entry, commit, build, "
                     "publish, and answer the thread with the commit. Then stop for review and watch again."},
+    {"name": "route", "group": "verdict", "task": False, "scope": "page", "label": "now", "hidden": True,
+     "help": "A decision on a page that waits for a sign-off: Claude takes it up now",
+     "instruction": "Added by the site to a Revise or Drop on a page that waits for a sign-off (pace: guided): "
+                    "`kea watch` stops for it (exit 50) instead of waiting for a harvest. Do what the other tag "
+                    "asks, then stop for review."},
     {"name": "revise", "group": "verdict", "task": True, "scope": "page", "label": "revise", "needs_text": True,
      "help": "Rewrite this page (say what to change): this branch is reworked",
      "instruction": "The reader asks to revise this page; their text says what to change. A page that waits for "

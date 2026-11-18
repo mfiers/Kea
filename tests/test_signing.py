@@ -156,3 +156,36 @@ def test_context_names_waiting_premises_and_decisions(tmp_path):
     tree = nodes.load_tree(doc)
     first = graph.next_steps(tree, "p")[0]
     assert first.startswith("Waiting for the owner to sign off on") and "(premise)" in first
+
+
+def test_kea_sign_pending_applies_every_open_sign_off(tmp_path, monkeypatch, capsys):
+    from kea.docsite import identity
+    from kea.feedback import cycle
+    doc = _doc(tmp_path)
+    (tmp_path / "kea.yaml").write_text("pace: guided\n")
+    _hypothesis(doc)
+    _page(doc, "p/step/s-a.md", "id: s-a\ntype: step\ntitle: Run\nshort: Runs.\nparent: q-a\nstatus: planned\n"
+          "relations:\n  tests: [h-a]")
+    _page(doc, "p/step/s-b.md", "id: s-b\ntype: step\ntitle: Control\nshort: Permutes.\nparent: q-a\n"
+          "status: planned\nrelations:\n  tests: [h-a]")
+    for relative in ("p/result/r-a.md", "p/conclusion/c-a.md"):
+        (doc / relative).unlink()
+    _sign_all(doc, "home.md", "q-a.md", "p-a.md")
+    monkeypatch.setattr(nodes, "DOC", doc)
+    monkeypatch.setattr(nodes, "PROJECT_ROOT", tmp_path)
+    events = tmp_path / "events.jsonl"
+    monkeypatch.setattr(store, "default_path", lambda: events)
+    tree = nodes.load_tree(doc)
+    stage = signing.bundle(tree, tree.nodes["p:s-b"])
+    assert graph.stage_action(tree, stage) == "run the plan"              # two planned steps: the plan runs as one
+    signs = "Signs: " + ", ".join(f"{node.key}@{identity.version_of(node)}" for node in stage)
+    store.append_event({"type": "create", "page": "p:s-b", "author": "Ann", "text": signs, "tags": ["approve"],
+                        "page_version": identity.version_of(tree.nodes["p:s-b"])}, events)
+    store.append_event({"type": "create", "page": "p:s-a", "author": "Ann", "text": "Simpler, please",
+                        "tags": ["revise", "route"]}, events)
+    assert len(cycle.route_requests(store.threads(events))) == 2
+    assert signing.main(["--pending"]) == 0
+    out = capsys.readouterr().out
+    assert "also waiting: revise on p:s-a" in out and "kea reply" in out
+    tree = nodes.load_tree(doc)
+    assert all(graph.approved(tree.nodes[node.key]) for node in stage)

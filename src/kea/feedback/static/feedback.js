@@ -222,8 +222,11 @@
     setTimeout(() => box.remove(), 7000);
   }
   async function tagThread(selection, names, text) {
+    // Revise or Drop on a page that waits for a sign-off: a decision on the route, so it wakes Claude (route tag)
+    const waits = !!(container && container.querySelector(".node-content[data-waiting]"));
+    const route = waits && !selection && names.some(name => ["revise", "drop"].includes(name)) ? ["route"] : [];
     const created = await sendQuiet(() => api("POST", API, { page: PAGE, page_title: TITLE, page_commit: COMMIT,
-      page_version: pageVersion(), text: text || "", tags: names, ...(selection || {}) }));
+      page_version: pageVersion(), text: text || "", tags: [...names, ...route], ...(selection || {}) }));
     return created && created.thread;
   }
   async function retag(threadId, names) {
@@ -329,7 +332,7 @@
     const rejected = openThread("drop") || openThread("reject");
     if (rejected) add("fb-pp-remove", "✕ drop asked", "Asked by " + rejected.author + (rejected.text ? ": " + rejected.text : ""));
     const approval = openThread("approve");
-    if (approval) add("fb-pp-ok", "✓ approve · next harvest", "Approved by " + approval.author);
+    if (approval) add("fb-pp-ok", "✓ signed · Claude writes it on", "Signed off by " + approval.author + " on the site; Claude writes it onto the page when it picks it up");
     const revision = openThread("revise");
     if (revision) add("fb-pp-next", "↻ revise asked", "Asked by " + revision.author + ": " + (revision.text || ""));
     const section = pageSection();
@@ -361,6 +364,9 @@
   const bundle = () => { try { return JSON.parse(contentData().bundle || "[]"); } catch (error) { return []; } };
   const signsLine = items => "Signs: " + items.map(item => item.key + "@" + item.version).join(", ");
   const bundleList = items => items.map(item => "  " + item.label + "  " + item.title).join("\n");
+  /* What ▶ Approve & … asks for: on a page that waits in a stage of several pages, the stage's next step
+     (graph.stage_action: run the plan, draw conclusions, …); else the page's own (graph.go_action). */
+  const nextStep = waitingPage => (waitingPage && bundle().length > 1 ? contentData().stageGo : contentData().go) || "";
   /* Approve & go: a sign-off that also asks Claude for the next step of this page now (data-go: write the plan, run
      the step, …). Needs the right to steer: the server answers need_steer and cycle.js asks for the password. */
   async function approveAndGo(action, sign) {
@@ -388,6 +394,23 @@
     await reload();
     if (window.keaPollNow) window.keaPollNow();
   }
+  /* A group of pills behind one pill (Change ▸, More ▸): opens in place; opening one closes the other. */
+  function dockGroup(cls, label, title, members) {
+    const box = el("div", { class: "fb-dgroup " + cls });
+    const head = el("button", { class: "fb-dpill fb-dgroup-head", title, "aria-expanded": "false", onclick: () => {
+      const open = sub.hidden;
+      for (const other of document.querySelectorAll(".fb-dgroup")) {
+        other.querySelector(".fb-dgroup-items").hidden = true;
+        other.querySelector(".fb-dgroup-head").setAttribute("aria-expanded", "false");
+      }
+      sub.hidden = !open; head.setAttribute("aria-expanded", String(open));
+      if (dockPop) dockPop.hidden = true;
+    } }, label);
+    const sub = el("div", { class: "fb-dgroup-items" }, ...members);
+    sub.hidden = true;
+    box.append(head, sub);
+    return box;
+  }
   function buildDock() {
     const dock = el("div", { class: "fb-dock " + NOT });
     const items = el("div", { class: "fb-dock-items" });
@@ -398,17 +421,20 @@
     edit.hidden = true;
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
-      const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
-      const one = pill("fb-d-confirm-one", "✓ This page only", "Sign off on this page alone; the others keep waiting", () => {});
-      one.hidden = true;
+      /* Comment · ▶ Approve & <next step> (the main button on a page that waits) · Approve only · Change ▸ (Edit,
+         Revise, Drop) · More ▸ (Propose, Next run, Manuscript): two groups that open in place, one at a time */
       const go = pill("fb-d-go", "▶ Approve & go", "", () => {});
       go.hidden = true;
+      const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
       const revise = pill("fb-d-revise", "↻ Revise ▸", "Rewrite this page: say what to change; this branch is reworked", () => toggleDockPop(revise, "revise"));
       const reject = pill("fb-d-reject", "✕ Drop", "", () => {});
       const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
       const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
       const propose = pill("fb-d-propose", "Propose ▸", "Propose the next step of the reasoning: a question, hypothesis, step, conclusion, caveat …", () => toggleDockPop(propose, "propose"));
-      items.append(el("span", { class: "fb-dock-gap" }), confirm, one, go, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
+      items.querySelector(".fb-d-edit").remove();
+      const change = dockGroup("fb-d-change", "Change ▸", "Edit the text, ask Claude to revise the page, or drop it", [edit, revise, reject]);
+      const more = dockGroup("fb-d-more", "More ▸", "Propose a next step, ask for work in the next run, or place the page in the manuscript", [propose, next, manuscript]);
+      items.append(el("span", { class: "fb-dock-gap" }), go, confirm, change, more);
     } else {
       // the project's front page: propose an experiment (renderDock hides the button where nothing can be proposed)
       const propose = pill("fb-d-propose", "Propose ▸", "Propose a new experiment for this project", () => toggleDockPop(propose, "propose"));
@@ -449,44 +475,39 @@
     const signedWith = waitingPage && !asked && ((window.keaStatus || {}).signing || []).includes(PAGE);
     const dropped = openThread("drop") || openThread("reject"), revising = openThread("revise");
     const done = !waitingPage && pageConfirmed();
-    const when = waitingPage ? "at the next harvest" : "in the next plan";
+    // on a page that waits, Approve, Revise and Drop wake Claude (kea watch exit 50); on a settled page they go
+    // into the next plan
+    const when = waitingPage ? "when Claude picks it up (within a minute while a session watches)" : "in the next plan";
     const word = waitingPage ? "Approve" : "Confirm";
     const going = openThread("go");
-    confirm.hidden = waitingPage && !!going;                 // an Approve & go signs the page off too
-    confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked ? " fb-pending" : unasked ? " fb-pending-off" : "");
-    confirm.textContent = asked ? (waitingPage ? "✓ Signed · recorded at the next harvest" : "✓ Confirm · next plan")
-      : unasked ? "✓ Withdrawal · next plan" : done ? "✓ Confirmed" : "✓ " + word;
-    confirm.title = asked ? `Your sign-off is recorded on the page ${when}; click to take it back`
-      : unasked ? "The confirmation is withdrawn in the next plan; click to keep it"
-      : done ? "This page is confirmed; click to withdraw the confirmation (in the next plan)"
-      : waitingPage ? `Sign off on this version${pageVersion() ? " (" + pageVersion() + ")" : ""}: your name and the version are recorded on the page at the next harvest. It asks for no further work; Approve & go also does.`
-      : "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
     const together = waitingPage ? bundle() : [];
-    const one = dockEl.querySelector(".fb-d-confirm-one");
-    if (one) {
-      one.hidden = !(together.length > 1) || !!asked || !!going;
-      one.onclick = async () => { if (dropped) await withdraw(dropped, "drop replaced by approve"); await tagThread(null, ["approve"]); };
-    }
-    if (together.length > 1 && !asked) {
-      confirm.textContent = `✓ Approve all ${together.length}`;
-      confirm.title = "One sign-off for every page that waits in this stage:\n" + bundleList(together)
-        + "\nYour name and the version of each page are recorded. If a page changes later (beyond a minor edit), it waits again.";
-    }
-    if (signedWith) {
-      confirm.className = "fb-dpill fb-d-confirm fb-pending";
-      confirm.textContent = "✓ Signed with its stage";
-      confirm.title = "Signed with the other pages of its stage (Approve all, on another page); Claude writes it onto the page at the next harvest or step. To take it back, do so on that page.";
-      if (one) one.hidden = true;
+    const next = nextStep(waitingPage);                      // what ▶ Approve & … asks for ('' when nothing)
+    confirm.hidden = waitingPage && !!going;                 // an Approve & go signs the page off too
+    confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked || signedWith ? " fb-pending"
+      : unasked ? " fb-pending-off" : waitingPage && !next ? " fb-main" : "");
+    if (asked || signedWith) {
+      confirm.textContent = signedWith ? "✓ Signed with its stage" : waitingPage ? "✓ Signed · Claude writes it on" : "✓ Confirm · next plan";
+      confirm.title = signedWith ? "Signed with the other pages of its stage, on another page; Claude writes it onto the pages when it picks it up. To take it back, do so on that page."
+        : `Your sign-off is recorded on the page${together.length > 1 ? "s of this stage" : ""} ${when}; click to take it back`;
+    } else if (unasked) {
+      confirm.textContent = "✓ Withdrawal · next plan";
+      confirm.title = "The confirmation is withdrawn in the next plan; click to keep it";
+    } else if (done) {
+      confirm.textContent = "✓ Confirmed";
+      confirm.title = "This page is confirmed; click to withdraw the confirmation (in the next plan)";
+    } else if (waitingPage) {
+      const all = together.length > 1 ? `all ${together.length} ` : "";
+      confirm.textContent = next ? (all ? "✓ Approve only ▸" : "✓ Approve only") : `✓ Approve ${all}`.trim() + (all ? " ▸" : "");
+      confirm.title = (all ? "Sign off on the pages of this stage, or on this page alone" : `Sign off on this version${pageVersion() ? " (" + pageVersion() + ")" : ""}`)
+        + (next ? `, without asking Claude to ${next}` : "") + `. Claude writes it on ${when}. If a page changes later (beyond a minor edit), it waits again.`;
+    } else {
+      confirm.textContent = "✓ " + word;
+      confirm.title = "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
     }
     confirm.onclick = async () => {
       if (signedWith) return;
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
-      if (together.length > 1) {
-        if (!confirm_(`You sign off on these ${together.length} pages, as you see them now:\n\n${bundleList(together)}\n\nIf one of them changes later (beyond a minor edit), it waits for you again.`)) return;
-        if (dropped) await withdraw(dropped, "drop replaced by approve");
-        await tagThread(null, ["approve"], signsLine(together));
-        return;
-      }
+      if (waitingPage && together.length > 1) return toggleDockPop(confirm, "approve");
       if (unasked) return withdraw(unasked, "withdrawal taken back");
       if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
       if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());
@@ -494,10 +515,16 @@
     };
     renderGo(waitingPage, dropped);
     const revise = dockEl.querySelector(".fb-d-revise");
+    const soon = waitingPage ? "asked" : "next plan";
     revise.className = "fb-dpill fb-d-revise" + (revising ? " fb-pending" : "");
-    revise.textContent = revising ? "↻ Revise · " + (waitingPage ? "next harvest" : "next plan") : "↻ Revise ▸";
+    revise.textContent = revising ? "↻ Revise · " + soon : "↻ Revise ▸";
     reject.className = "fb-dpill fb-d-reject" + (dropped ? " fb-pending" : "");
-    reject.textContent = dropped ? "✕ Drop · " + (waitingPage ? "next harvest" : "next plan") : "✕ Drop";
+    reject.textContent = dropped ? "✕ Drop · " + soon : "✕ Drop";
+    const change = dockEl.querySelector(".fb-d-change .fb-dgroup-head");
+    if (change) {
+      change.textContent = revising ? "Change · revise " + soon : dropped ? "Change · drop " + soon : "Change ▸";
+      change.classList.toggle("fb-pending", !!(revising || dropped));
+    }
     reject.title = dropped ? "This page is dropped " + when + "; click to take it back"
       : "Remove this page" + (dropAlso ? " and the pages that rest only on it (" + dropAlso + ")" : "") + "; done " + when;
     reject.onclick = async () => {
@@ -513,6 +540,9 @@
     dockEl.querySelector(".fb-d-next").textContent = "Next run" + (nextCount ? " · " + nextCount : "") + " ▸";
     const section = pageSection();
     dockEl.querySelector(".fb-d-ms").textContent = "Manuscript" + (section ? ": " + tagInfo(section.tags[0]).label : "") + " ▸";
+    const more = dockEl.querySelector(".fb-d-more .fb-dgroup-head");
+    const marked = nextCount + (section ? 1 : 0);
+    if (more) more.textContent = "More" + (marked ? " · " + marked : "") + " ▸";
     if (!dockPop.hidden) fillDockPop();
   }
   /* The Approve & go pill: what it asks for (data-go), then the request's fate from cycle.js's status: waiting for
@@ -520,7 +550,8 @@
   function renderGo(waitingPage, dropped) {
     const go = dockEl && dockEl.querySelector(".fb-d-go");
     if (!go) return;
-    const action = contentData().go || "";
+    const sign = waitingPage && !openThread("approve") && !((window.keaStatus || {}).signing || []).includes(PAGE);
+    const action = nextStep(waitingPage);
     const going = openThread("go");
     go.hidden = (!action && !going) || !!dropped;
     if (go.hidden) return;
@@ -530,10 +561,11 @@
       /* a page that waits for a sign-off: Approve & <step> signs and asks; a page signed off already (or needing no
          sign-off): ▶ <Step> only asks; a second reader's signature is the plain Approve */
       const Action = action[0].toUpperCase() + action.slice(1);
-      go.textContent = waitingPage ? "▶ Approve & " + action : "▶ " + Action;
-      go.title = waitingPage ? `Sign off on this page and ask Claude to ${action} now; Claude does only that, then stops for your review`
-        : `Ask Claude to ${action} now (the page needs no further sign-off); Claude does only that, then stops for your review`;
-      go.onclick = () => approveAndGo(action, waitingPage);
+      const count = bundle().length;
+      go.textContent = sign ? (count > 1 ? `▶ Approve all ${count} & ${action}` : "▶ Approve & " + action) : "▶ " + Action;
+      go.title = sign ? `Sign off on ${count > 1 ? "the " + count + " pages of this stage" : "this page"} and ask Claude to ${action} now; Claude does only that, then stops for your review`
+        : `Ask Claude to ${action} now (no further sign-off needed); Claude does only that, then stops for your review`;
+      go.onclick = () => approveAndGo(action, sign);
       return;
     }
     const asked = going.text.replace(/^(Approve & |Go: )/i, "") || action;
@@ -571,6 +603,26 @@
               dockPop.hidden = true; await withdraw(revising, "revision taken back"); } }, "Take it back")))
         : proposalForm({ ...tag, label: "", help: "What should change, and why? The page is rewritten; pages that rest on it are rechecked." },
             null, () => { dockPop.hidden = true; }, "Revise this page"));
+      dockPop.hidden = false;
+      const rect = dockPopAnchor.getBoundingClientRect();
+      const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
+      dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
+      dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+      return;
+    }
+    if (dockPopGroup === "approve") {               // Approve only, on a stage of several pages: all, or this one
+      const together = bundle(), dropped = openThread("drop") || openThread("reject");
+      const sign = async extra => {
+        dockPop.hidden = true;
+        if (dropped) await withdraw(dropped, "drop replaced by approve");
+        await tagThread(null, ["approve"], extra);
+      };
+      dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, "Sign off, as you see them now"),
+        el("div", { class: "fb-help" }, together.map(item => item.label + "  " + item.title).join(" · ")),
+        el("div", { class: "fb-sel-row" },
+          el("button", { class: "fb-qchip", onclick: () => sign(signsLine(together)) }, `All ${together.length} pages`),
+          el("button", { class: "fb-qchip", onclick: () => sign() }, "This page only")),
+        el("div", { class: "fb-help" }, "Claude writes the sign-off onto the pages when it picks it up; nothing else starts. If a page changes later (beyond a minor edit), it waits again."));
       dockPop.hidden = false;
       const rect = dockPopAnchor.getBoundingClientRect();
       const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;

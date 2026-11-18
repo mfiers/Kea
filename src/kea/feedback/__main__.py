@@ -71,7 +71,8 @@ def watch(args: argparse.Namespace) -> int:
     Polls every --interval seconds while a reader was active in the last --quiet-after seconds, else every
     --slow-interval. Comments do not wake it (since 1.18): a long review round costs no agent time until someone
     presses Harvest. Exit 10 = harvest requested, 20 = implement requested, 30 = deadline reached, 40 = Approve & go (a reader
-    signed a page off and asked for its next step now). Writes only the
+    signed a page off and asked for its next step now), 50 = a sign-off on the site, or Revise / Drop on a page that
+    waits for one (apply it now; kea sign --pending; start nothing else). Writes only the
     heartbeat file (unless --no-heartbeat) and a status line every --report-every seconds, so whoever started it
     can see it is alive.
     """
@@ -123,6 +124,16 @@ def watch(args: argparse.Namespace) -> int:
             extra.update({"doing": f"starting: {asked} ({first.page_title or first.page})", "page": first.page,
                           "thread": first.thread_id})
             return leave("going", GO_EXIT)
+        route = cycle.route_requests(store.threads(args.events))
+        if route and current.state not in cycle.PAUSED_STATES:
+            first = route[0]
+            print(f"sign-off: {len(route)} decision(s) on pages that wait; first {first.thread_id} by {first.author} "
+                  f"on {first.page} ({', '.join(tag for tag in first.tags if tag != 'route')}). Apply the sign-offs with "
+                  "`kea sign --pending` (it lists Revise and Drop on waiting pages too: do those), commit, build, "
+                  "publish, answer each thread (kea reply … --status answered), start nothing else; watch again")
+            extra.update({"doing": f"writing on the sign-off by {first.author} ({first.page_title or first.page})",
+                          "page": first.page, "thread": first.thread_id})
+            return leave("signing", ROUTE_EXIT)
         if current.state == "harvest-requested":
             waiting = cycle.needs_planning(store.threads(args.events), current)
             edits = cycle.direct_edits(current.plan_updated_at) if args.cycle_log == cycle.default_path() else []
@@ -139,6 +150,7 @@ def watch(args: argparse.Namespace) -> int:
 
 DEADLINE_EXIT = 30
 GO_EXIT = 40                      # a reader pressed Approve & go: do the next step of that page now
+ROUTE_EXIT = 50                   # a sign-off (Approve), or Revise / Drop on a page that waits: apply it now, nothing else
 
 
 def progress(args: argparse.Namespace) -> int:

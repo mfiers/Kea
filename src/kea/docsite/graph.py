@@ -381,6 +381,30 @@ def go_action(tree: Tree, node: Node) -> str:
     return ""
 
 
+def stage_action(tree: Tree, pages: list[Node]) -> str:
+    """What "Approve & …" on a stage asks the agent to do once every page in it is signed ('' when nothing): the
+    plan with two or more planned steps → run the plan (every planned step of the question, then the results); a
+    stage of results of a question without conclusions → draw conclusions; else the first page's own go_action in
+    route order (propose questions, write the plan, plan its steps, run the step)."""
+    from kea.docsite import questions
+    if not pages:
+        return ""
+    planned = [node for node in pages if node.type == "step" and node.status == "planned"]
+    if len(planned) > 1:
+        return "run the plan"
+    results = [node for node in pages if node.type == "result" and node.status != "deprecated"]
+    if results:
+        for question in questions.questions(tree, results[0].project):
+            _, found, conclusions = questions.evidence(tree, question)
+            if results[0] in found:
+                return "" if question.status in ("answered", "dropped") or conclusions else "draw conclusions"
+    for node in pages:
+        action = go_action(tree, node)
+        if action:
+            return action
+    return ""
+
+
 def next_steps(tree: Tree, project: str) -> list[str]:
     """Where each question stands on the route, and the one next step (for kea context; pace: guided)."""
     from kea.docsite import questions

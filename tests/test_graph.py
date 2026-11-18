@@ -169,7 +169,7 @@ def test_page_verdicts_approve_revise_drop():
     from kea.feedback import tags
     known = {tag["name"]: tag for tag in tags.vocabulary({})["tags"]}
     assert known["approve"]["scope"] == known["revise"]["scope"] == known["drop"]["scope"] == "page"
-    assert known["revise"].get("needs_text") and "harvest itself" in known["approve"]["instruction"]
+    assert known["revise"].get("needs_text") and "exit 50" in known["approve"]["instruction"]
     assert "kea drop" in known["drop"]["instruction"] and known["reject"].get("hidden")
 
 

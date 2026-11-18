@@ -391,6 +391,29 @@ def add_signature(node, entry: dict) -> None:
 
 # ------------------------------------------------------------------ kea sign
 
+def apply_thread(tree, thread, resolve) -> None:
+    """Write the signatures of one site sign-off (an Approve, or an Approve & go): every page on its 'Signs:' line,
+    else the thread's page, each bound to the version the reader saw (from git when the page changed since)."""
+    from kea.docsite import identity
+    items = parse_signs(thread.text) or [(thread.page, thread.page_version)]
+    for label, version in items:
+        node = tree.nodes.get(label) or resolve(label)
+        if version and identity.version_of(node) != version:
+            old = find_wording(node, version=version)
+            if old is None:
+                print(f"{node.label}: the version {version} the reader saw is not in git; not signed (ask again)")
+                continue
+            signed = content_of(*old)
+        else:
+            signed = content(node)
+        entry = {"by": thread.author, **({"orcid": thread.author_id} if thread.author_id else {}),
+                 "date": thread.created_at[:10], **({"version": version} if version else {}), "how": "site",
+                 "thread": thread.thread_id, "content": signed}
+        add_signature(node, entry)
+        print(f"{node.label}: signed by {thread.author}" + ("" if signed == content(node) else
+                                                              " (an earlier wording: the page waits again)"))
+
+
 def main(argv: list[str]) -> int:
     """kea sign: record sign-offs and minor edits (see the module docstring)."""
     import argparse
@@ -405,6 +428,8 @@ def main(argv: list[str]) -> int:
                "signature and whether it holds.")
     parser.add_argument("ids", nargs="*")
     parser.add_argument("--thread", default="", help="apply the Approve / Approve & go of this comment thread")
+    parser.add_argument("--pending", action="store_true",
+                        help="apply every open Approve on the site (kea watch exit 50) and list the other route decisions")
     parser.add_argument("--by", default="", help="the person who signed off (with --how chat)")
     parser.add_argument("--orcid", default="")
     parser.add_argument("--how", default="chat", choices=["chat"], help="only chat: site sign-offs come with --thread")
@@ -480,12 +505,29 @@ def main(argv: list[str]) -> int:
             print(f"{node.label}: minor edit recorded; {len(gone)} signature(s) carried")
         return 1 if failed else 0
 
-    if args.thread:
-        from kea.feedback import backend, store
+    if args.thread or args.pending:
+        from kea.feedback import backend, cycle, store
         client = backend.get()
         if client.remote:
             client.sync()
-        found = {thread.thread_id: thread for thread in store.threads(client.events_path)}
+        threads = store.threads(client.events_path)
+        if args.pending:
+            chosen = cycle.sign_requests(threads)
+            if not chosen:
+                print("no open sign-off on the site")
+            for thread in chosen:
+                print(f"thread {thread.thread_id} by {thread.author} on {thread.page}:")
+                apply_thread(tree, thread, resolve)
+            others = [thread for thread in cycle.route_requests(threads) if thread not in chosen]
+            for thread in others:
+                print(f"also waiting: {', '.join(tag for tag in thread.tags if tag != 'route')} on {thread.page} "
+                      f"(thread {thread.thread_id}, by {thread.author}): {thread.text[:120]}")
+            if chosen:
+                print("next: commit, make site, kea publish, then answer each thread with the commit: "
+                      + "; ".join(f"kea reply {thread.thread_id} \"Signed off in <commit>\" --status answered"
+                                  for thread in chosen))
+            return 0
+        found = {thread.thread_id: thread for thread in threads}
         thread = found.get(args.thread)
         if thread is None:
             raise SystemExit(f"no thread {args.thread!r} in the comment log")
@@ -494,23 +536,7 @@ def main(argv: list[str]) -> int:
         if "go" in thread.tags and thread.text.startswith("Go:"):
             print("a Go: on a page signed off already: it adds no signature")
             return 0
-        items = parse_signs(thread.text) or [(thread.page, thread.page_version)]
-        for label, version in items:
-            node = tree.nodes.get(label) or resolve(label)
-            if version and identity.version_of(node) != version:
-                old = find_wording(node, version=version)
-                if old is None:
-                    print(f"{node.label}: the version {version} the reader saw is not in git; not signed (ask again)")
-                    continue
-                signed = content_of(*old)
-            else:
-                signed = content(node)
-            entry = {"by": thread.author, **({"orcid": thread.author_id} if thread.author_id else {}),
-                     "date": thread.created_at[:10], **({"version": version} if version else {}), "how": "site",
-                     "thread": thread.thread_id, "content": signed}
-            add_signature(node, entry)
-            print(f"{node.label}: signed by {thread.author}" + ("" if signed == content(node) else
-                                                                  " (an earlier wording: the page waits again)"))
+        apply_thread(tree, thread, resolve)
         return 0
 
     if not args.ids or not args.by.strip():
