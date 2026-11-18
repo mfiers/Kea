@@ -236,39 +236,28 @@ def test_status_names_the_reader_and_logout_forgets_the_password(tmp_path):
     assert client.get("/api/status").status_code == 401                      # signed out
 
 
-def test_approve_and_go_needs_steering_wakes_the_watcher_and_reports_progress(tmp_path, capsys):
-    """Approve & go: the server asks for the iteration password, the status lists the request, kea watch stops with
-    exit 40, and kea progress puts the agent's words in the status (watcher.doing)."""
+def test_sign_offs_wait_for_the_harvest(tmp_path, capsys):
+    """Since 1.31 a sign-off starts nothing: Approve & go is refused, a plain Approve shows as signed on the site,
+    does not wake kea watch, and counts among the threads the next harvest takes (kea sign --pending applies it);
+    kea progress puts the agent's words in the status during Implement."""
     site = tmp_path / "site"
     site.mkdir()
     events, log, heartbeat = tmp_path / "events.jsonl", tmp_path / "cycle.jsonl", tmp_path / "heartbeat.json"
     client = TestClient(server.make_app(site, events, "pw-for-tests", log, heartbeat, steer_password="steer-pw"))
     client.post("/login", data={"password": "pw-for-tests", "name": "Ann", "next": "/"}, follow_redirects=False)
     body = {"page": "p:s-a", "page_title": "S1 Run", "page_version": "v7", "text": "Approve & run the step", "tags": ["go"]}
-    refused = client.post("/api/threads", json=body)
-    assert refused.status_code == 403 and refused.json()["need_steer"]
-    signed = client.post("/api/threads", json={**body, "text": "", "tags": ["approve"]})   # a plain sign-off: no steering
-    assert signed.status_code == 200 and signed.json()["thread"]["page_version"] == "v7"
     assert client.post("/api/steer", json={"password": "steer-pw"}).status_code == 200
-    assert client.post("/api/threads", json=body).status_code == 200
+    refused = client.post("/api/threads", json=body)
+    assert refused.status_code == 400 and "removed" in refused.json()["error"]
+    signed = client.post("/api/threads", json={**body, "text": "Signs: p:s-a@v7, p:h-a@v3", "tags": ["approve"]})
+    assert signed.status_code == 200 and signed.json()["thread"]["page_version"] == "v7"
     status = client.get("/api/status").json()
-    assert [item["text"] for item in status["goes"]] == ["Approve & run the step"] and status["signing"] == ["p:s-a"]
+    assert "goes" not in status and status["signing"] == ["p:h-a", "p:s-a"] and status["unplanned"] == 1
     common = ["--events", str(events), "watch", "--interval", "0.05", "--no-heartbeat", "--cycle-log", str(log)]
-    assert cli.main(common + ["--deadline", str(time.time() + 5)]) == 40
-    assert "approve & go: 1 request(s)" in capsys.readouterr().out
-    cycle.write_heartbeat(heartbeat, {"exit": "going", "doing": "running S1: 3 of 8 donors", "page": "p:s-a"})
-    watcher = client.get("/api/status").json()["watcher"]
-    assert watcher["state"] == "working" and watcher["doing"] == "running S1: 3 of 8 donors" and watcher["page"] == "p:s-a"
-    thread = store.threads(events)[-1]
-    store.append_event({"type": "status", "thread_id": thread.thread_id, "status": "page-changed", "commit": "abc1234",
-                        "author": "claude"}, events)
-    assert client.get("/api/status").json()["goes"] == []                     # answered: no longer open
-    # the plain sign-off is still open: it wakes the watcher too (exit 50), and kea sign --pending applies it
-    assert cli.main(common + ["--deadline", str(time.time() + 5)]) == 50
-    assert "kea sign --pending" in capsys.readouterr().out
-    plain = [item for item in store.threads(events) if item.tags == ["approve"]][0]
+    assert cli.main(common + ["--deadline", str(time.time() + 0.3)]) == 30          # nothing wakes it but a PI
+    plain = store.threads(events)[0]
     assert [item.thread_id for item in cycle.sign_requests(store.threads(events))] == [plain.thread_id]
-    assert plain.thread_id not in [item.thread_id for item in cycle.needs_planning(store.threads(events), cycle.state(log))]
-    store.append_event({"type": "reply", "thread_id": plain.thread_id, "text": "Signed off in abc1234",
-                        "author": "claude"}, events)
-    assert cli.main(common + ["--deadline", str(time.time() + 0.3)]) == 30
+    assert plain.thread_id in [item.thread_id for item in cycle.needs_planning(store.threads(events), cycle.state(log))]
+    cycle.write_heartbeat(heartbeat, {"exit": "implementing", "doing": "running S1: 3 of 8 donors", "page": "p:s-a"})
+    watcher = client.get("/api/status").json()["watcher"]
+    assert watcher["state"] == "working" and watcher["doing"] == "running S1: 3 of 8 donors"

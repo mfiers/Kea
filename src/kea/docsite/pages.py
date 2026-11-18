@@ -157,6 +157,17 @@ def tab_strip(colour: str, tabs: list[tuple[str, str, str, str]], pid: str = "")
             f"role='tablist'>{buttons}<!--kea:tab-buttons--></span></div><div class='tab-panels'>{panels}"
             "<!--kea:tab-panels--></div>")
 
+ROUND_STEPS = (
+    "<ol class='round-steps not-annotatable' id='round-steps'>"
+    "<li data-step='review'><b>1 · Review</b><span>You read, comment and sign off. Claude does nothing.</span></li>"
+    "<li data-step='harvest'><b>2 · Harvest</b><span>A PI presses Harvest. Claude records the sign-offs and writes "
+    "the plan: every comment, and the next step of each signed stage. Nothing else changes.</span></li>"
+    "<li data-step='implement'><b>3 · Implement</b><span>A PI reads the plan and presses Implement. Claude does "
+    "what the plan lists, and nothing more. Comments pause.</span></li>"
+    "<li data-step='release'><b>4 · Release</b><span>A new version. The pages reload, and the next round of review "
+    "starts.</span></li></ol>")
+
+
 class SiteRenderer:
     """Turns the validated tree (plus git, comments and plans) into HTML pages; knows nothing about serving."""
 
@@ -1099,7 +1110,7 @@ class SiteRenderer:
         self.write("comments.html", page("Current comments", body, "", None, self.tree, wide=True))
 
     ROUTE_ORDER = {"experiment": 0, "question": 1, "hypothesis": 2, "step": 3, "result": 4, "conclusion": 5}
-    STAGE_TEXT = {"done": ("✓", "done"), "you": ("●", "waiting for you"), "agent": ("▶", "the agent's turn"),
+    STAGE_TEXT = {"done": ("✓", "done"), "you": ("●", "waiting for you"), "agent": ("▶", "Claude's turn · next plan"),
                   "running": ("⟳", "running"), "later": ("·", ""), "closed": ("–", "closed"),
                   "free": ("–", "not needed")}
 
@@ -1109,20 +1120,21 @@ class SiteRenderer:
                       key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
 
     def progress_page(self) -> None:
-        """progress.html (Progress in the menu bar): one view of where the analysis stands and what waits for whom: the pages
-        that wait for a sign-off (with what Approve & go would start), the route of every question (question, plan,
-        run, results, conclusions), and who signed off on what. The agent's status and the open Approve & go
-        requests are filled in live by _feedback/cycle.js (#progress-live)."""
+        """progress.html (Progress in the menu bar): where the round stands (Review → Harvest → Implement →
+        Release; the current step is marked live by _feedback/cycle.js, #progress-live), the pages that wait for a
+        sign-off, the next steps that are Claude's (they go into the plan at the next Harvest and run at Implement),
+        the route of every question, and who signed off on what."""
         prefix = ""
         tree = self.tree
         link = lambda node: node_link(node, prefix, node.title if node.tag else None)   # noqa: E731
         hrefs = {key: relative for relative, (key, _) in self.pages.items() if key in tree.nodes}
         parts = [crumbs([("Progress", None)], prefix), "<h1>Progress</h1>",
-                 "<div class='short'>What waits for whom, and where each question stands on its route: question, "
-                 "plan, run, results, conclusions.</div>",
+                 "<div class='short'>Where the review round stands, what waits for you, and where each question "
+                 "stands on its route.</div>",
+                 ROUND_STEPS,
                  f"<div id='progress-live' class='progress-live not-annotatable' data-pages='{esc(json.dumps(hrefs))}'>"
-                 "<p class='help'>The agent's status "
-                 "and the open Approve &amp; go requests show here when the site is served with comments.</p></div>"]
+                 "<p class='help'>The current step and Claude's session show here when the site is served with "
+                 "comments.</p></div>"]
         if tree.pace != "guided":
             parts.append("<p class='help not-annotatable'>This project runs with <code>pace: free</code>: no page waits "
                          "for a sign-off; Approve records a signature only.</p>")
@@ -1130,50 +1142,51 @@ class SiteRenderer:
         waiting = self.waiting_pages()
         ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
                        key=order)
-        parts.append(f"<h2>Waiting for you <span class='count'>{len(waiting) + len(ready)}</span></h2>")
-        if waiting or ready:
-            parts.append("<p class='help'>Every page here waits for a click from a reader; nothing moves until then. "
-                     "<b>Needs your sign-off</b>: the page is new and nobody has approved it; <b>▶ Approve &amp; …</b> "
-                     "signs it (with the other pages of its stage) and starts the next step; <b>✓ Approve only</b> signs "
-                     "and stops there. <b>Signed off, not started</b>: the page is approved (or needs no sign-off) "
-                     "and its next step is Claude's, waiting for a go. <b>▶ Approve &amp; …</b> signs the page off and "
-                     "asks Claude to take that step now; on a page signed off already the button is just "
-                     "<b>▶ Run the step</b> (or Write the plan, …).</p>")
-        if waiting or ready:
+        parts.append(f"<h2>Needs your sign-off <span class='count'>{len(waiting)}</span></h2>")
+        if waiting:
+            parts.append("<p class='help'>Read the page, then press <b>✓ Approve</b> on it (it signs the other pages "
+                         "of its stage with it). Nothing starts when you click: the sign-off is recorded, Claude writes "
+                         "it onto the pages at the next Harvest and puts the step after it in the plan.</p>")
             rows = []
-            for node in waiting + ready:
-                action = graph.go_action(tree, node)
-                signed = graph.signatures(node)
-                if node.waiting:
-                    stands = "<span class='rs rs-you'>● needs your sign-off</span>"
-                elif signed:
-                    names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
-                    stands = f"<span class='rs rs-done'>✓ signed off</span> <span class='help'>by {esc(names)} · not started</span>"
-                else:
-                    stands = "<span class='rs rs-free'>no sign-off needed</span> <span class='help'>· not started</span>"
-                together = signing.bundle(tree, node) if node.waiting else []
-                if len(together) > 1:
-                    action = graph.stage_action(tree, together)
-                if node.waiting and signing.stale(node):
-                    stands = "<span class='rs rs-you'>● changed since signed</span>"
+            for node in waiting:
+                together = signing.bundle(tree, node)
+                action = graph.stage_action(tree, together) if len(together) > 1 else graph.go_action(tree, node)
+                stands = ("<span class='rs rs-you'>● changed since signed</span>" if signing.stale(node)
+                          else "<span class='rs rs-you'>● needs your sign-off</span>")
                 listed = (" <span class='help'>(" + ", ".join(esc(item.label) for item in together) + ")</span>"
                           if len(together) > 1 else "")
-                if len(together) > 1 and not action:
-                    button = f"<b>✓ Approve all {len(together)}</b>{listed}"
-                elif not action:
-                    button = "<b>✓ Approve</b>"
-                elif node.waiting:
-                    all_ = f"all {len(together)} " if len(together) > 1 else ""
-                    button = f"<b>▶ Approve {all_}&amp; {esc(action)}</b>{listed} <span class='help'>or ✓ Approve only</span>"
-                else:
-                    button = f"<b>▶ {esc(action[0].upper() + action[1:])}</b>"
+                button = (f"<b>✓ Approve all {len(together)}</b>{listed}" if len(together) > 1 else "<b>✓ Approve</b>")
+                then = esc(action) if action else "<span class='help'>nothing further</span>"
                 rows.append(f"<tr data-page='{esc(node.key)}'><td class='rq'>{link(node)}"
                             + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
-                            + f"</td><td>{stands}<div class='live-cell help'></div></td><td>{button}</td></tr>")
+                            + f"</td><td>{stands}<div class='live-cell help'></div></td><td>{button}</td>"
+                              f"<td>{then}</td></tr>")
             parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Where it stands</th>"
-                         "<th>The button on the page</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+                         "<th>What to press</th><th>Next plan then holds</th></tr></thead><tbody>" + "".join(rows)
+                         + "</tbody></table></div>")
         else:
-            parts.append("<p class='help'>Nothing waits for you.</p>")
+            parts.append("<p class='help'>No page needs a sign-off.</p>")
+        parts.append(f"<h2>Claude's next steps <span class='count'>{len(ready)}</span></h2>")
+        if ready:
+            parts.append("<p class='help'>These pages are signed off (or need no sign-off), and the next step is "
+                         "Claude's. Nothing to press on the page: the step goes into the plan at the next "
+                         "<b>Harvest</b> and runs when a PI presses <b>Implement</b>. To hold one back, comment on the "
+                         "page before the Harvest.</p>")
+            rows = []
+            for node in ready:
+                signed = graph.signatures(node)
+                names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
+                stands = (f"<span class='rs rs-done'>✓ signed off</span> <span class='help'>by {esc(names)}</span>"
+                          if signed else "<span class='rs rs-free'>no sign-off needed</span>")
+                action = graph.go_action(tree, node)
+                rows.append(f"<tr><td class='rq'>{link(node)}"
+                            + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
+                            + f"</td><td>{stands}</td><td>{esc(action[0].upper() + action[1:])}</td>"
+                              "<td class='next-when help'>next Harvest → plan; runs at Implement</td></tr>")
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Signed</th>"
+                         "<th>Next step</th><th>When</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+        else:
+            parts.append("<p class='help'>None: Claude's next steps appear here once their pages are signed off.</p>")
         for project, home in tree.projects.items():
             found = questions.questions(tree, project)
             title = f"Route · {home.title}" if len(tree.projects) > 1 else "Route of each question"
@@ -1238,7 +1251,7 @@ class SiteRenderer:
             if number not in plans:
                 return (f"<h1>Plan for cycle {number}</h1><div class='short'>No plan yet. Claude writes one when it "
                         "goes through the comments; it lists, per comment, what will change.</div>"
-                        f"<div id='fb-plan-actions' data-items='0' class='not-annotatable'></div>")
+                        + (ROUND_STEPS if live else "") + "<div id='fb-plan-actions' data-items='0' class='not-annotatable'></div>")
             header, body, source = plans[number]
             context = self.context(project, prefix)
             items = len(re.findall(r"^### ", body, flags=re.M))
@@ -1246,7 +1259,7 @@ class SiteRenderer:
             body = re.sub(r"^### (\d+)\.\s+(.*)$",
                           lambda match: f"<h3 id='item-{match.group(1)}'>{esc(label + ' ') if label else ''}#"
                                         f"{match.group(1)} · {esc(match.group(2))}</h3>", body, flags=re.M)
-            actions = (f"<div id='fb-plan-actions' data-items='{items}' class='not-annotatable'>"
+            actions = (ROUND_STEPS + f"<div id='fb-plan-actions' data-items='{items}' class='not-annotatable'>"
                        "<span class='help'>The Implement button appears when the comment server is running.</span></div>"
                        if live else "")
             release = ""

@@ -15,11 +15,11 @@ Usage:
         waits until a PI asks for something (fast polling while readers are active, slow after an hour of
         quiet); comments alone never wake it. Exit 10 = "Harvest comments" pressed: fold every comment not yet in
         the plan into it and run `kea cycle plan-updated`, 20 = "Implement the plan" pressed, 30 = deadline
-        reached, 40 = "Approve & go" on a page: sign it off and do its next step now. <when> is epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time
+        reached (since 1.31 nothing else wakes it: sign-offs wait for the harvest). <when> is epoch seconds, a duration from now (90m, 12h, 3d) or an ISO date/time
         (2026-11-09T18:00, local time). Prints a status line every --report-every seconds and writes only its
         heartbeat (data/feedback/watch_heartbeat.json, shown on the plan page).
     kea progress "running S2: 3 of 8 donors" [--page <page> --thread <thread>]
-        what the agent is doing now, shown to readers on that page, the plan and the progress page
+        what the agent is doing now (during Implement), shown to readers on the plan, the progress page and the page
     kea watch --status  is a watcher running, when did it last look, what is it waiting for (exit 0 if alive, 1 if not)
     kea lease status|take|release [--force]
         one agent per project (feedback.agent): every command that writes (reply, status, cycle, watch,
@@ -70,9 +70,8 @@ def watch(args: argparse.Namespace) -> int:
 
     Polls every --interval seconds while a reader was active in the last --quiet-after seconds, else every
     --slow-interval. Comments do not wake it (since 1.18): a long review round costs no agent time until someone
-    presses Harvest. Exit 10 = harvest requested, 20 = implement requested, 30 = deadline reached, 40 = Approve & go (a reader
-    signed a page off and asked for its next step now), 50 = a sign-off on the site, or Revise / Drop on a page that
-    waits for one (apply it now; kea sign --pending; start nothing else). Writes only the
+    presses Harvest. Exit 10 = harvest requested, 20 = implement requested, 30 = deadline reached. Sign-offs and
+    Revise / Drop wait for the harvest like every other comment (since 1.31). Writes only the
     heartbeat file (unless --no-heartbeat) and a status line every --report-every seconds, so whoever started it
     can see it is alive.
     """
@@ -114,26 +113,6 @@ def watch(args: argparse.Namespace) -> int:
         if current.state == "implement-requested":
             print(f"implement requested by {current.by} at {current.since} (cycle {current.cycle})")
             return leave("implementing", 20)
-        goes = cycle.go_requests(store.threads(args.events))
-        if goes and current.state not in cycle.PAUSED_STATES:
-            first = goes[0]
-            asked = (first.text or "").splitlines()[0].strip() if first.text else "the next step"   # not the Signs: line
-            print(f"approve & go: {len(goes)} request(s); first {first.thread_id} by {first.author} at "
-                  f"{first.created_at} on {first.page} ({first.page_title}): {asked}. If it starts with "
-                  "'Approve &', sign the page off ('Go:' adds no signature); do that step only, report with `kea progress \"…\" --page <page>`, publish, answer the thread, watch again")
-            extra.update({"doing": f"starting: {asked} ({first.page_title or first.page})", "page": first.page,
-                          "thread": first.thread_id})
-            return leave("going", GO_EXIT)
-        route = cycle.route_requests(store.threads(args.events))
-        if route and current.state not in cycle.PAUSED_STATES:
-            first = route[0]
-            print(f"sign-off: {len(route)} decision(s) on pages that wait; first {first.thread_id} by {first.author} "
-                  f"on {first.page} ({', '.join(tag for tag in first.tags if tag != 'route')}). Apply the sign-offs with "
-                  "`kea sign --pending` (it lists Revise and Drop on waiting pages too: do those), commit, build, "
-                  "publish, answer each thread (kea reply … --status answered), start nothing else; watch again")
-            extra.update({"doing": f"writing on the sign-off by {first.author} ({first.page_title or first.page})",
-                          "page": first.page, "thread": first.thread_id})
-            return leave("signing", ROUTE_EXIT)
         if current.state == "harvest-requested":
             waiting = cycle.needs_planning(store.threads(args.events), current)
             edits = cycle.direct_edits(current.plan_updated_at) if args.cycle_log == cycle.default_path() else []
@@ -149,19 +128,17 @@ def watch(args: argparse.Namespace) -> int:
 
 
 DEADLINE_EXIT = 30
-GO_EXIT = 40                      # a reader pressed Approve & go: do the next step of that page now
-ROUTE_EXIT = 50                   # a sign-off (Approve), or Revise / Drop on a page that waits: apply it now, nothing else
 
 
 def progress(args: argparse.Namespace) -> int:
-    """What the agent is doing now, for readers (the plan, the progress page and the page that asked): a heartbeat
-    with exit "going" and the text, so the hub shows the session as working on it."""
+    """What the agent is doing now (during Implement), for readers (the plan, the progress page and the page it is
+    about): a heartbeat with exit "implementing" and the text, so the hub shows the session as working on it."""
     client = backend.get(args.events)
     text = " ".join(args.text).strip()[:300]
     if not text:
         print("kea progress needs a short text: what you are doing now", file=sys.stderr)
         return 2
-    client.heartbeat({"pid": os.getpid(), "exit": "going", "doing": text, "page": args.page or "",
+    client.heartbeat({"pid": os.getpid(), "exit": "implementing", "doing": text, "page": args.page or "",
                       "thread": args.thread or ""})
     print(f"progress: {text}" + (f" ({args.page})" if args.page else ""))
     return 0
@@ -382,10 +359,10 @@ def main(argv: list[str] | None = None) -> int:
                               help="do not write data/feedback/watch_heartbeat.json (shown on the plan page)")
     watch_parser.add_argument("--settle", type=float, default=120, help=argparse.SUPPRESS)   # unused since 1.18
     watch_parser.add_argument("--cycle-log", type=Path, default=cycle.default_path())
-    progress_parser = sub.add_parser("progress", help="tell readers what the agent is doing now (after an Approve & go)")
+    progress_parser = sub.add_parser("progress", help="tell readers what the agent is doing now (during Implement)")
     progress_parser.add_argument("text", nargs="+", help="a short line, e.g. \"running S2: 3 of 8 donors\"")
     progress_parser.add_argument("--page", default="", help="the page key it is about (as in kea list)")
-    progress_parser.add_argument("--thread", default="", help="the Approve & go thread it answers")
+    progress_parser.add_argument("--thread", default="", help="the comment thread it is about (optional)")
     show_parser = sub.add_parser("show")
     show_parser.add_argument("thread_id")
     reply_parser = sub.add_parser("reply")

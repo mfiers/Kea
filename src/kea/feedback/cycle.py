@@ -170,31 +170,17 @@ def needs_attention(thread) -> bool:
     return thread.status != "resolved" and last_author != "claude"
 
 
-def go_requests(threads: list) -> list:
-    """Approve & go requests the agent has not taken up: open threads tagged go (oldest first)."""
-    return sorted((thread for thread in threads if "go" in thread.tags and thread.status == "open"),
-                  key=lambda thread: thread.created_at)
-
-
 def _answered(thread) -> bool:
     """Claude has had the last word (it answered the request; the thread may still show as open)."""
     return bool(thread.replies) and thread.replies[-1].author == "claude"
 
 
 def sign_requests(threads: list) -> list:
-    """Sign-offs given on the site that Claude has not written onto the pages: open Approve threads (an Approve & go
-    is a go request), oldest first."""
-    return sorted((thread for thread in threads if "approve" in thread.tags and "go" not in thread.tags
+    """Sign-offs given on the site that Claude has not written onto the pages: open Approve threads (and Approve & go
+    threads from 1.28-1.30 that start with "Approve &"), oldest first. Applied at the harvest (`kea sign --pending`)."""
+    return sorted((thread for thread in threads if ("approve" in thread.tags or (
+                   "go" in thread.tags and (thread.text or "").startswith("Approve &")))
                    and thread.status == "open" and not _answered(thread)), key=lambda thread: thread.created_at)
-
-
-def route_requests(threads: list) -> list:
-    """Decisions on pages that wait for a sign-off, taken up at once (kea watch exit 50): open sign-offs, and Revise
-    or Drop on a waiting page (the site adds the route tag), oldest first."""
-    route = [thread for thread in threads if "route" in thread.tags and "go" not in thread.tags
-             and thread.status == "open" and not _answered(thread)]
-    return sorted({thread.thread_id: thread for thread in sign_requests(threads) + route}.values(),
-                  key=lambda thread: thread.created_at)
 
 
 def last_activity(thread) -> str:
@@ -237,7 +223,7 @@ def watcher_status(info: dict, now: float | None = None) -> dict:
     """The agent's session as seen from its heartbeats: {state, seen_at, seconds, deadline, exit, text, doing, page}.
 
     state: none (never ran), watching (heartbeat fresh), working (stopped on purpose to plan comments or implement,
-    within WORKING_LIMITS; going = the next step of a page after an Approve & go), ended (deadline reached or passed), gone (heartbeats stopped without a reason while the
+    within WORKING_LIMITS; going = an Approve & go of 1.28-1.30), ended (deadline reached or passed), gone (heartbeats stopped without a reason while the
     deadline is ahead, or a deliberate pause ran past its limit)."""
     import datetime as dt
     import time as time_module
@@ -300,8 +286,6 @@ def read_heartbeat(path: Path | None = None) -> str:
 
 def needs_planning(threads: list, current: CycleState) -> list:
     """Threads not in the plan: needing attention, with activity after the moment the last harvest covers."""
-    direct = {thread.thread_id for thread in route_requests(threads)} | {thread.thread_id for thread in go_requests(threads)}
-    threads = [thread for thread in threads if thread.thread_id not in direct]   # taken up at once, not harvested
     cutoff = current.harvested_until or current.plan_updated_at
     if not cutoff:
         return [thread for thread in threads if needs_attention(thread)]

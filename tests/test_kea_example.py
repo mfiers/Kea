@@ -37,7 +37,8 @@ def test_init_and_build_example_project(tmp_path):
         assert (site / page).exists(), page
     assert "Example" in (site / "index.html").read_text()
     progress = (site / "progress.html").read_text()                     # Progress in the menu bar
-    assert "Waiting for you" in progress and "Route of each question" in progress and "Approve &amp; propose questions" in progress
+    assert "Needs your sign-off" in progress and "Route of each question" in progress and "1 · Review" in progress
+    assert "Approve &amp;" not in progress and "propose questions" in progress           # what the next plan then holds
     assert "progress.html" in (site / "first" / "home.html").read_text()
 
 

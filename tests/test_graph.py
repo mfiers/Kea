@@ -169,7 +169,7 @@ def test_page_verdicts_approve_revise_drop():
     from kea.feedback import tags
     known = {tag["name"]: tag for tag in tags.vocabulary({})["tags"]}
     assert known["approve"]["scope"] == known["revise"]["scope"] == known["drop"]["scope"] == "page"
-    assert known["revise"].get("needs_text") and "exit 50" in known["approve"]["instruction"]
+    assert known["revise"].get("needs_text") and "kea sign --pending" in known["approve"]["instruction"]
     assert "kea drop" in known["drop"]["instruction"] and known["reject"].get("hidden")
 
 
@@ -233,6 +233,6 @@ def test_signatures_route_and_the_go_button(tmp_path):
 def test_approve_is_a_signature_and_go_asks_for_the_step():
     from kea.feedback import tags
     known = {tag["name"]: tag for tag in tags.vocabulary({})["tags"]}
-    assert "version" in known["approve"]["instruction"] and "no further work" in known["approve"]["instruction"]
-    assert known["go"]["scope"] == "page" and known["go"].get("hidden") and "exit 40" in known["go"]["instruction"]
-    assert "kea progress" in known["go"]["instruction"]
+    assert "version" in known["approve"]["instruction"] and "harvest" in known["approve"]["instruction"]
+    assert "plan item" in known["approve"]["instruction"] and "Implement" in known["approve"]["instruction"]
+    assert known["go"]["scope"] == "page" and known["go"].get("hidden") and "removed in 1.31" in known["go"]["help"]

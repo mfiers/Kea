@@ -7,6 +7,7 @@ comments stay anchored to the page's own text.
 from __future__ import annotations
 
 import html
+import json
 import re
 
 import markdown
@@ -40,7 +41,7 @@ overflow:hidden;text-overflow:ellipsis}
 .topbar .experiment:hover{text-decoration:none;background:#4a5468}
 .topbar .here .tag{margin:0;flex:0 0 auto}
 .topbar .here-title{display:block;color:#c9d2e3;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}.topbar .grp{display:inline-flex;align-items:center;gap:12px}.topbar .grp .sub{display:none;align-items:center;gap:12px}.topbar .grp.open>.sub{display:inline-flex;gap:2px;background:#2c3446;border-radius:6px;padding:2px 3px;box-shadow:inset 0 0 0 1px #3d475b}.topbar .grp.open>a:first-child{color:#fff;font-weight:600}.topbar .grp.open>a:first-child::after{content:' ▸';font-size:11px;color:#8a93a3}.topbar .grp .sub a,.topbar .grp .sub .off{font-size:13px;color:#c9d2e3;padding:1px 8px;border-radius:4px;line-height:1.45}.topbar .grp .sub .off{color:#6b7488}.topbar .grp .sub a:hover{background:#3d475b;color:#fff;text-decoration:none}.topbar .links .grp .sub a.cur{background:#4f5a70;color:#fff;font-weight:600;border-bottom:0}.topbar .links a.cur{color:#fff;font-weight:700;border-bottom:2px solid #fff}.topbar.folded.open .grp,.topbar.folded.open .grp .sub{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.topbar.folded.open .grp .sub{padding:4px 6px;margin-left:10px}.topbar.folded.open .grp .sub::before{content:none}.topbar .nav-count{display:inline-block;margin-left:5px;min-width:18px;padding:0 6px;border-radius:9px;background:#4a5468;color:#fff;font:600 11.5px system-ui,sans-serif;line-height:17px;text-align:center}
+.topbar .links{display:flex;gap:16px;flex:0 0 auto;white-space:nowrap}.topbar .links .off{color:#6b7488;cursor:default}.topbar .grp{display:inline-flex;align-items:center;gap:12px}.topbar .grp .sub{display:none;align-items:center;gap:12px}.topbar .grp.open>.sub{display:inline-flex;gap:2px;background:#2c3446;border-radius:6px;padding:2px 3px;box-shadow:inset 0 0 0 1px #3d475b}.topbar .grp.open>a:first-child{color:#fff;font-weight:600}.topbar .grp.open>a:first-child::after{content:' ▸';font-size:11px;color:#8a93a3}.topbar .grp .sub a,.topbar .grp .sub .off{font-size:13px;color:#c9d2e3;padding:1px 8px;border-radius:4px;line-height:1.45}.topbar .grp .sub .off{color:#6b7488}.topbar .grp .sub a:hover{background:#3d475b;color:#fff;text-decoration:none}.topbar .links .grp .sub a.cur{background:#4f5a70;color:#fff;font-weight:600;border-bottom:0}.topbar .links a.cur{color:#fff;font-weight:700;border-bottom:2px solid #fff}.topbar.folded.open .grp,.topbar.folded.open .grp .sub{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.topbar.folded.open .grp .sub{padding:4px 6px;margin-left:10px}.topbar.folded.open .grp .sub::before{content:none}.topbar .nav-count{display:inline-block;margin-left:5px;min-width:18px;padding:0 6px;border-radius:9px;background:#4a5468;color:#fff;font:600 11.5px system-ui,sans-serif;line-height:17px;text-align:center}.topbar .nav-count[hidden]{display:none}
 .topbar .menu-button{background:none;border:1px solid #4a5468;color:#fff;border-radius:5px;font-size:16px;padding:0 9px;
 cursor:pointer;flex:0 0 auto}
 .topbar .menu-button{-webkit-tap-highlight-color:transparent}.topbar .menu-button:focus{outline:none}.topbar .menu-button:focus-visible{outline:2px solid #c9d2e3;outline-offset:1px}.topbar.open .menu-button,.topbar .menu-button:hover{background:#3d475b}
@@ -179,7 +180,7 @@ table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-le
 .node-data-sep .sep-tab.on{background:var(--kc,#556);color:#fff;padding-bottom:8px;cursor:default}
 .node-data-sep .sep-tab span.tab-count{display:inline-block;margin-left:7px;padding:0 6px;border-radius:8px;font:600 10.5px/1.5 system-ui,sans-serif;letter-spacing:0;background:color-mix(in srgb,var(--kc,#556) 22%,#fff);color:inherit}
 .node-data-sep .sep-tab.on span.tab-count{background:#fff3;color:#fff}
-/* progress.html (pages.progress_page): what waits for whom, the route of each question, the sign-offs */
+/* progress.html (pages.progress_page): the step of the round, what waits for a sign-off, Claude's next steps, the route of each question, the sign-offs */
 .progress-table{display:table;width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 4px}.progress-table th,.progress-table td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--line)}
 .progress-table th{font:600 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .progress-table.route td.rq{min-width:220px}.progress-table .rs{display:inline-block;white-space:nowrap;font:600 12.5px system-ui,sans-serif;border-radius:10px;padding:1px 8px}
@@ -188,6 +189,8 @@ table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-le
 .rs-pages{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px}.rs-pages .tag{font-size:11.5px}
 h2 .count{font:600 12px system-ui,sans-serif;color:var(--muted);background:var(--soft);border-radius:9px;padding:1px 8px;vertical-align:2px}
 .progress-table th,.progress-table td{background:none}.progress-live{margin:14px 0 6px}.progress-live .fb-session{margin:0 0 8px}.progress-live table{margin-top:4px}
+.round-steps{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 4px;padding:0;counter-reset:none}.round-steps li{border:1px solid var(--line);border-radius:7px;padding:7px 10px;font:13px/1.4 system-ui,sans-serif;color:var(--muted)}.round-steps li b{display:block;color:var(--fg);font-size:13.5px;margin-bottom:2px}.round-steps li.now{border:2px solid #1f5fa8;background:#e2ecf8;color:#163f73}.round-steps li.now b{color:#163f73}.round-steps li.now b[data-now]:not([data-now=''])::after{content:' · ' attr(data-now);font-weight:500}.round-now{font:14px/1.5 system-ui,sans-serif;margin:6px 0 10px;padding:8px 12px;border-left:4px solid #1f5fa8;background:var(--soft)}.round-now b{font-weight:650}.round-now .round-go{margin-left:8px}
+@media (max-width:640px){.round-steps{grid-template-columns:1fr 1fr}}
 .route-note{margin:4px 0 8px}.scroll{overflow-x:auto;max-width:100%}.progress-table td,.progress-table td a{white-space:normal}.progress-table td.rq{width:55%}
 @media (max-width:640px){.progress-table:not(.route) thead{display:none}
  .progress-table:not(.route),.progress-table:not(.route) tbody,.progress-table:not(.route) tr,.progress-table:not(.route) td{display:block;width:auto}
@@ -442,16 +445,17 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
         link("Review cycles", "history.html", "Each release with its comments, plan items and commits"),
         link("Comments", "feedback.html", "All comments on the site")]
     if mode.MODE != "public":
-        waiting = 0
+        keys = []
         if tree is not None:
-            if "_waiting_count" not in tree.__dict__:
-                from kea.docsite import graph
-                tree.__dict__["_waiting_count"] = sum(1 for item in tree.nodes.values()
-                                                      if item.waiting or graph.go_action(tree, item))
-            waiting = tree.__dict__["_waiting_count"]
-        right.append(link("Progress" + (f" <span class='nav-count'>{waiting}</span>" if waiting else ""),
+            if "_waiting_keys" not in tree.__dict__:
+                tree.__dict__["_waiting_keys"] = sorted(item.key for item in tree.nodes.values() if item.waiting)
+            keys = tree.__dict__["_waiting_keys"]
+        waiting = len(keys)
+        # cycle.js counts down live as pages are signed on the site (data-waiting: the keys)
+        right.append(link("Progress" + (f" <span class='nav-count' data-waiting='{esc(json.dumps(keys))}'>{waiting}</span>"
+                                        if waiting else ""),
                           "progress.html", "What waits for whom, and where each question stands"
-                          + (f": {waiting} page(s) wait for a click" if waiting else "")))
+                          + (f": {waiting} page(s) wait for your sign-off" if waiting else "")))
         right.append(group(link("Plan", "plan.html", "The plan of the current review cycle: what the next run does"),
                            [link("Current comments", "comments.html", "Who commented what, and where: open and "
                                  "planned comments, by person")]))

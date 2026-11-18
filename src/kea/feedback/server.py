@@ -16,15 +16,16 @@ implementation is requested or running, new comments, replies and status changes
 API (JSON):
     GET  /api/threads?page=<path>   threads of one page (all pages without ?page=)
     POST /api/threads               {page, page_title, page_commit, page_version, quote, prefix, suffix, start, end,
-                                    text, tags}; the tag go (Approve & go) needs the right to steer (403 need_steer)
+                                    text, tags}; the tag go (Approve & go, 1.28-1.30) is refused since 1.31 (400)
                                     (text optional with tags; tags checked against the site's _feedback/tags.json)
     POST /api/threads/<id>/reply    {text}
     POST /api/threads/<id>/tags     {tags}: replace the thread's tags (marks may change while comments are paused)
     GET  /id/<uid>                  redirect to the page with that permanent id (/id/<uid>.json: its public facts)
     POST /api/threads/<id>/status   {status, note}   (readers may set resolved or open)
     GET  /api/status                cycle state, site build id, comment counts, the agent's session (watcher: state,
-                                    doing, page), open Approve & go requests (goes) and pages with a sign-off
-                                    waiting for the harvest (signing); polled by every page
+                                    doing, page) and pages with a sign-off given on the site and not yet
+                                    written onto the page (signing: it waits for the harvest), the number of those
+                                    sign-offs (sign_offs, threads); polled by every page
     GET  /api/source?page=<key>     the Markdown source of a documentation page (for the editor)
     POST /api/suggest               {page, page_title, text, new_text}: a suggested edit, stored as a thread with the
                                     diff; files are never written by the server
@@ -83,6 +84,9 @@ STEER_COOKIE = "fb_steer"
 NAME_COOKIE = "fb_name"
 COOKIE_DAYS = 90
 READER_STATUSES = ("resolved", "open")
+
+GO_REMOVED = ("Approve & go was removed in Kea 1.31: Approve signs the page, and the next step goes into the plan "
+              "at the next Harvest")
 
 
 def default_salt() -> str:
@@ -294,10 +298,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "threads": len(threads),
                              "open": sum(cycle.needs_attention(thread) for thread in threads),
                              "unplanned": len(cycle.needs_planning(threads, current)),
-                             "goes": [{"thread_id": thread.thread_id, "page": thread.page, "title": thread.page_title,
-                                       "by": thread.author, "at": thread.created_at, "text": thread.text}
-                                      for thread in cycle.go_requests(threads)],
                              "signing": signing_pages(threads),
+                             "sign_offs": len(cycle.sign_requests(threads)),
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
                              "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
                              "can_steer": may_steer(request), **signed_in(request),
@@ -522,9 +524,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
             # marks (manuscript tags) ask for no work, so they are taken also while comments are paused
             if not fields["mark"] and (blocked := frozen_response(str(body.get("page") or ""))) is not None:
                 return blocked
-            if "go" in fields["tags"] and not may_steer(request):     # Approve & go starts the agent's next step
-                return JSONResponse({"error": "Approve & go needs the iteration password", "need_steer": True},
-                                    status_code=403)
+            if "go" in fields["tags"]:          # Approve & go (1.28-1.30): sign-offs wait for the harvest since 1.31
+                return JSONResponse({"error": GO_REMOVED}, status_code=400)
             event = await append(request, {**{key: body.get(key) for key in (
                 "page", "page_title", "page_commit", "page_version", "quote", "prefix", "suffix", "start", "end", "text")},
                 **fields, "type": "create", "author": _author(request)}, events_path)
@@ -550,9 +551,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
             body = await _body(request)
             thread = store.fold(store.load_events(events_path)).get(thread_id)
             fields = tag_fields(body, on_text=bool(thread and thread.quote))
-            if "go" in fields["tags"] and not (thread and "go" in thread.tags) and not may_steer(request):
-                return JSONResponse({"error": "Approve & go needs the iteration password", "need_steer": True},
-                                    status_code=403)
+            if "go" in fields["tags"] and not (thread and "go" in thread.tags):
+                return JSONResponse({"error": GO_REMOVED}, status_code=400)
             only_marks = fields["mark"] or not fields["tags"]
             if not (only_marks and thread is not None and thread.status == "marked") and \
                     (blocked := frozen_response(page_of_thread(thread_id))) is not None:

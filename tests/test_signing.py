@@ -182,10 +182,10 @@ def test_kea_sign_pending_applies_every_open_sign_off(tmp_path, monkeypatch, cap
     store.append_event({"type": "create", "page": "p:s-b", "author": "Ann", "text": signs, "tags": ["approve"],
                         "page_version": identity.version_of(tree.nodes["p:s-b"])}, events)
     store.append_event({"type": "create", "page": "p:s-a", "author": "Ann", "text": "Simpler, please",
-                        "tags": ["revise", "route"]}, events)
-    assert len(cycle.route_requests(store.threads(events))) == 2
+                        "tags": ["revise"]}, events)
+    assert len(cycle.sign_requests(store.threads(events))) == 1                   # the revise is a plan item
     assert signing.main(["--pending"]) == 0
     out = capsys.readouterr().out
-    assert "also waiting: revise on p:s-a" in out and "kea reply" in out
+    assert "revise" not in out and "kea reply" in out and "add the next step" in out
     tree = nodes.load_tree(doc)
     assert all(graph.approved(tree.nodes[node.key]) for node in stage)

@@ -429,7 +429,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("ids", nargs="*")
     parser.add_argument("--thread", default="", help="apply the Approve / Approve & go of this comment thread")
     parser.add_argument("--pending", action="store_true",
-                        help="apply every open Approve on the site (kea watch exit 50) and list the other route decisions")
+                        help="apply every open Approve given on the site (at the harvest)")
     parser.add_argument("--by", default="", help="the person who signed off (with --how chat)")
     parser.add_argument("--orcid", default="")
     parser.add_argument("--how", default="chat", choices=["chat"], help="only chat: site sign-offs come with --thread")
@@ -518,14 +518,12 @@ def main(argv: list[str]) -> int:
             for thread in chosen:
                 print(f"thread {thread.thread_id} by {thread.author} on {thread.page}:")
                 apply_thread(tree, thread, resolve)
-            others = [thread for thread in cycle.route_requests(threads) if thread not in chosen]
-            for thread in others:
-                print(f"also waiting: {', '.join(tag for tag in thread.tags if tag != 'route')} on {thread.page} "
-                      f"(thread {thread.thread_id}, by {thread.author}): {thread.text[:120]}")
             if chosen:
-                print("next: commit, make site, kea publish, then answer each thread with the commit: "
+                print("next: commit, answer each thread with the commit ("
                       + "; ".join(f"kea reply {thread.thread_id} \"Signed off in <commit>\" --status answered"
-                                  for thread in chosen))
+                                  for thread in chosen)
+                      + "), and add the next step of every stage this completes to the plan (kea context names it); "
+                        "it runs at Implement")
             return 0
         found = {thread.thread_id: thread for thread in threads}
         thread = found.get(args.thread)

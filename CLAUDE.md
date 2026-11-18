@@ -10,7 +10,7 @@
   `KEA_REMOTE_KEY` in .env): `kea publish` after every build; ask the owner before data files go up
   (`kea publish --files`).
 - Pace: one step along the route, then stop for the owner's review (experiment → questions → hypotheses and
-  planned steps → results → conclusions); go further only when the owner says so in chat or presses Approve & go.
+  planned steps → results → conclusions); go further only when the owner says so in chat or the step is an item of the plan being implemented.
   Sign-offs go on the page with `kea sign` (never by hand): bound to the wording signed; minor edits with `kea sign <id> --minor --because …`; `kea context` names the next step.
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after
@@ -19,10 +19,10 @@
   comments into `doc/_cycles/cycle-NNN.md` (`kea reply … --status planned`), then always `kea cycle plan-updated
   --commit …` (it ends the harvest). Exit 20 (Implement) → `kea cycle start`, implement, run entry, replies with
   commits → `kea cycle release --version X.Y.Z --kind … --reason …` → `make site`. Never implement a
-  plan item before Implement unless the owner asks in chat. Exit 50 (a sign-off, or Revise / Drop on a waiting page):
-  `kea sign --pending`, do the revisions or drops it lists, commit, build, publish, answer, start nothing else, watch
-  again. Exit 40 (Approve & go on a page): sign it off (and `kea sign --pending`), do that page's (or stage's) next step only (`kea list` names it), tell readers with `kea progress "…" --page <page>` as you go, run
-  entry, commit, `make site`, `kea publish`, answer the thread with the commit, stop for review, watch again.
+  plan item before Implement unless the owner asks in chat. Sign-offs (Approve on the site) wait for the harvest like
+  every comment: at the harvest, `kea sign --pending` writes them onto the pages, and the next step of every stage
+  that is signed becomes a plan item (`kea context` names it); a harvest runs nothing else. During Implement, tell
+  readers what you are doing with `kea progress "…"`.
 - After any change, `kea recheck --list`: read every page downstream of a changed page against the change,
   update it if it is even slightly affected, then `kea recheck <id> --because "…"`; releases wait for this.
 - Versions: MAJOR = a conclusion changes direction or is withdrawn; MINOR = new results or pages; PATCH = wording

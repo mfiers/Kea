@@ -180,7 +180,7 @@ def pace_rules(tree: Tree) -> None:
                                  "yet (pace: guided): stop after proposing the question and let it be reviewed")
         if node.type == "step" and node.status in RUNNING and not signed_once(node):
             tree.problems.append(f"{where}: step is {node.status} but was not approved (pace: guided): a planned "
-                                 "step runs only after the owner approves it (Approve or Approve & go on its page, or in chat: "
+                                 "step runs only after the owner approves it (Approve on its page, then a harvest, or in chat: "
                                  "approved: {by, date, how: chat})")
         if node.type == "conclusion" and node.status not in ("deprecated", "superseded"):
             unread = [item.label for item in evidence(tree, node) if item.type in EVIDENCE_TYPES and not signed_once(item)]
@@ -276,7 +276,7 @@ STAGES = (("question", "Approved"), ("plan", "Plan"), ("run", "Run"), ("results"
 
 def question_route(tree: Tree, question: Node) -> dict:
     """Where a question stands on the route, stage by stage (pace: guided): each stage is done, you (pages wait
-    for a sign-off), agent (the agent's turn: Approve & go, or the owner in chat, starts it), later, or running.
+    for a sign-off), agent (the agent's turn: it goes into the plan at the next harvest and runs at Implement), later, or running.
     {question, stages: [{key, label, state, pages, note}], hypotheses, steps, results, conclusions}."""
     from kea.docsite import questions
     hypotheses, results, conclusions = questions.evidence(tree, question)
@@ -346,7 +346,7 @@ def question_route(tree: Tree, question: Node) -> dict:
 
 
 def go_action(tree: Tree, node: Node) -> str:
-    """What an Approve & go on this page asks the agent to do next, when that step is the agent's turn ('' when
+    """The agent's next step after this page, when that step is the agent's turn ('' when
     there is none): an experiment without questions → propose questions; an open question without hypotheses or
     steps → write the plan; a planned hypothesis no step tests → plan its steps; a planned step → run the step; the
     last unreviewed result of a question without conclusions → draw conclusions. Signed off already or not: the
@@ -382,7 +382,7 @@ def go_action(tree: Tree, node: Node) -> str:
 
 
 def stage_action(tree: Tree, pages: list[Node]) -> str:
-    """What "Approve & …" on a stage asks the agent to do once every page in it is signed ('' when nothing): the
+    """The agent's next step once every page in a stage is signed (a plan item at the next harvest) ('' when nothing): the
     plan with two or more planned steps → run the plan (every planned step of the question, then the results); a
     stage of results of a question without conclusions → draw conclusions; else the first page's own go_action in
     route order (propose questions, write the plan, plan its steps, run the step)."""

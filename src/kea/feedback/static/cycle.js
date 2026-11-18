@@ -6,9 +6,11 @@
  *   Claude folds them into the plan, which then stands until the next harvest; the plan page counts the comments
  *   made since; "Implement the plan" (after a harvest) pauses comments until the release (a banner on every page,
  *   comment controls hidden; the server refuses them with 423 anyway).
- * - Approve & go (since 1.28): while a request waits or the agent works on it, a line on every page says so (what,
- *   for which page, by whom, the agent's last word from `kea progress`), polling every FAST_MS; the Progress page
- *   (#progress-live) lists the requests; a "kea-status" event hands each status to feedback.js (the page's buttons).
+ * - The round has four steps (since 1.31, again): Review (readers comment and sign off; Claude does nothing),
+ *   Harvest (Claude records the sign-offs and writes the plan), Implement (Claude does what the plan lists),
+ *   Release. The menu bar names the step for every reader (a button for PIs); the Progress and plan pages mark it
+ *   on their four-step strip (#round-steps) with one line on what happens now and what comes next (#progress-live).
+ *   A "kea-status" event hands each status to feedback.js (pages signed with their stage elsewhere).
  * - On the plan page (#fb-plan-actions) shows the buttons and a live indicator: are all comments in the plan,
  *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
  *   since the last heartbeat. When the session stopped unexpectedly ("gone"), readers who may steer get a banner
@@ -70,8 +72,8 @@
       const error = el("p", { class: "fb-steer-error" });
       const dialog = el("dialog", { class: "fb-steer not-annotatable" },
         el("p", {}, el("strong", {}, "Iteration password")),
-        el("p", { class: "fb-steer-help" }, "Harvesting the comments into the plan, asking Claude to implement it, and " +
-          "Approve & go need the iteration password (not the site password). Ask the site owner for it."),
+        el("p", { class: "fb-steer-help" }, "Harvesting the comments into the plan and asking Claude to implement it " +
+          "need the iteration password (not the site password). Ask the site owner for it."),
         input, error,
         el("div", { class: "fb-steer-buttons" },
           el("button", { class: "fb-secondary", onclick: () => { dialog.close(); resolve(false); } }, "Cancel"),
@@ -89,8 +91,6 @@
       input.focus();
     });
   }
-
-  window.keaAskSteer = askSteerPassword;            // feedback.js: Approve & go
 
   async function post(action, retried) {
     // the server records who asked: a reader without a name (no account, no comment yet) gives it first, as for a
@@ -125,8 +125,7 @@
     const watcher = status.watcher || { state: "none" };
     const last = watcher.seen_at ? `last heartbeat ${duration(watcher.seconds)} ago (${when(watcher.seen_at)})` : "";
     const until = deadlineText(watcher);
-    const doing = watcher.doing || { planning: "harvesting the comments into the plan", implementing: "implementing the plan",
-      going: "taking the next step a reader asked for", signing: "writing a sign-off onto the pages" }[watcher.exit] || watcher.exit;
+    const doing = watcher.doing || { planning: "harvesting the comments into the plan", implementing: "implementing the plan" }[watcher.exit] || watcher.exit;
     const parts = {
       none: ["○", "Claude's watcher has not run on this site yet."],
       watching: ["●", `Claude is watching: ${last}.` + (until ? ` Session until ${until}.` : "")],
@@ -190,43 +189,44 @@
     }
   }
 
-  /* The review cycle in the menu bar, for readers who may steer (status.can_steer: a PI or director account on a
-     hub, the iteration password, or a site without one): one button that follows the cycle. Harvest when comments
-     wait outside the plan; ▶ Implement once the plan stands and has items; a state while Claude works on either.
-     The plan page keeps the full controls (Harvest again, Cancel). */
+  /* The step of the round in the menu bar, for every reader: PIs (status.can_steer: a PI or director account on a
+     hub, the iteration password, or a site without one) get the button that moves the round on (Harvest · N while
+     comments and sign-offs wait; ▶ Implement once the plan stands), other readers the same words as a link to
+     Progress. While Claude works it says so. The plan page keeps the full controls (Harvest again, Cancel). */
   function menuCycle(status) {
     const bar = document.querySelector(".topbar");
     if (!bar) return;
     let slot = bar.querySelector(".cycle-tool");
-    if (!status.can_steer) { if (slot) slot.remove(); return; }
     if (!slot) {
       slot = el("span", { class: "cycle-tool" });
       bar.insertBefore(slot, bar.querySelector(".page-tools") || bar.querySelector(".user"));
     }
-    const cycle = status.cycle, waiting = status.unplanned || 0;
+    const cycle = status.cycle, waiting = status.unplanned || 0, steer = !!status.can_steer;
     const known = status.build && status.build.plan_items;
     const items = known ? Number(known[String(cycle.cycle)] || 0) : null;      // null: a build before 1.29.3
     const button = (cls, label, title, onclick) => el("button", { class: cls, title, onclick }, label);
+    const toProgress = () => { location.href = PREFIX + "progress.html"; };
     const toPlan = () => { location.href = PREFIX + "plan.html"; };
-    const harvest = (label) => button("ct-harvest", label, `Claude folds the ${waiting} comment(s) not yet in the plan into it`,
-      () => post("harvest"));
     let content = null;
     if (cycle.state === "collecting") {
-      if (waiting) content = harvest(`⇣ Harvest · ${waiting}`);
+      if (waiting && steer) content = button("ct-harvest", `⇣ Harvest · ${waiting}`, `Review round: ${waiting} comment(s) and sign-off(s) wait. `
+        + "Harvest: Claude records the sign-offs and writes the plan; nothing runs until Implement", () => post("harvest"));
+      else if (waiting) content = button("ct-busy", `Review · ${waiting} for the plan`, "Review round: Claude does nothing until a PI presses Harvest", toProgress);
     } else if (cycle.state === "harvest-requested") {
-      content = button("ct-busy", "⟳ Harvesting", `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude folds the comments into the plan`, toPlan);
+      content = button("ct-busy", "⟳ Claude is writing the plan", `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude records the sign-offs and folds the comments into the plan. It runs nothing.`, toPlan);
     } else if (cycle.state === "harvested") {
-      if (items === null || items > 0) {
-        content = button("ct-implement", "▶ Implement", "Ask Claude to implement the plan (comments pause until the release)" +
-          (waiting ? `; ${waiting} comment(s) made after the harvest stay for the next cycle (Harvest again on the plan page)` : ""), () => {
-            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next cycle.` : "";
-            if (confirm("Ask Claude to implement the plan now? Comments are paused until the new version is released." + left)) post("implement");
+      if (steer && (items === null || items > 0)) {
+        content = button("ct-implement", "▶ Implement", "The plan is ready. Implement: Claude does what the plan lists, nothing more (comments pause until the release)" +
+          (waiting ? `; ${waiting} comment(s) made after the harvest stay for the next round (Harvest again on the plan page)` : ""), () => {
+            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next round.` : "";
+            if (confirm("Ask Claude to implement the plan now? Claude does what the plan lists, nothing more. Comments are paused until the new version is released." + left)) post("implement");
           });
-      } else if (waiting) content = harvest(`⇣ Harvest again · ${waiting}`);
+      } else if (steer && waiting) content = button("ct-harvest", `⇣ Harvest again · ${waiting}`, "The plan is empty; harvest the comments made since", () => post("harvest"));
+      else if (items === null || items > 0) content = button("ct-busy", "Plan ready", "Claude has written the plan; it runs when a PI presses Implement", toPlan);
     } else if (cycle.state === "implement-requested") {
       content = button("ct-busy", "▶ Implement asked", `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
     } else if (cycle.state === "implementing") {
-      content = button("ct-busy", "⟳ Implementing", `Claude is implementing the plan (since ${when(cycle.since)})`, toPlan);
+      content = button("ct-busy", "⟳ Claude is working", `Claude is implementing the plan (since ${when(cycle.since)}); comments pause until the release`, toPlan);
     }
     const label = content ? content.textContent + "|" + content.title : "";
     if (slot.dataset.label === label) return;          // unchanged: keep the button (and any focus on it)
@@ -252,101 +252,77 @@
     return true;
   }
 
-  /* Approve & go (feedback/tags.py go): the request, then the agent's work on it, said on every page so a click is
-     never followed by silence; the Progress page lists them (#progress-live). */
-  function pageTitle(item) { return item.title || item.page; }
-  /* What a request asks, for readers: "Approve all 4 & run the plan", "Run the step". The thread's text also carries
-     a "Signs:" line (page keys and versions, for kea sign): counted, never shown. */
-  function requestLabel(text) {
-    const lines = (text || "").split("\n");
-    const signs = lines.find(line => /^Signs:/.test(line.trim()));
-    const head = lines.filter(line => !/^Signs:/.test(line.trim())).join(" ").trim();
-    const count = signs ? signs.replace(/^\s*Signs:/, "").split(",").filter(part => part.trim()).length : 0;
-    const action = head.replace(/^(Approve & |Go: )/i, "") || "the next step";
-    if (/^Approve & /i.test(head)) return (count > 1 ? `Approve all ${count} & ` : "Approve & ") + action;
-    return action[0].toUpperCase() + action.slice(1);
-  }
-  window.keaRequestLabel = requestLabel;
-  /* The page keys on a request's Signs: line ([] without one). */
-  function signsKeys(text) {
-    const line = (text || "").split("\n").find(item => /^\s*Signs:/.test(item));
-    return line ? line.replace(/^\s*Signs:/, "").split(",").map(part => part.trim().split("@")[0]).filter(Boolean) : [];
-  }           // feedback.js: the page's ▶ button while a request waits
-  function goBanner(status) {
-    const goes = status.goes || [], watcher = status.watcher || {};
-    const working = watcher.state === "working" && watcher.exit === "going";
-    if (!goes.length && !working) return false;
-    const progress = el("a", { href: PREFIX + "progress.html" }, "Progress");
-    if (working) {
-      showBanner("go", el("b", {}, "Claude is working: "), watcher.doing || "the next step a reader asked for",
-        ` (last word ${duration(watcher.seconds)} ago)` + (goes.length > 1 ? `; ${goes.length - 1} more request(s) waiting` : "") + ". ",
-        progress, ".");
-      return true;
+  /* The four-step strip (pages.ROUND_STEPS, on Progress and the plan page): mark the step the round is in, and say
+     in one line what happens now and what comes next (#progress-live on Progress). */
+  function roundSteps(status) {
+    const strip = document.getElementById("round-steps");
+    if (!strip) return;
+    const state = status.cycle.state;
+    const [step, word] = { "collecting": ["review", "now"], "harvest-requested": ["harvest", "now"],
+      "harvested": ["harvest", "done: plan ready"], "implement-requested": ["implement", "asked"],
+      "implementing": ["implement", "now"] }[state] || ["", ""];
+    for (const item of strip.querySelectorAll("li")) {
+      item.classList.toggle("now", item.dataset.step === step);
+      item.querySelector("b").dataset.now = item.dataset.step === step ? word : "";
     }
-    const first = goes[0];
-    const watching = watcher.state === "watching";
-    showBanner("go", el("b", {}, requestLabel(first.text) + ": "),
-      `${pageTitle(first)}, asked by ${first.by} ${when(first.at)}. `,
-      watching ? "Claude picks it up within a minute. " : "No Claude session is watching now: the request waits until one starts. ",
-      goes.length > 1 ? `${goes.length - 1} more waiting. ` : "", progress, ".");
-    return true;
+  }
+  function nowLine(status) {
+    const cycle = status.cycle, waiting = status.unplanned || 0, signed = (status.signing || []).length;
+    const signOffs = Math.min(status.sign_offs || 0, waiting), comments = waiting - signOffs;
+    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    const waits = [comments ? plural(comments, "comment") : "", signOffs ? plural(signOffs, "sign-off") + ` (${plural(signed, "page")})` : ""].filter(Boolean).join(" and ");
+    const watcher = status.watcher || {};
+    const watching = ["watching", "working"].includes(watcher.state);
+    const noSession = watching ? "" : " No Claude session is watching at the moment: it waits for the next one.";
+    const harvestButton = status.can_steer ? el("button", { class: "fb-secondary round-go", onclick: () => post("harvest") }, "⇣ Harvest now") : null;
+    const plan = el("a", { href: PREFIX + "plan.html" }, "the plan");
+    const lines = {
+      "collecting": [el("b", {}, "Now: Review. "), "Claude does nothing. ",
+        waiting ? `Waiting for the Harvest: ${waits}. ` : "Nothing waits for the Harvest yet. ",
+        el("b", {}, "Next: "), status.can_steer ? "when the round is done, press Harvest. " : "a PI presses Harvest. ", harvestButton && waiting ? harvestButton : null],
+      "harvest-requested": [el("b", {}, "Now: Harvest. "), `${cycle.by} pressed Harvest (${when(cycle.since)}). Claude records the sign-offs and writes `, plan,
+        ". It runs nothing and changes no other page." + noSession],
+      "harvested": [el("b", {}, "Now: the plan is ready. "), "Read ", plan, ". ", el("b", {}, "Next: "),
+        status.can_steer ? "press ▶ Implement in the menu bar; Claude then does what the plan lists, nothing more." : "a PI presses Implement; Claude then does what the plan lists, nothing more.",
+        waiting ? ` ${waiting} comment(s) made since the harvest are not in it (Harvest again, or they wait for the next round).` : ""],
+      "implement-requested": [el("b", {}, "Now: Implement asked. "), `${cycle.by} asked Claude to implement `, plan, ` (${when(cycle.since)}); Claude has not started yet. Comments are paused.` + noSession],
+      "implementing": [el("b", {}, "Now: Implement. "), "Claude is doing what ", plan, " lists" + (watcher.doing ? `: ${watcher.doing}` : "") + ". Comments are paused; the pages reload when the new version is released."],
+    }[cycle.state] || [];
+    return el("div", { class: "round-now" }, ...lines);
   }
   function progressLive(status) {
     const box = document.getElementById("progress-live");
     if (!box) return;
-    const goes = status.goes || [], watcher = status.watcher || {};
-    const pages = JSON.parse(box.dataset.pages || "{}");
-    const parts = [sessionLine(status)];
-    if (goes.length) {
-      const rows = goes.map((item, index) => {
-        const busy = index === 0 && watcher.state === "working" && watcher.exit === "going";
-        const href = pages[item.page];
-        return el("tr", {}, el("td", {}, href ? el("a", { href: PREFIX + href }, pageTitle(item)) : pageTitle(item)),
-          el("td", {}, requestLabel(item.text)), el("td", {}, `${item.by}, ${when(item.at)}`),
-          el("td", {}, el("span", { class: "rs " + (busy ? "rs-running" : "rs-agent") },
-            busy ? "⟳ " + (watcher.doing || "working") : index === 0 && watcher.state === "watching" ? "▶ being picked up"
-              : "▶ waiting for the agent")));
-      });
-      parts.push(el("table", { class: "progress-table" }, el("thead", {}, el("tr", {}, el("th", {}, "Approve & go on"),
-        el("th", {}, "Asked for"), el("th", {}, "By"), el("th", {}, "State"))), el("tbody", {}, ...rows)));
-    } else {
-      parts.push(el("p", { class: "help" }, "No Approve & go request is open."));
-    }
-    box.replaceChildren(...parts);
-    /* One state per page that waited for you, from the live status: signed on the site (an Approve, or the
-       Approve of an Approve & go, with every page on its Signs: line), then the request's fate: Claude about to
-       start, Claude working on it (the watcher's page or request), or no session watching. */
+    box.replaceChildren(nowLine(status), sessionLine(status));
+    /* Pages signed on the site (an Approve, with every page on its Signs: line): nothing to click any more; the
+       sign-off waits for the harvest (or is being harvested). */
+    const state = status.cycle.state;
     const signing = new Set(status.signing || []);
-    const going = new Map();                                           // page key → its Approve & go request
-    for (const item of goes) for (const key of [item.page, ...signsKeys(item.text)]) if (!going.has(key)) going.set(key, item);
-    const busy = watcher.state === "working" && watcher.exit === "going";
-    const workingOn = new Set(busy ? [watcher.page, ...(goes.length && (!watcher.thread || watcher.thread === goes[0].thread_id)
-      ? [goes[0].page, ...signsKeys(goes[0].text)] : [])].filter(Boolean) : []);
+    const harvesting = state === "harvest-requested";
     for (const row of document.querySelectorAll(".progress-table tr[data-page]")) {
       const cell = row.querySelector(".live-cell");
       const key = row.dataset.page;
       const stands = row.querySelector(".rs-you, .rs-live");
-      const request = going.get(key);
-      const signed = signing.has(key) || (request && /^Approve & /i.test(request.text || ""));
-      const taken = signed || !!request || workingOn.has(key);
+      const signed = signing.has(key);
       if (stands && !stands.dataset.was) { stands.dataset.was = stands.textContent; stands.dataset.cls = stands.className; }
       if (stands) {
-        stands.textContent = !taken ? stands.dataset.was : workingOn.has(key) ? (signed ? "✓ signed · ⟳ Claude is working" : "⟳ Claude is working")
-          : request ? (signed ? "✓ signed · ▶ next step asked" : "▶ next step asked") : "✓ signed on the site";
-        stands.className = !taken ? stands.dataset.cls : "rs rs-live " + (workingOn.has(key) ? "rs-running" : request ? "rs-agent" : "rs-done");
+        stands.textContent = !signed ? stands.dataset.was : harvesting ? "✓ signed · being harvested" : "✓ signed · waits for Harvest";
+        stands.className = !signed ? stands.dataset.cls : "rs rs-live rs-done";
       }
-      if (cell) cell.textContent = !taken ? ""
-        : workingOn.has(key) ? (watcher.doing ? "Claude: " + watcher.doing : "Claude is taking the step you asked for")
-        : request ? (watcher.state === "watching" ? `${requestLabel(request.text)}: Claude picks it up within a minute` : `${requestLabel(request.text)}: waits for a Claude session`)
-        : "Claude writes it onto the page when it picks it up";
-      row.classList.toggle("signed-live", taken);
+      if (cell) cell.textContent = !signed ? "" : harvesting ? "Claude is writing it on and planning the next step" : "";
+      row.classList.toggle("signed-live", signed);
       const button = row.cells[2];
       if (button && !button.dataset.was) button.dataset.was = button.innerHTML;
-      if (button) button.innerHTML = taken ? "<span class='help'>nothing to click</span>" : button.dataset.was;
+      if (button) button.innerHTML = signed ? "<span class='help'>nothing to click</span>" : button.dataset.was;
     }
-    // the count in "Waiting for you": the rows still waiting for a click
+    // the count of "Needs your sign-off": the rows still waiting for a click
     const count = document.querySelector("h2 .count");
     if (count) count.textContent = document.querySelectorAll(".progress-table tr[data-page]:not(.signed-live)").length;
+    // Claude's next steps: when they run
+    const when_ = { "collecting": "next Harvest → plan; runs at Implement", "harvest-requested": "being planned now",
+      "harvested": "in the plan (see Plan); runs at Implement", "implement-requested": "Implement asked",
+      "implementing": "Claude is implementing the plan" }[state];
+    for (const td of document.querySelectorAll("td.next-when")) if (when_) td.textContent = when_;
     // the route's "waiting for you" cells: every page they wait on is signed now (links → keys: data-pages)
     let byHref = {};
     try { byHref = Object.fromEntries(Object.entries(JSON.parse(box.dataset.pages || "{}")).map(([key, href]) => [href, key])); }
@@ -355,11 +331,25 @@
       const keys = Array.from(td.querySelectorAll(".rs-pages a")).map(link => byHref[link.getAttribute("href")]).filter(Boolean);
       const mark = td.querySelector(".rs");
       if (!mark.dataset.was) mark.dataset.was = mark.textContent;
-      const all = keys.length && keys.every(key => signing.has(key) || (going.get(key) && /^Approve & /i.test(going.get(key).text || "")));
-      mark.textContent = all ? "✓ signed on the site" : mark.dataset.was;
+      const all = keys.length && keys.every(key => signing.has(key));
+      if (!mark.dataset.cls) mark.dataset.cls = mark.className;
+      mark.textContent = all ? "✓ signed · waits for Harvest" : mark.dataset.was;
+      mark.className = all ? "rs rs-done" : mark.dataset.cls;
     }
   }
 
+  /* Progress in the menu bar: the pages that wait for a sign-off (render.py: data-waiting), less those signed on
+     the site since the build. */
+  function navCount(status) {
+    const signing = new Set(status.signing || []);
+    for (const count of document.querySelectorAll(".nav-count[data-waiting]")) {
+      let keys = [];
+      try { keys = JSON.parse(count.dataset.waiting); } catch (error) { continue; }
+      const left = keys.filter(key => !signing.has(key)).length;
+      count.textContent = left;
+      count.hidden = !left;
+    }
+  }
   function apply(status) {
     const cycle = status.cycle;
     const onPlan = !!document.getElementById("fb-plan-actions");
@@ -379,8 +369,6 @@
         el("a", { href: PREFIX + "plan.html" }, "See the plan"), ".");
     } else if (newBuild && !typing() && lastState !== null) {
       location.reload(); return;
-    } else if (goBanner(status)) {
-      /* shown: an Approve & go is waiting or being worked on */
     } else if (newBuild) {
       if (!typing() && lastState !== null) { location.reload(); return; }
       showBanner("new", el("b", {}, "A new version of the site is available. "),
@@ -397,6 +385,8 @@
     planActions(status);
     menuCycle(status);
     progressLive(status);
+    roundSteps(status);
+    navCount(status);
     lastState = cycle.state;
     window.keaStatus = status;
     window.dispatchEvent(new CustomEvent("kea-status", { detail: status }));
@@ -495,18 +485,10 @@
     }
   }
 
-  /* every POLL_MS; every FAST_MS while an Approve & go waits or runs (the reader who clicked sees it move) */
-  const FAST_MS = 6000;
-  function busy() {
-    const status = window.keaStatus;
-    return !!(status && ((status.goes || []).length || (status.watcher && status.watcher.exit === "going"
-      && status.watcher.state === "working")));
-  }
   async function start() {
     if (!await poll()) return;
-    const next = () => setTimeout(async () => { await poll(); next(); }, busy() ? FAST_MS : POLL_MS);
+    const next = () => setTimeout(async () => { await poll(); next(); }, POLL_MS);
     next();
-    window.keaPollNow = poll;                        // feedback.js: right after an Approve & go
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

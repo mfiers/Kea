@@ -144,39 +144,31 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
      "help": "Sign off on this version of the page: it may be built on",
      "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill), or on every "
-                    "page its `Signs:` line names (one click for a whole stage). `kea watch` stops for it (exit 50): apply "
-                    "every open sign-off with `kea sign --pending` (or one with `kea sign --thread <this thread>`): "
-                    "it records each signature bound to the version the reader saw (never edit `approved:` by hand), "
-                    "keeps earlier signatures, and changes nothing else. Then build, publish, answer the thread with "
-                    "the commit (`--status answered`) and watch again. A sign-off asks for no further work: the next step waits "
-                    "for an Approve & go, or for the owner in chat."},
+                    "page its `Signs:` line names (one click for a whole stage). It waits for the harvest like every "
+                    "comment. At the harvest, apply every open sign-off with `kea sign --pending`: it records each "
+                    "signature bound to the version the reader saw (never edit `approved:` by hand), keeps earlier "
+                    "signatures and changes nothing else; commit, and answer the thread with the commit "
+                    "(`--status answered`). Then, for each stage this completes, add the next step on the route as a "
+                    "plan item (\"Next step: plan the steps for Q1\"; `kea context` names it): it runs only at Implement."},
     {"name": "go", "group": "verdict", "task": True, "scope": "page", "label": "approve & go", "hidden": True,
-     "help": "Sign off on this page and ask the agent to take the next step now",
-     "instruction": "The reader signs off on this page and asks for the next step now; the thread's text names it "
-                    "(write the plan, run the step, …). `kea watch` stops for it (exit 40). When the text starts "
-                    "with \"Approve &\", apply the signature(s) with `kea sign --thread <this thread>`; \"Go:\" (a page signed off "
-                    "already, or needing no sign-off) adds none; apply other open sign-offs too (`kea sign --pending`). "
-                    "Then do that one step (the skill's pace table; \"run the plan\": every approved planned step of the "
-                    "question, then its results), "
-                    "reporting as you go with `kea progress \"…\" --page <page>`; write the run entry, commit, build, "
-                    "publish, and answer the thread with the commit. Then stop for review and watch again."},
+     "help": "Approve & go (Kea 1.28-1.30; removed in 1.31)",
+     "instruction": "An Approve & go from Kea 1.28-1.30 (the site no longer offers it): treat it as an Approve "
+                    "(when its text starts with \"Approve &\"; `kea sign --pending` applies it at the harvest) plus a "
+                    "request for the step its text names: make that step a plan item, done at Implement."},
     {"name": "route", "group": "verdict", "task": False, "scope": "page", "label": "now", "hidden": True,
-     "help": "A decision on a page that waits for a sign-off: Claude takes it up now",
-     "instruction": "Added by the site to a Revise or Drop on a page that waits for a sign-off (pace: guided): "
-                    "`kea watch` stops for it (exit 50) instead of waiting for a harvest. Do what the other tag "
-                    "asks, then stop for review."},
+     "help": "Kea 1.30 only: a Revise or Drop on a page that waited for a sign-off",
+     "instruction": "Added by the site in Kea 1.30 to a Revise or Drop on a page that waited for a sign-off; it "
+                    "means nothing since 1.31: the other tag goes into the plan like any comment."},
     {"name": "revise", "group": "verdict", "task": True, "scope": "page", "label": "revise", "needs_text": True,
      "help": "Rewrite this page (say what to change): this branch is reworked",
      "instruction": "The reader asks to revise this page; their text says what to change. A page that waits for "
-                    "approval: rewrite it at the harvest itself; it waits for approval again. A settled page: make it "
-                    "a plan item and rewrite it at Implement; remove `approved:` and `confirmed:` (the claim "
+                    "approval or a settled page: make it a plan item and rewrite it at Implement; remove `approved:` and `confirmed:` (the claim "
                     "changed; under pace: guided it waits for approval again). Every page downstream then gets a "
                     "recheck mark: work through kea recheck --list. Say in the reply what changed."},
     {"name": "drop", "group": "verdict", "task": True, "scope": "page", "label": "drop",
      "help": "Remove this page, and the pages that rest only on it",
      "instruction": "The reader drops this page and every page that rests only on it: `kea drop <id>` lists them. "
-                    "A page that waits for approval: drop at the harvest itself; a settled page: a plan item, done at "
-                    "Implement. Keep the record: a question gets status dropped, a step dropped, a result, "
+                    "It is a plan item, done at Implement. Keep the record: a question gets status dropped, a step dropped, a result, "
                     "conclusion or figure deprecated (with the reason in the text), a decision superseded; delete "
                     "the other pages. Remove or update the links to them; pages that rested partly on them get a "
                     "recheck mark: recheck them. Say in the reply what was dropped."},
