@@ -297,13 +297,23 @@ def make_site_app(spec: SiteSpec) -> Starlette:
                              "goes": [{"thread_id": thread.thread_id, "page": thread.page, "title": thread.page_title,
                                        "by": thread.author, "at": thread.created_at, "text": thread.text}
                                       for thread in cycle.go_requests(threads)],
-                             "signing": sorted({thread.page for thread in threads if "approve" in thread.tags
-                                                and thread.status in ("open", "planned")}),
+                             "signing": signing_pages(threads),
                              "watcher_seen_at": cycle.read_heartbeat(heartbeat_path),
                              "watcher": cycle.watcher_status(cycle.read_heartbeat_info(heartbeat_path)),
                              "can_steer": may_steer(request), **signed_in(request),
                              "hub": spec.hub_menu(request.scope.get("kea_account")) if spec.hub_menu else None,
                              "server_version": __version__, "on_hub": spec.hub_menu is not None})
+
+    def signing_pages(threads: list) -> list[str]:
+        """Pages signed on the site and not yet written onto the page: the page of each open Approve, and every
+        page on its 'Signs:' line (a bundle: one click signs a stage; docsite/signing.parse_signs)."""
+        from kea.docsite.signing import parse_signs
+        pages = set()
+        for thread in threads:
+            if "approve" in thread.tags and thread.status in ("open", "planned"):
+                pages.add(thread.page)
+                pages.update(key for key, _ in parse_signs(thread.text))
+        return sorted(pages)
 
     def signed_in(request: Request) -> dict:
         """Who the reader is for the menu bar: signed in (account or site password) and where to sign out."""

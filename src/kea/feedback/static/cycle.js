@@ -301,7 +301,32 @@
     for (const row of document.querySelectorAll(".progress-table tr[data-page]")) {
       const cell = row.querySelector(".live-cell");
       const key = row.dataset.page;
-      if (cell) cell.textContent = going.has(key) ? "asked: see the top of the page" : signing.has(key) ? "signed on the site; written onto the page at the next harvest" : "";
+      if (cell) cell.textContent = going.has(key) ? "asked: see the top of the page" : "";
+      const stands = row.querySelector(".rs-you");
+      if (stands && !stands.dataset.was) stands.dataset.was = stands.textContent;
+      if (stands) {
+        stands.textContent = signing.has(key) && !going.has(key) ? "✓ signed on the site" : stands.dataset.was;
+        stands.className = "rs " + (signing.has(key) && !going.has(key) ? "rs-done" : "rs-you");
+        if (cell && signing.has(key) && !going.has(key)) cell.textContent = "Claude writes it onto the page at the next harvest or step";
+      }
+      row.classList.toggle("signed-live", signing.has(key) || going.has(key));
+      const button = row.cells[2];
+      if (button && !button.dataset.was) button.dataset.was = button.innerHTML;
+      if (button) button.innerHTML = signing.has(key) || going.has(key) ? "<span class='help'>nothing to click</span>" : button.dataset.was;
+    }
+    // the count in "Waiting for you": the rows still waiting for a click
+    const count = document.querySelector("h2 .count");
+    if (count) count.textContent = document.querySelectorAll(".progress-table tr[data-page]:not(.signed-live)").length;
+    // the route's "waiting for you" cells: every page they wait on is signed now (links → keys: data-pages)
+    let byHref = {};
+    try { byHref = Object.fromEntries(Object.entries(JSON.parse(box.dataset.pages || "{}")).map(([key, href]) => [href, key])); }
+    catch (error) { /* no map: the route cells stay as built */ }
+    for (const td of document.querySelectorAll("td.rs-cell.rs-you")) {
+      const keys = Array.from(td.querySelectorAll(".rs-pages a")).map(link => byHref[link.getAttribute("href")]).filter(Boolean);
+      const mark = td.querySelector(".rs");
+      if (!mark.dataset.was) mark.dataset.was = mark.textContent;
+      const all = keys.length && keys.every(key => signing.has(key));
+      mark.textContent = all ? "✓ signed on the site" : mark.dataset.was;
     }
   }
 

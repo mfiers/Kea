@@ -445,6 +445,8 @@
     const waitingPage = !!(content && content.dataset.waiting);           // pace: guided, not yet approved
     const dropAlso = content ? content.dataset.drop || "" : "";
     const asked = openThread(waitingPage ? "approve" : "confirm"), unasked = openThread("unconfirm");
+    // signed with its stage from another page ("Approve all"): nothing to click here until Claude writes it on
+    const signedWith = waitingPage && !asked && ((window.keaStatus || {}).signing || []).includes(PAGE);
     const dropped = openThread("drop") || openThread("reject"), revising = openThread("revise");
     const done = !waitingPage && pageConfirmed();
     const when = waitingPage ? "at the next harvest" : "in the next plan";
@@ -470,7 +472,14 @@
       confirm.title = "One sign-off for every page that waits in this stage:\n" + bundleList(together)
         + "\nYour name and the version of each page are recorded. If a page changes later (beyond a minor edit), it waits again.";
     }
+    if (signedWith) {
+      confirm.className = "fb-dpill fb-d-confirm fb-pending";
+      confirm.textContent = "✓ Signed with its stage";
+      confirm.title = "Signed with the other pages of its stage (Approve all, on another page); Claude writes it onto the page at the next harvest or step. To take it back, do so on that page.";
+      if (one) one.hidden = true;
+    }
     confirm.onclick = async () => {
+      if (signedWith) return;
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
       if (together.length > 1) {
         if (!confirm_(`You sign off on these ${together.length} pages, as you see them now:\n\n${bundleList(together)}\n\nIf one of them changes later (beyond a minor edit), it waits for you again.`)) return;
