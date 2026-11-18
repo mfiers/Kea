@@ -310,7 +310,8 @@ def make_site_app(spec: SiteSpec) -> Starlette:
         from kea.docsite.signing import parse_signs
         pages = set()
         for thread in threads:
-            if "approve" in thread.tags and thread.status in ("open", "planned"):
+            approving = "approve" in thread.tags or ("go" in thread.tags and thread.text.startswith("Approve &"))
+            if approving and thread.status in ("open", "planned"):
                 pages.add(thread.page)
                 pages.update(key for key, _ in parse_signs(thread.text))
         return sorted(pages)

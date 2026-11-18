@@ -266,7 +266,12 @@
     if (/^Approve & /i.test(head)) return (count > 1 ? `Approve all ${count} & ` : "Approve & ") + action;
     return action[0].toUpperCase() + action.slice(1);
   }
-  window.keaRequestLabel = requestLabel;           // feedback.js: the page's ▶ button while a request waits
+  window.keaRequestLabel = requestLabel;
+  /* The page keys on a request's Signs: line ([] without one). */
+  function signsKeys(text) {
+    const line = (text || "").split("\n").find(item => /^\s*Signs:/.test(item));
+    return line ? line.replace(/^\s*Signs:/, "").split(",").map(part => part.trim().split("@")[0]).filter(Boolean) : [];
+  }           // feedback.js: the page's ▶ button while a request waits
   function goBanner(status) {
     const goes = status.goes || [], watcher = status.watcher || {};
     const working = watcher.state === "working" && watcher.exit === "going";
@@ -308,22 +313,36 @@
       parts.push(el("p", { class: "help" }, "No Approve & go request is open."));
     }
     box.replaceChildren(...parts);
-    const signing = new Set(status.signing || []), going = new Set(goes.map(item => item.page));
+    /* One state per page that waited for you, from the live status: signed on the site (an Approve, or the
+       Approve of an Approve & go, with every page on its Signs: line), then the request's fate: Claude about to
+       start, Claude working on it (the watcher's page or request), or no session watching. */
+    const signing = new Set(status.signing || []);
+    const going = new Map();                                           // page key → its Approve & go request
+    for (const item of goes) for (const key of [item.page, ...signsKeys(item.text)]) if (!going.has(key)) going.set(key, item);
+    const busy = watcher.state === "working" && watcher.exit === "going";
+    const workingOn = new Set(busy ? [watcher.page, ...(goes.length && (!watcher.thread || watcher.thread === goes[0].thread_id)
+      ? [goes[0].page, ...signsKeys(goes[0].text)] : [])].filter(Boolean) : []);
     for (const row of document.querySelectorAll(".progress-table tr[data-page]")) {
       const cell = row.querySelector(".live-cell");
       const key = row.dataset.page;
-      if (cell) cell.textContent = going.has(key) ? "asked: see the top of the page" : "";
-      const stands = row.querySelector(".rs-you");
-      if (stands && !stands.dataset.was) stands.dataset.was = stands.textContent;
+      const stands = row.querySelector(".rs-you, .rs-live");
+      const request = going.get(key);
+      const signed = signing.has(key) || (request && /^Approve & /i.test(request.text || ""));
+      const taken = signed || !!request || workingOn.has(key);
+      if (stands && !stands.dataset.was) { stands.dataset.was = stands.textContent; stands.dataset.cls = stands.className; }
       if (stands) {
-        stands.textContent = signing.has(key) && !going.has(key) ? "✓ signed on the site" : stands.dataset.was;
-        stands.className = "rs " + (signing.has(key) && !going.has(key) ? "rs-done" : "rs-you");
-        if (cell && signing.has(key) && !going.has(key)) cell.textContent = "Claude writes it onto the page when it picks it up";
+        stands.textContent = !taken ? stands.dataset.was : workingOn.has(key) ? (signed ? "✓ signed · ⟳ Claude is working" : "⟳ Claude is working")
+          : request ? (signed ? "✓ signed · ▶ next step asked" : "▶ next step asked") : "✓ signed on the site";
+        stands.className = !taken ? stands.dataset.cls : "rs rs-live " + (workingOn.has(key) ? "rs-running" : request ? "rs-agent" : "rs-done");
       }
-      row.classList.toggle("signed-live", signing.has(key) || going.has(key));
+      if (cell) cell.textContent = !taken ? ""
+        : workingOn.has(key) ? (watcher.doing ? "Claude: " + watcher.doing : "Claude is taking the step you asked for")
+        : request ? (watcher.state === "watching" ? `${requestLabel(request.text)}: Claude picks it up within a minute` : `${requestLabel(request.text)}: waits for a Claude session`)
+        : "Claude writes it onto the page when it picks it up";
+      row.classList.toggle("signed-live", taken);
       const button = row.cells[2];
       if (button && !button.dataset.was) button.dataset.was = button.innerHTML;
-      if (button) button.innerHTML = signing.has(key) || going.has(key) ? "<span class='help'>nothing to click</span>" : button.dataset.was;
+      if (button) button.innerHTML = taken ? "<span class='help'>nothing to click</span>" : button.dataset.was;
     }
     // the count in "Waiting for you": the rows still waiting for a click
     const count = document.querySelector("h2 .count");
@@ -336,7 +355,7 @@
       const keys = Array.from(td.querySelectorAll(".rs-pages a")).map(link => byHref[link.getAttribute("href")]).filter(Boolean);
       const mark = td.querySelector(".rs");
       if (!mark.dataset.was) mark.dataset.was = mark.textContent;
-      const all = keys.length && keys.every(key => signing.has(key));
+      const all = keys.length && keys.every(key => signing.has(key) || (going.get(key) && /^Approve & /i.test(going.get(key).text || "")));
       mark.textContent = all ? "✓ signed on the site" : mark.dataset.was;
     }
   }
