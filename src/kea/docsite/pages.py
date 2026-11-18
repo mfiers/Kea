@@ -17,7 +17,7 @@ from kea.docsite import artefacts, changes, codepages, comments, graph, history,
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
-                            prefix_for, render_markdown, detail_pills, status_pill, status_row_class, tagline, type_badge)
+                            prefix_for, render_markdown, detail_pills, node_href, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons, render
 
 CHILD_ORDER = ["experiment", "premise", "question", "hypothesis", "decision", "step", "result", "conclusion", "figure",
@@ -664,9 +664,6 @@ class SiteRenderer:
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
                 pills += (f" <span class='pill s-recheck' title='{esc(detail)}. Compare the versions under History; "
                           f"Approve signs the new wording.'>changed since {esc(names)} signed</span>")
-        bundle = signing.bundle(self.tree, node) if self.tree.pace == "guided" else []
-        bundle_data = json.dumps([{"key": item.key, "label": item.label or item.title, "title": item.title,
-                                   "type": item.type, "version": self.page_version(item)} for item in bundle])
         kind_html = (f"{icons.svg(node.type)}Experiment" if node.type == "experiment" else fullname_inner(node))
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
@@ -674,8 +671,6 @@ class SiteRenderer:
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"
-                 f"{(' data-bundle=' + chr(39) + esc(bundle_data) + chr(39)) if len(bundle) > 1 else ''}"
-                 f"{(' data-stage-go=' + chr(39) + esc(graph.stage_action(self.tree, bundle)) + chr(39)) if len(bundle) > 1 else ''}"
                  f" style='--kc:{TYPE_COLOURS.get(node.type, '#556')}'"
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
@@ -1114,11 +1109,6 @@ class SiteRenderer:
                   "running": ("⟳", "running"), "later": ("·", ""), "closed": ("–", "closed"),
                   "free": ("–", "not needed")}
 
-    def waiting_pages(self) -> list[Node]:
-        """Pages that wait for a sign-off (pace: guided), in route order."""
-        return sorted((node for node in self.tree.nodes.values() if node.waiting),
-                      key=lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id)))
-
     def progress_page(self) -> None:
         """progress.html (Progress in the menu bar): where the round stands (Review → Harvest → Implement →
         Release; the current step is marked live by _feedback/cycle.js, #progress-live), the pages that wait for a
@@ -1139,31 +1129,26 @@ class SiteRenderer:
             parts.append("<p class='help not-annotatable'>This project runs with <code>pace: free</code>: no page waits "
                          "for a sign-off; Approve records a signature only.</p>")
         order = lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id))  # noqa: E731
-        waiting = self.waiting_pages()
         ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
                        key=order)
+        waiting = signing.sign_order(tree)                # top down: the order "Approve & next" walks
         parts.append(f"<h2>Needs your sign-off <span class='count'>{len(waiting)}</span></h2>")
         if waiting:
-            parts.append("<p class='help'>Read the page, then press <b>✓ Approve</b> on it (it signs the other pages "
-                         "of its stage with it). Nothing starts when you click: the sign-off is recorded, Claude writes "
-                         "it onto the pages at the next Harvest and puts the step after it in the plan.</p>")
+            first = node_href(waiting[0], prefix)
+            parts.append("<p class='help'>Top down, one page at a time: read the page, then press <b>✓ Approve &amp; "
+                         "next</b> on it; it signs that page only and opens the next one. Nothing starts when you "
+                         "click: Claude writes the sign-offs onto the pages at the next Harvest.</p>"
+                         f"<p class='not-annotatable'><a class='sign-start' id='sign-start' href='{esc(first)}'>"
+                         "Start signing at the top →</a></p>")
             rows = []
-            for node in waiting:
-                together = signing.bundle(tree, node)
-                action = graph.stage_action(tree, together) if len(together) > 1 else graph.go_action(tree, node)
+            for number, node in enumerate(waiting, 1):
                 stands = ("<span class='rs rs-you'>● changed since signed</span>" if signing.stale(node)
                           else "<span class='rs rs-you'>● needs your sign-off</span>")
-                listed = (" <span class='help'>(" + ", ".join(esc(item.label) for item in together) + ")</span>"
-                          if len(together) > 1 else "")
-                button = (f"<b>✓ Approve all {len(together)}</b>{listed}" if len(together) > 1 else "<b>✓ Approve</b>")
-                then = esc(action) if action else "<span class='help'>nothing further</span>"
-                rows.append(f"<tr data-page='{esc(node.key)}'><td class='rq'>{link(node)}"
+                rows.append(f"<tr data-page='{esc(node.key)}'><td class='nowrap help'>{number}</td><td class='rq'>{link(node)}"
                             + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
-                            + f"</td><td>{stands}<div class='live-cell help'></div></td><td>{button}</td>"
-                              f"<td>{then}</td></tr>")
-            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Where it stands</th>"
-                         "<th>What to press</th><th>Next plan then holds</th></tr></thead><tbody>" + "".join(rows)
-                         + "</tbody></table></div>")
+                            + f"</td><td>{stands}<div class='live-cell help'></div></td></tr>")
+            parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>#</th><th>Page</th>"
+                         "<th>Where it stands</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
         else:
             parts.append("<p class='help'>No page needs a sign-off.</p>")
         parts.append(f"<h2>Claude's next steps <span class='count'>{len(ready)}</span></h2>")

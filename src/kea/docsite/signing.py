@@ -25,10 +25,9 @@ A signature is one entry of ``approved:`` (a list, one entry per person) in a pa
    negation or other meaning-bearing word (direction, quantifier, modal, causal verb), a link, a non-text field,
    a short field (certainty, analysis, …) or more than a few words changed. The signer sees each minor edit and its reason on the page and can Revise it.
 
-4. Bundles (:func:`bundle`): one click signs a stage, not a page. On a page that waits, Approve signs every
-   page waiting with it: the experiment with its proposed questions, premises and decisions; a question's plan
-   (hypotheses and planned steps); a question's results; its conclusions. The site lists what is signed before the
-   click, and the thread records each page and the version seen (a ``Signs:`` line).
+4. One page per click (since 1.31.1; 1.29-1.31.0 signed a whole stage at once, with a ``Signs:`` line naming each
+   page and the version seen, still read by ``kea sign``). :func:`sign_order` lists the pages that wait, top down
+   through the tree; the site's "Approve & next" signs one and opens the next.
 
 5. Who writes a signature: never the agent by hand. ``kea sign --thread <id>`` applies a reader's Approve or
    Approve & go (the thread names the reader, the page versions they saw and the bundle); ``kea sign <id> --by
@@ -36,7 +35,7 @@ A signature is one entry of ``approved:`` (a list, one entry per person) in a pa
    ``kea check`` reports a site signature whose thread is missing from the comment log or names someone else.
 
 Input: the tree of pages, git history of doc/, data/feedback/events.jsonl. Output: :func:`approved`,
-:func:`state`, :func:`bundle`, :func:`problems_and_notes`, and the ``kea sign`` command (:func:`main`).
+:func:`state`, :func:`sign_order`, :func:`problems_and_notes`, and the ``kea sign`` command (:func:`main`).
 """
 from __future__ import annotations
 
@@ -220,34 +219,46 @@ def minor_reasons(old_header: dict, old_body: str, new_header: dict, new_body: s
     return reasons
 
 
-# ------------------------------------------------------------------ bundles: one click signs a stage
+# ------------------------------------------------------------------ the order of sign-offs: one page per click
 
-def bundle(tree, node) -> list:
-    """The pages one Approve on this page signs (pace: guided): every page that waits in the same stage, the page
-    itself first; [node] when it waits alone, [] when it does not wait."""
+def sign_order(tree) -> list:
+    """Every page that waits for a sign-off (pace: guided), in the order a reader should read and sign them: top
+    down through the tree. Per experiment: the experiment, its premises and decisions; then each question in turn
+    with its hypotheses, planned steps, results and conclusions (the route's order); a page that fits nowhere comes
+    right after its parent, else at the end. One Approve signs one page (since 1.31.1); the site's "Approve & next"
+    walks this list."""
     from kea.docsite import graph, questions
-    if not node.waiting:
-        return []
-    project = [other for other in tree.nodes.values() if other.project == node.project]
-    background = [other for other in project if other.waiting and other.type in ("premise", "decision")]
-    members: list = []
-    if node.type in ("experiment", "premise", "decision") or (node.type == "question" and _question_waits(node)):
-        members = [other for other in project if other.waiting
-                   and (other.type == "experiment" or other.type == "question" and _question_waits(other))]
-    for question in questions.questions(tree, node.project):
-        route = graph.question_route(tree, question)
-        for stage in route["stages"]:
-            pages = [page for page in stage["pages"] if page.waiting]
-            if stage["state"] == "you" and node in pages and stage["key"] != "question":
-                members = pages
-    members = members or [node]
-    members += [other for other in background if other not in members]
-    order = {"experiment": 0, "premise": 1, "decision": 2, "question": 3, "hypothesis": 4, "step": 5, "result": 6,
-             "figure": 7, "conclusion": 8}
     from kea.docsite.nodes import natural
-    rest = sorted((other for other in members if other is not node),
-                  key=lambda other: (order.get(other.type, 9), natural(other.number or other.id)))
-    return [node] + rest
+    rank = {"experiment": 0, "premise": 1, "decision": 2, "question": 3, "hypothesis": 4, "step": 5, "result": 6,
+            "figure": 7, "conclusion": 8}
+    order: list = []
+
+    def add(node) -> None:
+        if node.waiting and node not in order:
+            order.append(node)
+    for project, home in tree.projects.items():
+        add(home)
+        top = [node for node in tree.nodes.values() if node.project == project and node.type in ("premise", "decision")
+               and node.parent in (None, "home")]
+        for node in sorted(top, key=lambda node: (rank[node.type], natural(node.number or node.id))):
+            add(node)
+        for question in questions.questions(tree, project):
+            add(question)
+            for stage in graph.question_route(tree, question)["stages"]:
+                for node in sorted(stage["pages"], key=lambda node: (rank.get(node.type, 9), natural(node.number or node.id))):
+                    add(node)
+    rest = sorted((node for node in tree.nodes.values() if node.waiting and node not in order),
+                  key=lambda node: (node.project, rank.get(node.type, 9), natural(node.number or node.id)))
+    for node in rest:                              # after its parent (and the parent's earlier children), if listed
+        parent = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
+        if parent in order:
+            index = order.index(parent) + 1
+            while index < len(order) and order[index].parent == node.parent and order[index].project == node.project:
+                index += 1
+            order.insert(index, node)
+        else:
+            order.append(node)
+    return order
 
 
 def _question_waits(question) -> bool:
@@ -421,7 +432,7 @@ def main(argv: list[str]) -> int:
     from kea.docsite.nodes import DOC, load_tree
     parser = argparse.ArgumentParser(
         prog="kea sign", description="Record a sign-off bound to the page's wording, or a minor edit that keeps it.",
-        epilog="kea sign --thread T: apply a reader's Approve (or Approve & go), with every page of its bundle.  "
+        epilog="kea sign --thread T: apply a reader's Approve (or Approve & go), with every page on its Signs: line (1.29-1.31.0).  "
                "kea sign ID… --by NAME --how chat: the owner signed off in the conversation.  "
                "kea sign ID --minor --because \"…\": an edit that changes no meaning keeps the signatures.  "
                "kea sign --adopt: bind signatures made before 1.29 to today's wording.  kea sign --list: every "

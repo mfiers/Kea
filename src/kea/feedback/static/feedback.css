@@ -302,3 +302,7 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 .fb-dgroup-head.fb-pending{background:#fdecea;border:2px dashed #b3261e;color:#8c1d18}
 /* Approve, when there is no next step to ask for: the main button of the page */
 .fb-dpill.fb-d-confirm.fb-main{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:600}.fb-dpill.fb-d-confirm.fb-main:hover{background:#256a29}
+/* ‹ n of N ›: the pages that wait for a sign-off, top down (feedback.js renderSignNav) */
+.fb-signnav{display:flex;align-items:center;justify-content:space-between;gap:4px}.fb-signnav[hidden]{display:none}
+.fb-signnav .fb-dpill{padding:4px 12px;text-align:center;font-weight:600}.fb-signnav .fb-dpill:disabled{opacity:.35;cursor:default}
+.fb-sn-where{font:12.5px system-ui,sans-serif;color:#3b4252;background:#fff;border:1px solid #c9ced8;border-radius:12px;padding:3px 9px;white-space:nowrap}

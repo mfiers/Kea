@@ -294,8 +294,8 @@
     const box = document.getElementById("progress-live");
     if (!box) return;
     box.replaceChildren(nowLine(status), sessionLine(status));
-    /* Pages signed on the site (an Approve, with every page on its Signs: line): nothing to click any more; the
-       sign-off waits for the harvest (or is being harvested). */
+    /* Pages signed on the site (an Approve; before 1.31.1 also every page on its Signs: line): the sign-off waits
+       for the harvest (or is being harvested). */
     const state = status.cycle.state;
     const signing = new Set(status.signing || []);
     const harvesting = state === "harvest-requested";
@@ -311,10 +311,11 @@
       }
       if (cell) cell.textContent = !signed ? "" : harvesting ? "Claude is writing it on and planning the next step" : "";
       row.classList.toggle("signed-live", signed);
-      const button = row.cells[2];
-      if (button && !button.dataset.was) button.dataset.was = button.innerHTML;
-      if (button) button.innerHTML = signed ? "<span class='help'>nothing to click</span>" : button.dataset.was;
     }
+    // "Start signing at the top": the first page in the order that is still unsigned
+    const start = document.getElementById("sign-start");
+    const first = ((status.build || {}).sign_order || []).find(item => !signing.has(item.key) && item.href);
+    if (start) { start.hidden = !first; if (first) start.href = PREFIX + first.href; }
     // the count of "Needs your sign-off": the rows still waiting for a click
     const count = document.querySelector("h2 .count");
     if (count) count.textContent = document.querySelectorAll(".progress-table tr[data-page]:not(.signed-live)").length;

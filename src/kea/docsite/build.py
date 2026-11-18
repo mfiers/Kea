@@ -89,8 +89,13 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     for plan in sorted((PROJECT_ROOT / "doc" / "_cycles").glob("cycle-*.md")):
         number = plan.stem.split("-")[-1].lstrip("0") or "0"
         plan_items[number] = len(re.findall(r"^### ", plan.read_text(encoding="utf-8"), flags=re.M))
+    from kea.docsite import signing
+    hrefs = {key: relative for relative, (key, _) in renderer.pages.items()}
+    # the pages that wait for a sign-off, top down (the site's "Approve & next" and ‹ › walk this list)
+    sign_order = [{"key": node.key, "href": hrefs.get(node.key, ""), "label": node.label or "", "title": node.title,
+                   "type": node.type} for node in signing.sign_order(tree)] if tree.pace == "guided" else []
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
-                                                  "plan_items": plan_items,
+                                                  "plan_items": plan_items, "sign_order": sign_order,
                                                   "previews_marked": True,      # kea publish relies on this
                                                   "built_at": dt.datetime.now().isoformat(timespec="seconds")}))
     from kea.docsite import linkcheck

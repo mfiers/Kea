@@ -72,13 +72,12 @@ support). **Never write or edit `approved:` by hand: use `kea sign`.** The owner
 (name the pages they approved; "looks good" about one question approves that question only):
 `kea sign <id> … --by "<name>"` (recorded as `how: chat`, shown as recorded by you). A reader presses on the site:
 
-- **✓ Approve** (the main button on a page that waits): signs every page that waits in the same stage ("✓ Approve
-  all 3": the experiment with its proposed questions, premises and decisions; a question's plan; its results; its
-  conclusions), or "this page only". The thread (tag `approve`) has a `Signs:` line naming each page and the
-  version seen. Nothing starts: it waits for the harvest like every comment (since 1.31; Approve & go and
-  `kea watch` exits 40 and 50 of 1.28-1.30 are gone). At the harvest, `kea sign --pending` applies every open
-  sign-off (it reads the bundles and the versions; change no claim), and the next step of each stage it completes
-  becomes a plan item, done at Implement.
+- **✓ Approve & next →** (the main button on a page that waits): signs that page only, bound to the version seen
+  (since 1.31.1; threads of 1.29-1.31.0 may carry a `Signs:` line naming several pages, which `kea sign` still
+  applies), then opens the next page that waits, top down (`signing.sign_order`). Nothing starts: it waits for the
+  harvest like every comment (since 1.31; Approve & go and `kea watch` exits 40 and 50 of 1.28-1.30 are gone). At
+  the harvest, `kea sign --pending` applies every open sign-off (change no claim), and the next step of each stage
+  that is now fully signed becomes a plan item, done at Implement. Never sign pages on the owner's behalf in bulk.
 - **Revise** and **Drop** are plan items like any comment, on a waiting page too: done at Implement.
 
 **A signature holds only for the wording signed.** When you change a signed page's title, summary, text or fields

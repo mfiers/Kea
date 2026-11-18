@@ -196,8 +196,8 @@ GONE = ("deprecated", "superseded", "dropped")
 def waiting(node: Node) -> bool:
     """Under pace: guided, a page waiting for a sign-off before the next step builds on it: a question, a premise,
     a decision, a planned hypothesis or step, a result or a conclusion without a signature that holds; and any page
-    of these types edited (beyond minor edits) after its sign-off. One Approve signs a whole stage
-    (signing.bundle), so this costs one click per stage, not per page."""
+    of these types edited (beyond minor edits) after its sign-off. One Approve signs one page; the site walks
+    them top down (signing.sign_order)."""
     from kea.docsite import signing
     if node.type not in WAITING_TYPES or approved(node) or node.status in GONE:
         return False

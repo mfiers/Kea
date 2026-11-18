@@ -357,13 +357,16 @@
   const pageConfirmed = () => !!(container && container.querySelector(".node-content[data-confirmed]"));
   const contentData = () => { const content = container && container.querySelector(".node-content"); return content ? content.dataset : {}; };
   const pageVersion = () => contentData().version || "";
-  /* The stage this page waits in (signing.bundle at build time): one Approve signs every page in it. */
-  const bundle = () => { try { return JSON.parse(contentData().bundle || "[]"); } catch (error) { return []; } };
-  const signsLine = items => "Signs: " + items.map(item => item.key + "@" + item.version).join(", ");
-  const bundleList = items => items.map(item => "  " + item.label + "  " + item.title).join("\n");
-  /* The step that follows once this page's stage is signed (graph.stage_action / go_action): named on the Approve
-     button's tooltip, so a reader knows what the next plan will hold. Nothing runs before Implement. */
-  const nextStep = waitingPage => (waitingPage && bundle().length > 1 ? contentData().stageGo : contentData().go) || "";
+  /* The pages that wait for a sign-off, top down through the tree (signing.sign_order, in _build.json, handed over by
+     cycle.js's status poll): one Approve signs one page; "Approve & next" then opens the next page still unsigned. */
+  const signOrder = () => (((window.keaStatus || {}).build || {}).sign_order || []);
+  const signedOnSite = () => new Set((window.keaStatus || {}).signing || []);
+  function nextToSign() {
+    const order = signOrder(), signed = signedOnSite(), here = order.findIndex(item => item.key === PAGE);
+    const open = item => item.key !== PAGE && !signed.has(item.key) && item.href;
+    return order.slice(here + 1).find(open) || order.slice(0, Math.max(here, 0)).find(open) || null;
+  }
+  const goTo = item => { location.href = BASE + (item ? item.href : "progress.html"); };
   /* A group of pills behind one pill (Change ▸, More ▸): opens in place; opening one closes the other. */
   function dockGroup(cls, label, title, members) {
     const box = el("div", { class: "fb-dgroup " + cls });
@@ -403,7 +406,12 @@
       items.querySelector(".fb-d-edit").remove();
       const change = dockGroup("fb-d-change", "Change ▸", "Edit the text, ask Claude to revise the page, or drop it", [edit, revise, reject]);
       const more = dockGroup("fb-d-more", "More ▸", "Propose a next step, ask for work in the next run, or place the page in the manuscript", [propose, next, manuscript]);
-      items.append(el("span", { class: "fb-dock-gap" }), confirm, change, more);
+      // ‹ 2 of 7 ›: the pages that wait for a sign-off, top down (shown on such a page)
+      const signNav = el("div", { class: "fb-signnav", hidden: "" },
+        el("button", { class: "fb-dpill fb-sn-prev", title: "The page before this one in the sign-off order" }, "‹"),
+        el("span", { class: "fb-sn-where" }),
+        el("button", { class: "fb-dpill fb-sn-next", title: "The next page to sign" }, "›"));
+      items.append(el("span", { class: "fb-dock-gap" }), signNav, confirm, change, more);
     } else {
       // the project's front page: propose an experiment (renderDock hides the button where nothing can be proposed)
       const propose = pill("fb-d-propose", "Propose ▸", "Propose a new experiment for this project", () => toggleDockPop(propose, "propose"));
@@ -440,22 +448,21 @@
     const waitingPage = !!(content && content.dataset.waiting);           // pace: guided, not yet approved
     const dropAlso = content ? content.dataset.drop || "" : "";
     const asked = openThread(waitingPage ? "approve" : "confirm"), unasked = openThread("unconfirm");
-    // signed with its stage from another page ("Approve all"): nothing to click here; it waits for the harvest
+    // signed on another page with a Signs: line (Approve all, 1.29-1.31.0): nothing to click here; it waits for the harvest
     const signedWith = waitingPage && !asked && ((window.keaStatus || {}).signing || []).includes(PAGE);
     const dropped = openThread("drop") || openThread("reject"), revising = openThread("revise");
     const done = !waitingPage && pageConfirmed();
     // every verdict waits for the harvest: Claude records sign-offs then and plans the rest; nothing runs before Implement
     const when = "at the next Harvest";
     const word = waitingPage ? "Approve" : "Confirm";
-    const together = waitingPage ? bundle() : [];
-    const next = nextStep(waitingPage);                      // the step the next plan will hold once this is signed
-    const then = next ? ` Then the plan holds the next step (${next}), which runs only when a PI presses Implement.` : "";
+    const following = waitingPage ? nextToSign() : null;    // the next page to sign, top down
+    const then = " Nothing else starts: the next step goes into the plan at the Harvest and runs only when a PI presses Implement.";
     confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked || signedWith ? " fb-pending"
       : unasked ? " fb-pending-off" : waitingPage ? " fb-main" : "");
     if (asked || signedWith) {
-      confirm.textContent = signedWith ? "✓ Signed with its stage · waits for Harvest" : waitingPage ? "✓ Signed · waits for Harvest" : "✓ Confirm · next plan";
-      confirm.title = signedWith ? "Signed with the other pages of its stage, on another page. Claude writes it onto the pages at the next Harvest. To take it back, do so on that page."
-        : `Your sign-off is recorded. Claude writes it onto the page${together.length > 1 ? "s of this stage" : ""} ${when}.${then} Click to take it back.`;
+      confirm.textContent = waitingPage ? "✓ Signed · waits for Harvest" : "✓ Confirm · next plan";
+      confirm.title = signedWith ? "Signed on another page. Claude writes it onto this page at the next Harvest."
+        : `Your sign-off is recorded. Claude writes it onto the page ${when}.${then} Click to take it back.`;
     } else if (unasked) {
       confirm.textContent = "✓ Withdrawal · next plan";
       confirm.title = "The confirmation is withdrawn in the next plan; click to keep it";
@@ -463,10 +470,10 @@
       confirm.textContent = "✓ Confirmed";
       confirm.title = "This page is confirmed; click to withdraw the confirmation (in the next plan)";
     } else if (waitingPage) {
-      const all = together.length > 1 ? `all ${together.length} ` : "";
-      confirm.textContent = `✓ Approve ${all}`.trim() + (all ? " ▸" : "");
-      confirm.title = (all ? "Sign off on the pages of this stage, or on this page alone" : `Sign off on this version${pageVersion() ? " (" + pageVersion() + ")" : ""}`)
-        + `. Nothing starts now: Claude writes the sign-off on ${when}.${then} If a page changes later (beyond a minor edit), it waits again.`;
+      confirm.textContent = following ? "✓ Approve & next →" : "✓ Approve";
+      confirm.title = `Sign off on this page only, as you read it${pageVersion() ? " (version " + pageVersion() + ")" : ""}`
+        + (following ? `, then open the next page to sign: ${following.label ? following.label + " " : ""}${following.title}` : "")
+        + `. Claude writes the sign-off onto the page ${when}.${then} If the page changes later (beyond a minor edit), it waits again.`;
     } else {
       confirm.textContent = "✓ " + word;
       confirm.title = "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
@@ -474,12 +481,17 @@
     confirm.onclick = async () => {
       if (signedWith) return;
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
-      if (waitingPage && together.length > 1) return toggleDockPop(confirm, "approve");
       if (unasked) return withdraw(unasked, "withdrawal taken back");
       if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
       if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());
-      await tagThread(null, [waitingPage ? "approve" : "confirm"]);
+      const made = await tagThread(null, [waitingPage ? "approve" : "confirm"]);
+      if (made && waitingPage) {
+        const left = nextToSign();
+        if (!left) toast("Signed. Every page that waited is signed now: next, a PI presses Harvest.");
+        setTimeout(() => goTo(left), left ? 400 : 1600);         // top down: the next page to sign, or Progress
+      }
     };
+    renderSignNav(waitingPage);
     const revise = dockEl.querySelector(".fb-d-revise");
     const soon = "next plan";
     revise.className = "fb-dpill fb-d-revise" + (revising ? " fb-pending" : "");
@@ -511,7 +523,25 @@
     if (more) more.textContent = "More" + (marked ? " · " + marked : "") + " ▸";
     if (!dockPop.hidden) fillDockPop();
   }
-  // the status poll (cycle.js) tells which pages were signed with their stage on another page
+  /* ‹ n of N ›: where this page is in the sign-off order, with the pages before and after it. */
+  function renderSignNav(waitingPage) {
+    const nav = dockEl && dockEl.querySelector(".fb-signnav");
+    if (!nav) return;
+    const order = signOrder(), here = order.findIndex(item => item.key === PAGE);
+    nav.hidden = !waitingPage || here < 0 || order.length < 2;
+    if (nav.hidden) return;
+    const signed = signedOnSite();
+    const left = order.filter(item => !signed.has(item.key)).length;
+    nav.querySelector(".fb-sn-where").textContent = `${here + 1} of ${order.length}` + (left < order.length ? ` · ${left} to sign` : "");
+    const prev = order[here - 1], next = order[here + 1];
+    const prevButton = nav.querySelector(".fb-sn-prev"), nextButton = nav.querySelector(".fb-sn-next");
+    prevButton.disabled = !prev; nextButton.disabled = !next;
+    prevButton.title = prev ? `Previous: ${prev.label ? prev.label + " " : ""}${prev.title}` : "This is the first page to sign";
+    nextButton.title = next ? `Next: ${next.label ? next.label + " " : ""}${next.title}` : "This is the last page to sign";
+    prevButton.onclick = () => prev && goTo(prev);
+    nextButton.onclick = () => next && goTo(next);
+  }
+  // the status poll (cycle.js) hands over the sign-off order and the pages signed on the site
   window.addEventListener("kea-status", () => renderDock());
   const confirm_ = text => window.confirm(text);
   /* The popup of Next run / Manuscript chips, to the left of its pill. */
@@ -535,26 +565,6 @@
               dockPop.hidden = true; await withdraw(revising, "revision taken back"); } }, "Take it back")))
         : proposalForm({ ...tag, label: "", help: "What should change, and why? The page is rewritten; pages that rest on it are rechecked." },
             null, () => { dockPop.hidden = true; }, "Revise this page"));
-      dockPop.hidden = false;
-      const rect = dockPopAnchor.getBoundingClientRect();
-      const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
-      dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
-      dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
-      return;
-    }
-    if (dockPopGroup === "approve") {               // Approve only, on a stage of several pages: all, or this one
-      const together = bundle(), dropped = openThread("drop") || openThread("reject");
-      const sign = async extra => {
-        dockPop.hidden = true;
-        if (dropped) await withdraw(dropped, "drop replaced by approve");
-        await tagThread(null, ["approve"], extra);
-      };
-      dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, "Sign off, as you see them now"),
-        el("div", { class: "fb-help" }, together.map(item => item.label + "  " + item.title).join(" · ")),
-        el("div", { class: "fb-sel-row" },
-          el("button", { class: "fb-qchip", onclick: () => sign(signsLine(together)) }, `All ${together.length} pages`),
-          el("button", { class: "fb-qchip", onclick: () => sign() }, "This page only")),
-        el("div", { class: "fb-help" }, "Nothing starts now. At the next Harvest Claude writes the sign-off onto the pages and puts the next step in the plan; it runs when a PI presses Implement. If a page changes later (beyond a minor edit), it waits again."));
       dockPop.hidden = false;
       const rect = dockPopAnchor.getBoundingClientRect();
       const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;

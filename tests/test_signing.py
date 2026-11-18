@@ -1,5 +1,6 @@
 """Signatures bound to the wording they signed (docsite/signing.py): what is signed, when a signature stops holding,
-minor edits that carry it (checked mechanically), bundles (one click per stage) and the kea sign command."""
+minor edits that carry it (checked mechanically), the top-down order of sign-offs (one page per click) and the
+kea sign command (which still reads the Signs: lines of 1.29-1.31.0)."""
 from __future__ import annotations
 
 import json
@@ -84,20 +85,21 @@ def test_minor_or_not():
     assert signing.minor_reasons({"title": "A"}, "See [[r-a]].", {"title": "A"}, "See [[r-b]].")
 
 
-def test_bundle_signs_a_stage_in_one_click(tmp_path):
+def test_sign_order_is_top_down_one_page_each(tmp_path):
     doc = _doc(tmp_path)
     (tmp_path / "kea.yaml").write_text("pace: guided\n")
     _page(doc, "p/step/s-a.md", "id: s-a\ntype: step\ntitle: Run\nshort: Runs.\nparent: q-a\nstatus: planned\n"
           "relations:\n  tests: [h-a]")
     _page(doc, "p/step/s-b.md", "id: s-b\ntype: step\ntitle: Control\nshort: Permutes.\nparent: q-a\n"
           "status: planned\nrelations:\n  tests: [h-a]")
+    _page(doc, "p/decision/d-a.md", "id: d-a\ntype: decision\ntitle: Per donor\nshort: Count per donor.\nparent: home")
     for relative in ("p/result/r-a.md", "p/conclusion/c-a.md"):
         (doc / relative).unlink()
     _sign_all(doc, "home.md", "q-a.md", "p-a.md")
     tree = nodes.load_tree(doc)
-    plan = [node.id for node in signing.bundle(tree, tree.nodes["p:s-b"])]
-    assert plan[0] == "s-b" and set(plan) == {"h-a", "s-a", "s-b"}
-    assert signing.bundle(tree, tree.nodes["p:q-a"]) == []                  # signed already: nothing to sign
+    order = [node.id for node in signing.sign_order(tree)]
+    assert order == ["d-a", "h-a", "s-a", "s-b"]                         # the decision first, then the question's plan
+    assert "q-a" not in order and len(order) == len(set(order))          # signed already: not listed
 
 
 def _git(root: Path, *args: str) -> None:
@@ -176,7 +178,7 @@ def test_kea_sign_pending_applies_every_open_sign_off(tmp_path, monkeypatch, cap
     events = tmp_path / "events.jsonl"
     monkeypatch.setattr(store, "default_path", lambda: events)
     tree = nodes.load_tree(doc)
-    stage = signing.bundle(tree, tree.nodes["p:s-b"])
+    stage = [tree.nodes[key] for key in ("p:s-b", "p:h-a", "p:s-a")]       # a stage signed at once in 1.29-1.31.0
     assert graph.stage_action(tree, stage) == "run the plan"              # two planned steps: the plan runs as one
     signs = "Signs: " + ", ".join(f"{node.key}@{identity.version_of(node)}" for node in stage)
     store.append_event({"type": "create", "page": "p:s-b", "author": "Ann", "text": signs, "tags": ["approve"],
