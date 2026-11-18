@@ -1002,7 +1002,9 @@ class SiteRenderer:
                    "<div class='short'>Working documentation of the project: each experiment is a tree of small "
                    "pages (questions, premises, hypotheses, steps, results, conclusions, caveats).</div>")
                 + "<p class='help not-annotatable'>New here? <a href='help.html'>How to read this site</a>.</p>"
-                + f"<h2>Experiments</h2><div class='not-annotatable'>{experiments}</div>{latest}"
+                + f"<h2>Experiments</h2><div class='not-annotatable' data-page-type='project'>{experiments}"
+                + "<p class='help'>To add an experiment: <b>Propose ▸ an experiment</b> in the page buttons; the "
+                  "agent writes it in the next run.</p></div>" + latest
                 + ("<h2>About this site</h2><ul class='not-annotatable'>" + "".join(
                     f"<li><a href='{esc(href)}'>{esc(title)}</a> <span class='help'>{esc(short)}</span></li>"
                     for href, title, short in getattr(self, "site_listing", [])) + "</ul>"

@@ -191,7 +191,9 @@
     return vocab.tags.filter(tag => tag.group === group && (scope === "page" || (tag.scope || "any") !== "page"));
   }
   /* Proposals (tags.py PROPOSALS): the next step of the reasoning for this page's type, written by the reader. */
-  const pageType = () => { const node = container && container.querySelector(".node-content"); return node ? node.dataset.type || "" : ""; };
+  // a page's type: its node, or the project's front page (data-page-type="project"), where only proposals apply
+  const pageType = () => { const node = container && container.querySelector(".node-content, [data-page-type]");
+    return node ? node.dataset.type || node.dataset.pageType || "" : ""; };
   function proposals() { return vocab.tags.filter(tag => tag.group === "propose" && (tag.types || []).includes(pageType())); }
   /* A small form for one proposal: the reader's text, Send and Cancel; selection = the quoted text or null. */
   function proposalForm(tag, selection, done, heading) {
@@ -407,6 +409,10 @@
       const manuscript = pill("fb-d-ms", "Manuscript ▸", "Which part of the manuscript the whole page belongs in", () => toggleDockPop(manuscript, "manuscript"));
       const propose = pill("fb-d-propose", "Propose ▸", "Propose the next step of the reasoning: a question, hypothesis, step, conclusion, caveat …", () => toggleDockPop(propose, "propose"));
       items.append(el("span", { class: "fb-dock-gap" }), confirm, one, go, revise, reject, propose, el("span", { class: "fb-dock-gap" }), next, manuscript);
+    } else {
+      // the project's front page: propose an experiment (renderDock hides the button where nothing can be proposed)
+      const propose = pill("fb-d-propose", "Propose ▸", "Propose a new experiment for this project", () => toggleDockPop(propose, "propose"));
+      items.append(el("span", { class: "fb-dock-gap" }), propose);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
       onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
