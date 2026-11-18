@@ -1586,6 +1586,9 @@ def site_pdf(tree: Tree, site: Path) -> dict | None:
     "complete", "version", "commit", "built", "reused", "reason"}; both PDFs are copied into <site>.
     """
     import json
+    if not tree.projects:
+        print("pdf     skipped: no experiment yet (the PDF reads as its experiments)")
+        return None
     command = typst_command()
     if command is None:
         return None

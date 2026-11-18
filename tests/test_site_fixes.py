@@ -125,3 +125,11 @@ def test_no_links_to_commits_before_changes_since(tmp_path, monkeypatch):
         assert f"commits/{new}.html" in comments.version_box(new, "", None, False)
     finally:
         changes.commit_page_shorts.cache_clear()
+
+
+def test_pdf_skipped_without_experiments(tmp_path, monkeypatch):
+    """A fresh project with no experiment builds its site; the PDF is skipped instead of failing."""
+    from types import SimpleNamespace
+    from kea.docsite import pdf
+    monkeypatch.setattr(pdf, "typst_command", lambda: ["typst"])
+    assert pdf.site_pdf(SimpleNamespace(projects={}), tmp_path) is None
