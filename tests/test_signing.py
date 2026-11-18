@@ -146,3 +146,13 @@ def test_kea_sign_minor_and_thread(tmp_path, monkeypatch, capsys):
     # a signature naming a thread by someone else is a problem
     signing.add_signature(nodes.load_tree(doc).nodes["p:h-a"], {**entry, "by": "Bob"})
     assert any("does not match thread" in problem for problem in nodes.load_tree(doc).problems)
+
+
+def test_context_names_waiting_premises_and_decisions(tmp_path):
+    doc = _doc(tmp_path)
+    (tmp_path / "kea.yaml").write_text("pace: guided\n")
+    _hypothesis(doc)
+    _sign_all(doc, "home.md", "q-a.md")
+    tree = nodes.load_tree(doc)
+    first = graph.next_steps(tree, "p")[0]
+    assert first.startswith("Waiting for the owner to sign off on") and "(premise)" in first

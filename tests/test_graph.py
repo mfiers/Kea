@@ -125,7 +125,11 @@ def test_next_steps_say_what_waits(tmp_path):
     tree = nodes.load_tree(doc)
     assert graph.next_steps(tree, "p")[0].startswith("Next: propose questions")
     _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open")
-    assert "waiting for the owner to sign off on the question" in graph.next_steps(nodes.load_tree(doc), "p")[0]
+    # the experiment waits with its proposed question: named first, then the question
+    steps = graph.next_steps(nodes.load_tree(doc), "p")
+    assert "E (experiment)" in steps[0] and "waiting for the owner to sign off on the question" in steps[1]
+    _page(doc, "p/experiment/home.md", "id: home\ntype: experiment\ntitle: E\nshort: An experiment.\nstatus: open\n"
+          "approved: {by: Mark, date: 2026-11-09}")
     _page(doc, "p/question/q-a.md", "id: q-a\ntype: question\ntitle: Does it?\nshort: Asks.\nparent: home\nstatus: open\n"
           "approved: {by: Mark, date: 2026-11-09}")
     assert "write hypotheses" in graph.next_steps(nodes.load_tree(doc), "p")[0]

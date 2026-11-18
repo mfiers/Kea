@@ -385,6 +385,12 @@ def next_steps(tree: Tree, project: str) -> list[str]:
     """Where each question stands on the route, and the one next step (for kea context; pace: guided)."""
     from kea.docsite import questions
     lines = []
+    # the experiment, premises and decisions wait for a sign-off too (pace: guided), outside any question's route
+    standing = [node for node in tree.nodes.values() if node.project == project and getattr(node, "waiting", False)
+                and node.type in ("experiment", "premise", "decision")]
+    if standing:
+        names = ", ".join(f"{node.number or node.label or node.id} ({node.type})" for node in standing)
+        lines.append(f"Waiting for the owner to sign off on {names} (Approve on the site, or in chat).")
     found = questions.questions(tree, project)
     if not found:
         return ["Next: propose questions (and premises) for the experiment; then stop for the owner's review."]
