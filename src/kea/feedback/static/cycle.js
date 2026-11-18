@@ -255,6 +255,18 @@
   /* Approve & go (feedback/tags.py go): the request, then the agent's work on it, said on every page so a click is
      never followed by silence; the Progress page lists them (#progress-live). */
   function pageTitle(item) { return item.title || item.page; }
+  /* What a request asks, for readers: "Approve all 4 & run the plan", "Run the step". The thread's text also carries
+     a "Signs:" line (page keys and versions, for kea sign): counted, never shown. */
+  function requestLabel(text) {
+    const lines = (text || "").split("\n");
+    const signs = lines.find(line => /^Signs:/.test(line.trim()));
+    const head = lines.filter(line => !/^Signs:/.test(line.trim())).join(" ").trim();
+    const count = signs ? signs.replace(/^\s*Signs:/, "").split(",").filter(part => part.trim()).length : 0;
+    const action = head.replace(/^(Approve & |Go: )/i, "") || "the next step";
+    if (/^Approve & /i.test(head)) return (count > 1 ? `Approve all ${count} & ` : "Approve & ") + action;
+    return action[0].toUpperCase() + action.slice(1);
+  }
+  window.keaRequestLabel = requestLabel;           // feedback.js: the page's ▶ button while a request waits
   function goBanner(status) {
     const goes = status.goes || [], watcher = status.watcher || {};
     const working = watcher.state === "working" && watcher.exit === "going";
@@ -268,8 +280,7 @@
     }
     const first = goes[0];
     const watching = watcher.state === "watching";
-    const label = (first.text || "").replace(/^(Approve & |Go: )/i, "") || "the next step";
-    showBanner("go", el("b", {}, `${/^Approve & /i.test(first.text || "") ? "Approve & " + label : label[0].toUpperCase() + label.slice(1)}: `),
+    showBanner("go", el("b", {}, requestLabel(first.text) + ": "),
       `${pageTitle(first)}, asked by ${first.by} ${when(first.at)}. `,
       watching ? "Claude picks it up within a minute. " : "No Claude session is watching now: the request waits until one starts. ",
       goes.length > 1 ? `${goes.length - 1} more waiting. ` : "", progress, ".");
@@ -286,7 +297,7 @@
         const busy = index === 0 && watcher.state === "working" && watcher.exit === "going";
         const href = pages[item.page];
         return el("tr", {}, el("td", {}, href ? el("a", { href: PREFIX + href }, pageTitle(item)) : pageTitle(item)),
-          el("td", {}, item.text || "the next step"), el("td", {}, `${item.by}, ${when(item.at)}`),
+          el("td", {}, requestLabel(item.text)), el("td", {}, `${item.by}, ${when(item.at)}`),
           el("td", {}, el("span", { class: "rs " + (busy ? "rs-running" : "rs-agent") },
             busy ? "⟳ " + (watcher.doing || "working") : index === 0 && watcher.state === "watching" ? "▶ being picked up"
               : "▶ waiting for the agent")));

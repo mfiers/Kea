@@ -117,7 +117,7 @@ def watch(args: argparse.Namespace) -> int:
         goes = cycle.go_requests(store.threads(args.events))
         if goes and current.state not in cycle.PAUSED_STATES:
             first = goes[0]
-            asked = first.text or "the next step"
+            asked = (first.text or "").splitlines()[0].strip() if first.text else "the next step"   # not the Signs: line
             print(f"approve & go: {len(goes)} request(s); first {first.thread_id} by {first.author} at "
                   f"{first.created_at} on {first.page} ({first.page_title}): {asked}. If it starts with "
                   "'Approve &', sign the page off ('Go:' adds no signature); do that step only, report with `kea progress \"…\" --page <page>`, publish, answer the thread, watch again")

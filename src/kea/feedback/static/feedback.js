@@ -568,7 +568,7 @@
       go.onclick = () => approveAndGo(action, sign);
       return;
     }
-    const asked = going.text.replace(/^(Approve & |Go: )/i, "") || action;
+    const asked = (going.text.split("\n")[0] || "").replace(/^(Approve & |Go: )/i, "").trim() || action;   // not the Signs: line
     const working = watcher.state === "working" && watcher.exit === "going" && (!watcher.page || watcher.page === PAGE);
     go.className = "fb-dpill fb-d-go " + (working ? "fb-working" : "fb-pending");
     go.textContent = working ? `⟳ Claude: ${watcher.doing || asked}` : `▶ ${asked[0].toUpperCase() + asked.slice(1)} · asked, waiting for Claude`;
