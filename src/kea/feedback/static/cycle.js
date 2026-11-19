@@ -152,6 +152,8 @@
         : "Claude adds them when someone presses Harvest.");
   }
 
+  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
   function planActions(status) {
     const box = document.getElementById("fb-plan-actions");
     if (!box) return;
@@ -161,7 +163,9 @@
     const watching = status.watcher && ["watching", "working"].includes(status.watcher.state);
     const harvest = (label, title, main) => el("button", { class: main ? "fb-implement" : "fb-secondary",
       onclick: () => post("harvest"), title }, label);
+    const end = document.getElementById("fb-plan-implement");
     box.replaceChildren(sessionLine(status));
+    if (end) end.replaceChildren();
     if (state === "collecting") {
       box.append(indicator(status),
         harvest("Harvest comments", "Claude folds every comment not yet in the plan into it", waiting > 0),
@@ -174,13 +178,17 @@
           + (watching ? "" : " No Claude session is watching now: the harvest waits for the next one.")));
     } else if (state === "harvested") {
       box.append(indicator(status),
-        el("button", { class: "fb-implement", onclick: () => {
-          const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next cycle.` : "";
-          if (confirm("Ask Claude to implement this plan now? Comments are paused until the new version is released." + left)) post("implement");
-        }, ...(items ? {} : { disabled: "disabled" }) }, "Implement the plan"),
         harvest(waiting ? `Harvest again (${waiting})` : "Harvest again", "Fold the comments made since the last harvest into the plan"),
         el("span", { class: "fb-help" }, ` Harvested ${when(status.cycle.plan_updated_at)}; the plan stands until the next harvest. `
-          + (items ? "" : "Nothing to implement yet.")));
+          + (items ? "Read it below; the Implement button is at its end." : "Nothing to implement yet.")));
+      if (end && items) end.append(el("div", { class: "fb-plan-end" },
+        el("p", {}, el("b", {}, `That is the plan: ${plural(items, "item")}. `),
+          "Implement asks Claude to do what it lists, and nothing more. Comments are paused until the new version is released."
+          + (waiting ? ` ${waiting} comment(s) made after the harvest are not in it; they stay for the next round unless you Harvest again first.` : "")),
+        el("button", { class: "fb-implement fb-implement-big", onclick: () => {
+          const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next cycle.` : "";
+          if (confirm("Ask Claude to implement this plan now? Comments are paused until the new version is released." + left)) post("implement");
+        } }, `▶ Implement the plan (${plural(items, "item")})`)));
     } else if (state === "implement-requested") {
       box.append(el("button", { class: "fb-secondary", onclick: () => post("cancel") }, "Cancel the request"),
         el("span", { class: "fb-help" }, ` Requested by ${status.cycle.by} (${when(status.cycle.since)}); Claude has not started yet.`));
@@ -191,7 +199,8 @@
 
   /* The step of the round in the menu bar, for every reader: PIs (status.can_steer: a PI or director account on a
      hub, the iteration password, or a site without one) get the button that moves the round on (Harvest · N while
-     comments and sign-offs wait; ▶ Implement once the plan stands), other readers the same words as a link to
+     comments and sign-offs wait; after a harvest Harvest again and "Read the plan", never Implement: that button is
+     at the end of the plan page, so it is pressed by someone who has read the plan), other readers the same words as a link to
      Progress. While Claude works it says so. The plan page keeps the full controls (Harvest again, Cancel). */
   function menuCycle(status) {
     const bar = document.querySelector(".topbar");
@@ -219,14 +228,13 @@
       // comments made after the plan: the round is back in Review; Harvest again takes them in (it rewrites the plan)
       const again = steer && waiting ? button("ct-harvest", `⇣ Harvest again · ${waiting}`, `${waiting} comment(s) or sign-off(s) came in after the plan `
         + "was written. Harvest again: Claude takes them into the plan too; nothing runs until Implement", () => post("harvest")) : null;
-      const implement = steer && planned ? button(again ? "ct-implement ct-minor" : "ct-implement", "▶ Implement", "The plan is ready. Implement: Claude does what the plan lists, nothing more (comments pause until the release)" +
-          (waiting ? `; the ${waiting} comment(s) made after the harvest are not in it and stay for the next round` : ""), () => {
-            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next round. To take them in first, press Harvest again.` : "";
-            if (confirm("Ask Claude to implement the plan now? Claude does what the plan lists, nothing more. Comments are paused until the new version is released." + left)) post("implement");
-          }) : null;
-      if (again || implement) content = [again, implement].filter(Boolean);
+      // no Implement in the menu bar: it sits at the end of the plan, so whoever starts Claude has read what it will do
+      const count = items ? ` · ${plural(items, "item")}` : "";
+      const read = planned ? button(steer ? (again ? "ct-implement ct-minor" : "ct-implement") : "ct-busy", `📖 Read the plan${count} →`,
+        "Claude has written the plan. Read it: " + (steer ? "the Implement button is at its end" : "a PI implements it")
+          + (waiting ? `; the ${waiting} comment(s) made after the harvest are not in it` : ""), toPlan) : null;
+      if (again || read) content = [again, read].filter(Boolean);
       else if (waiting) content = button("ct-busy", `Review · ${waiting} since the plan`, "Comments came in after the plan; a PI can harvest again", toProgress);
-      else if (planned) content = button("ct-busy", "Plan ready", "Claude has written the plan; it runs when a PI presses Implement", toPlan);
     } else if (cycle.state === "implement-requested") {
       content = button("ct-busy", "▶ Implement asked", `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
     } else if (cycle.state === "implementing") {
@@ -263,7 +271,6 @@
     const strip = document.getElementById("round-steps");
     if (!strip) return;
     const state = status.cycle.state, comments = status.unplanned || 0;
-    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
     // a harvest done while readers go on commenting: the round is back in Review, and the plan misses those comments
     const reopened = state === "harvested" && comments > 0;
     const [step, word] = reopened ? ["review", `again: ${plural(comments, "comment")} since the plan`]

@@ -68,6 +68,9 @@
 .fb-banner button{margin-left:6px}
 body.fb-frozen .fb-select-bar,body.fb-frozen .fb-new,body.fb-frozen .fb-thread .fb-actions{display:none!important}
 .fb-implement{padding:8px 16px;border:0;border-radius:6px;background:#b3261e;color:#fff;font:inherit;cursor:pointer}
+.fb-plan-end{margin:28px 0 12px;padding:16px 18px;border:2px solid #b3261e;border-radius:8px;background:rgba(179,38,30,.06)}
+.fb-plan-end p{margin:0 0 12px}
+.fb-implement-big{padding:12px 24px;font-size:1.1em;font-weight:600}
 .fb-implement[disabled]{background:#bbb;cursor:not-allowed}
 #fb-plan-actions{margin:12px 0;padding:10px 14px;border:1px dashed #b3261e;border-radius:8px}
 .fb-banner button,#fb-plan-actions .fb-secondary{padding:4px 10px;border:1px solid #888;border-radius:5px;background:#fff;cursor:pointer;font:inherit}

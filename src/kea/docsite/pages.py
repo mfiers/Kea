@@ -1301,7 +1301,8 @@ class SiteRenderer:
                          f"{' id=' + chr(39) + 'fb-plan-state' + chr(39) if number == current.cycle else ''}>"
                          f"{esc(shown)}</span> <span class='help'>cycle {number} · {items} item(s)"
                          f"{' · updated ' + esc(header['updated']) if header.get('updated') else ''}</span></div>"
-                         f"{actions}{release}<article>{render_markdown(body, context)}</article>")
+                         f"{actions}{release}<article>{render_markdown(body, context)}</article>"
+                         + ("<div id='fb-plan-implement' class='not-annotatable'></div>" if live else ""))
             self.broken += [f"plan {number}: [[{target}]]" for target in context.broken]
             return html_body
 
