@@ -306,3 +306,9 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 .fb-signnav{display:flex;align-items:center;justify-content:space-between;gap:4px}.fb-signnav[hidden]{display:none}
 .fb-signnav .fb-dpill{padding:4px 12px;text-align:center;font-weight:600}.fb-signnav .fb-dpill:disabled{opacity:.35;cursor:default}
 .fb-sn-where{font:12.5px system-ui,sans-serif;color:#3b4252;background:#fff;border:1px solid #c9ced8;border-radius:12px;padding:3px 9px;white-space:nowrap}
+/* a dock popup on a phone: a sheet across the bottom of the screen (feedback.js placeDockPop) */
+.fb-dock-pop.fb-dock-sheet{width:auto;max-height:65dvh;overflow:auto;max-width:none;padding-right:34px;box-sizing:border-box;z-index:63}
+.fb-dock-sheet .fb-pop-arrow{display:none}.fb-dock-sheet .fb-propose{min-width:0}.fb-dock-sheet .fb-sel-row{flex-wrap:wrap}
+.fb-dpill.fb-d-tosign{color:#1e5e22;border-color:#9fd3b5;background:#eef8f0}.fb-dpill.fb-d-tosign[hidden]{display:none}
+.fb-sheet-close{display:none;position:absolute;top:4px;right:6px;border:0;background:none;font:20px/1 system-ui,sans-serif;color:#6b7488;cursor:pointer;padding:4px 6px}
+.fb-dock-sheet .fb-sheet-close{display:block}

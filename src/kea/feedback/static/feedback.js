@@ -68,19 +68,25 @@
     return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + " " +
       date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
-  // One key per submit (this page load + what is sent): a submit sent again (double click, retry after a slow
-  // server) carries the same key, and the server stores it once.
+  // One key per submit: a submit sent again while it is under way or after it failed (double click, retry after a
+  // slow server) carries the same key, and the server stores it once. Once it succeeded, the same click is a new
+  // request (Confirm, take it back, Confirm again) and gets a new key.
   const LOAD_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const pendingKeys = new Map();
+  let keyCount = 0;
   function requestKey(method, url, payload) {
     let hash = 2166136261;                       // FNV-1a over method, url and body
     const text = method + " " + url + " " + payload;
     for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619) >>> 0; }
-    return LOAD_ID + "-" + hash.toString(36);
+    const fingerprint = hash.toString(36);
+    if (!pendingKeys.has(fingerprint)) pendingKeys.set(fingerprint, LOAD_ID + "-" + fingerprint + "-" + (++keyCount).toString(36));
+    return [fingerprint, pendingKeys.get(fingerprint)];
   }
   async function api(method, url, body) {
     const payload = body ? JSON.stringify(body) : undefined;
     const headers = body ? { "Content-Type": "application/json" } : {};
-    if (method !== "GET") headers["X-Kea-Request"] = requestKey(method, url, payload || "");
+    let fingerprint = "";
+    if (method !== "GET") { const [print, key] = requestKey(method, url, payload || ""); fingerprint = print; headers["X-Kea-Request"] = key; }
     const response = await fetch(url, { method, credentials: "same-origin", headers, body: payload });
     let data = {};
     try { data = await response.json(); } catch (error) { /* not JSON */ }
@@ -89,6 +95,7 @@
       error.needSteer = !!data.need_steer;
       throw error;
     }
+    if (fingerprint) pendingKeys.delete(fingerprint);   // stored: the next identical click is a new request
     return data;
   }
 
@@ -324,8 +331,8 @@
     const pills = container && container.querySelector(".kindrow .pills");
     if (!pills || !PAGE.includes(":")) return;
     const add = (cls, text, title) => pills.append(el("span", { class: "pill fb-page-pill " + cls, title: title || "" }, text));
-    if (openThread("confirm")) add("fb-pp-ok", "✓ confirm · next plan", "A reader confirmed this page; it is recorded in the next plan");
-    if (openThread("unconfirm")) add("fb-pp-stale", "confirmation withdrawn · next plan");
+    if (openThread("confirm")) add("fb-pp-ok", "✓ keep as is · waits for Harvest", "A reader asked to keep this page as it is; Claude records the confirmation on the page at the next Harvest");
+    if (openThread("unconfirm")) add("fb-pp-stale", "confirmation withdrawn · waits for Harvest");
     const rejected = openThread("drop") || openThread("reject");
     if (rejected) add("fb-pp-remove", "✕ drop asked", "Asked by " + rejected.author + (rejected.text ? ": " + rejected.text : ""));
     const approval = openThread("approve");
@@ -343,7 +350,7 @@
   }
 
   /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
-     across the site). Comment · Edit | Approve or Confirm · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
+     across the site). Comment · Edit | Approve or Keep as is · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
      requests for the next plan; they stay highlighted while pending, and Confirm stays on once the page records it. */
   const DOCK_KEY = "kea-dock-open";
   function dockOpen() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch (error) { return true; } }
@@ -384,6 +391,8 @@
     box.append(head, sub);
     return box;
   }
+  /* On a page that does not wait: one pill to the first page still waiting for a sign-off (renderSignNav). */
+  const toSignPill = () => el("button", { class: "fb-dpill fb-d-tosign", hidden: "" });
   function buildDock() {
     const dock = el("div", { class: "fb-dock " + NOT });
     const items = el("div", { class: "fb-dock-items" });
@@ -394,10 +403,10 @@
     edit.hidden = true;
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
-      /* Comment · ✓ Approve (the main button on a page that waits; Confirm on a settled page) · Change ▸ (Edit,
+      /* Comment · ✓ Approve (the main button on a page that waits; Keep as is on a settled page) · Change ▸ (Edit,
          Revise, Drop) · More ▸ (Propose, Next run, Manuscript): two groups that open in place, one at a time.
          Every button records a request; nothing changes on the site before a Harvest and an Implement. */
-      const confirm = pill("fb-d-confirm", "✓ Confirm", "", () => {});
+      const confirm = pill("fb-d-confirm", "✓ Keep as is", "", () => {});
       const revise = pill("fb-d-revise", "↻ Revise ▸", "Rewrite this page: say what to change; this branch is reworked", () => toggleDockPop(revise, "revise"));
       const reject = pill("fb-d-reject", "✕ Drop", "", () => {});
       const next = pill("fb-d-next", "Next run ▸", "Ask for work on the whole page in the next run", () => toggleDockPop(next, "review"));
@@ -411,11 +420,11 @@
         el("button", { class: "fb-dpill fb-sn-prev", title: "The page before this one in the sign-off order" }, "‹"),
         el("span", { class: "fb-sn-where" }),
         el("button", { class: "fb-dpill fb-sn-next", title: "The next page to sign" }, "›"));
-      items.append(el("span", { class: "fb-dock-gap" }), signNav, confirm, change, more);
+      items.append(el("span", { class: "fb-dock-gap" }), signNav, toSignPill(), confirm, change, more);
     } else {
       // the project's front page: propose an experiment (renderDock hides the button where nothing can be proposed)
       const propose = pill("fb-d-propose", "Propose ▸", "Propose a new experiment for this project", () => toggleDockPop(propose, "propose"));
-      items.append(el("span", { class: "fb-dock-gap" }), propose);
+      items.append(el("span", { class: "fb-dock-gap" }), toSignPill(), propose);
     }
     const head = el("button", { class: "fb-dock-head", title: "Show or hide the page buttons", "aria-expanded": "true",
       onclick: () => { const open = items.hidden; items.hidden = !open; head.setAttribute("aria-expanded", String(open));
@@ -443,7 +452,7 @@
     const propose = dockEl.querySelector(".fb-d-propose");
     if (propose) propose.hidden = !proposals().length;
     const confirm = dockEl.querySelector(".fb-d-confirm"), reject = dockEl.querySelector(".fb-d-reject");
-    if (!confirm) return;
+    if (!confirm) { renderSignNav(false); return; }
     const content = container && container.querySelector(".node-content");
     const waitingPage = !!(content && content.dataset.waiting);           // pace: guided, not yet approved
     const dropAlso = content ? content.dataset.drop || "" : "";
@@ -454,21 +463,21 @@
     const done = !waitingPage && pageConfirmed();
     // every verdict waits for the harvest: Claude records sign-offs then and plans the rest; nothing runs before Implement
     const when = "at the next Harvest";
-    const word = waitingPage ? "Approve" : "Confirm";
+    const word = waitingPage ? "Approve" : "Keep as is";
     const following = waitingPage ? nextToSign() : null;    // the next page to sign, top down
     const then = " Nothing else starts: the next step goes into the plan at the Harvest and runs only when a PI presses Implement.";
     confirm.className = "fb-dpill fb-d-confirm" + (done && !unasked ? " fb-active" : asked || signedWith ? " fb-pending"
       : unasked ? " fb-pending-off" : waitingPage ? " fb-main" : "");
     if (asked || signedWith) {
-      confirm.textContent = waitingPage ? "✓ Signed · waits for Harvest" : "✓ Confirm · next plan";
+      confirm.textContent = waitingPage ? "✓ Signed · waits for Harvest" : "✓ Keep as is · waits for Harvest";
       confirm.title = signedWith ? "Signed on another page. Claude writes it onto this page at the next Harvest."
-        : `Your sign-off is recorded. Claude writes it onto the page ${when}.${then} Click to take it back.`;
+        : (waitingPage ? `Your sign-off is recorded. Claude writes it onto the page ${when}.${then}` : `Recorded: Claude writes your confirmation onto the page ${when} and changes nothing else.`) + " Click to take it back.";
     } else if (unasked) {
-      confirm.textContent = "✓ Withdrawal · next plan";
-      confirm.title = "The confirmation is withdrawn in the next plan; click to keep it";
+      confirm.textContent = "✓ Withdrawn · waits for Harvest";
+      confirm.title = "Claude removes the confirmation at the next Harvest; click to keep it after all";
     } else if (done) {
       confirm.textContent = "✓ Confirmed";
-      confirm.title = "This page is confirmed; click to withdraw the confirmation (in the next plan)";
+      confirm.title = "This page is confirmed as it is; click to withdraw the confirmation (done at the next Harvest)";
     } else if (waitingPage) {
       confirm.textContent = following ? "✓ Approve & next →" : "✓ Approve";
       confirm.title = `Sign off on this page only, as you read it${pageVersion() ? " (version " + pageVersion() + ")" : ""}`
@@ -476,13 +485,13 @@
         + `. Claude writes the sign-off onto the page ${when}.${then} If the page changes later (beyond a minor edit), it waits again.`;
     } else {
       confirm.textContent = "✓ " + word;
-      confirm.title = "Your stamp of approval: keep this page as it is (recorded on the page in the next plan)";
+      confirm.title = "This page is settled. Say it is right as it is: Claude records your confirmation on the page at the next Harvest and changes nothing. Nothing else starts.";
     }
     confirm.onclick = async () => {
       if (signedWith) return;
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
       if (unasked) return withdraw(unasked, "withdrawal taken back");
-      if (done) { if (confirm_("Withdraw the confirmation of this page? This goes into the next plan.")) await tagThread(null, ["unconfirm"]); return; }
+      if (done) { if (confirm_("Withdraw the confirmation of this page? Claude removes it at the next Harvest.")) await tagThread(null, ["unconfirm"]); return; }
       if (dropped) await withdraw(dropped, "drop replaced by " + word.toLowerCase());
       const made = await tagThread(null, [waitingPage ? "approve" : "confirm"]);
       if (made && waitingPage) {
@@ -493,7 +502,7 @@
     };
     renderSignNav(waitingPage);
     const revise = dockEl.querySelector(".fb-d-revise");
-    const soon = "next plan";
+    const soon = "waits for Harvest";
     revise.className = "fb-dpill fb-d-revise" + (revising ? " fb-pending" : "");
     revise.textContent = revising ? "↻ Revise · " + soon : "↻ Revise ▸";
     reject.className = "fb-dpill fb-d-reject" + (dropped ? " fb-pending" : "");
@@ -525,9 +534,20 @@
   }
   /* ‹ n of N ›: where this page is in the sign-off order, with the pages before and after it. */
   function renderSignNav(waitingPage) {
+    const order = signOrder(), here = order.findIndex(item => item.key === PAGE);
+    const toSign = dockEl && dockEl.querySelector(".fb-d-tosign");
+    if (toSign) {
+      const signed = signedOnSite(), open = order.filter(item => item.href && !signed.has(item.key));
+      toSign.hidden = !!waitingPage || !open.length || readOnly;
+      if (!toSign.hidden) {
+        toSign.textContent = `✓ Next to sign (${open.length}) →`;
+        toSign.title = `${open.length} page${open.length === 1 ? "" : "s"} wait${open.length === 1 ? "s" : ""} for your sign-off, top down through the tree. `
+          + `Open the first: ${open[0].label ? open[0].label + " " : ""}${open[0].title}`;
+        toSign.onclick = () => goTo(open[0]);
+      }
+    }
     const nav = dockEl && dockEl.querySelector(".fb-signnav");
     if (!nav) return;
-    const order = signOrder(), here = order.findIndex(item => item.key === PAGE);
     nav.hidden = !waitingPage || here < 0 || order.length < 2;
     if (nav.hidden) return;
     const signed = signedOnSite();
@@ -566,19 +586,11 @@
         : proposalForm({ ...tag, label: "", help: "What should change, and why? The page is rewritten; pages that rest on it are rechecked." },
             null, () => { dockPop.hidden = true; }, "Revise this page"));
       dockPop.hidden = false;
-      const rect = dockPopAnchor.getBoundingClientRect();
-      const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
-      dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
-      dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+      placeDockPop();
       return;
     }
     if (dockPopGroup === "propose") {
-      const place = () => {
-        const rect = dockPopAnchor.getBoundingClientRect();
-        const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
-        dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
-        dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
-      };
+      const place = placeDockPop;
       const options = proposals().map(tag => el("button", { class: "fb-qchip fb-tag-propose", title: tag.help || "",
         onclick: () => { dockPop.replaceChildren(proposalForm(tag, null, () => { dockPop.hidden = true; })); place(); } }, tag.label));
       dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, "Propose · whole page"),
@@ -606,10 +618,22 @@
     dockPop.replaceChildren(el("div", { class: "fb-sel-label" }, dockPopGroup === "review" ? "Next run · whole page" : "Manuscript · whole page"),
       el("div", { class: "fb-sel-row" }, ...chips));
     dockPop.hidden = false;
-    const rect = dockPopAnchor.getBoundingClientRect();
+    placeDockPop();
+  }
+  /* Beside the dock, level with its pill, where there is room; on a phone (or wherever it would run off the screen
+     on the left) a sheet across the bottom of the screen, above the dock, that scrolls when it is long. */
+  function placeDockPop() {
+    const width = document.documentElement.clientWidth;
     const dockLeft = dockEl.querySelector(".fb-dock-items").getBoundingClientRect().left;
-    dockPop.style.right = (document.documentElement.clientWidth - dockLeft + 10) + "px";
-    dockPop.style.bottom = Math.max(8, window.innerHeight - rect.bottom) + "px";
+    const rect = dockPopAnchor.getBoundingClientRect();
+    dockPop.classList.remove("fb-dock-sheet");
+    Object.assign(dockPop.style, { left: "", right: (width - dockLeft + 10) + "px", bottom: Math.max(8, window.innerHeight - rect.bottom) + "px" });
+    if (width <= 760 || dockPop.getBoundingClientRect().left < 8) {
+      dockPop.classList.add("fb-dock-sheet");
+      if (!dockPop.querySelector(".fb-sheet-close"))
+        dockPop.append(el("button", { class: "fb-sheet-close", title: "Close", "aria-label": "Close", onclick: () => { dockPop.hidden = true; } }, "×"));
+      Object.assign(dockPop.style, { left: "8px", right: "8px", bottom: "8px" });
+    }
   }
 
   /* In-place edits of the title and the summary: a pencil on hover; the new text is saved as a suggested edit. */

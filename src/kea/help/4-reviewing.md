@@ -3,7 +3,7 @@
 On a site served with comments, sign in with the site password and your name, or with ORCID on a hub that offers it. Then:
 
 - Select any text for Comment, Edit (just that passage) or a one-click tag: a request for the next run (explain, expand, shorten, delete, challenge, needs source) or the manuscript section the passage belongs in.
-- The buttons at the bottom right act on the whole page: Comment; ✓ Approve on a page that waits for your sign-off (Confirm on a settled page); Change ▸ (Edit, Revise, Drop); More ▸ (Propose the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …; Next run; Manuscript). Every button records a request; none starts Claude.
+- The buttons at the bottom right act on the whole page: Comment; ✓ Approve on a page that waits for your sign-off (✓ Keep as is on a settled page: it is right as it stands); Change ▸ (Edit, Revise, Drop); More ▸ (Propose the next step of the reasoning for this kind of page: a hypothesis on a question, a caveat on a result, a control on a step, …; Next run; Manuscript). Every button records a request; none starts Claude.
 - The pencils in the left margin edit the title or summary in place; the pencil after a section heading edits that section. Every edit is saved as a suggestion, shown as a diff, and goes into the next plan.
 
 Nothing changes until the comments are harvested. A round has four steps, shown at the top of Progress and the plan page with the current one marked, and named in the menu bar:
