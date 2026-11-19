@@ -312,3 +312,4 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 .fb-dpill.fb-d-tosign{color:#1e5e22;border-color:#9fd3b5;background:#eef8f0}.fb-dpill.fb-d-tosign[hidden]{display:none}
 .fb-sheet-close{display:none;position:absolute;top:4px;right:6px;border:0;background:none;font:20px/1 system-ui,sans-serif;color:#6b7488;cursor:pointer;padding:4px 6px}
 .fb-dock-sheet .fb-sheet-close{display:block}
+.fb-dpill[hidden]{display:none}

@@ -16,7 +16,7 @@ from kea.config import SETTINGS
 from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, questions, signing, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
-from kea.docsite.render import (ABOUT_ORDER, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
+from kea.docsite.render import (ABOUT_ORDER, hover_text, tag_inner, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
                             prefix_for, render_markdown, detail_pills, node_href, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons, render
 
@@ -159,12 +159,12 @@ def tab_strip(colour: str, tabs: list[tuple[str, str, str, str]], pid: str = "")
 
 ROUND_STEPS = (
     "<ol class='round-steps not-annotatable' id='round-steps'>"
-    "<li data-step='review'><b>1 · Review</b><span>You read, comment and sign off. Claude does nothing.</span></li>"
-    "<li data-step='harvest'><b>2 · Harvest</b><span>A PI presses Harvest. Claude records the sign-offs and writes "
+    "<li data-step='review' title='Step 1. Read the pages, comment, and sign off on the pages that wait (✓ Approve & next). Nothing you click starts Claude.' data-help='Step 1. Read the pages, comment, and sign off on the pages that wait (✓ Approve & next). Nothing you click starts Claude.'><b>1 · Review</b><span>You read, comment and sign off. Claude does nothing.</span></li>"
+    "<li data-step='harvest' title='Step 2. A PI presses Harvest in the menu bar. Claude records the sign-offs on the pages and writes the plan from every comment; it changes nothing else. Comments made after the harvest are not in that plan.' data-help='Step 2. A PI presses Harvest in the menu bar. Claude records the sign-offs on the pages and writes the plan from every comment; it changes nothing else. Comments made after the harvest are not in that plan.'><b>2 · Harvest</b><span>A PI presses Harvest. Claude records the sign-offs and writes "
     "the plan: every comment, and the next step of each signed stage. Nothing else changes.</span></li>"
-    "<li data-step='implement'><b>3 · Implement</b><span>A PI reads the plan and presses Implement. Claude does "
+    "<li data-step='implement' title='Step 3. A PI reads the plan and presses Implement. Claude does what the plan lists and nothing more; comments pause meanwhile.' data-help='Step 3. A PI reads the plan and presses Implement. Claude does what the plan lists and nothing more; comments pause meanwhile.'><b>3 · Implement</b><span>A PI reads the plan and presses Implement. Claude does "
     "what the plan lists, and nothing more. Comments pause.</span></li>"
-    "<li data-step='release'><b>4 · Release</b><span>A new version. The pages reload, and the next round of review "
+    "<li data-step='release' title='Step 4. Claude releases a new version; the pages reload and the next round of review starts.' data-help='Step 4. Claude releases a new version; the pages reload and the next round of review starts.'><b>4 · Release</b><span>A new version. The pages reload, and the next round of review "
     "starts.</span></li></ol>")
 
 
@@ -1116,7 +1116,16 @@ class SiteRenderer:
         the route of every question, and who signed off on what."""
         prefix = ""
         tree = self.tree
-        link = lambda node: node_link(node, prefix, node.title if node.tag else None)   # noqa: E731
+        def link(node) -> str:
+            """The page's tag first (C1), then its title, as one link; a page without a tag (the experiment) gets its kind as a
+            label. The hover names the kind, number, title, summary and status."""
+            kind = node.type.capitalize()
+            note = f"{kind}{(' · status: ' + node.status) if node.status else ''} · click to open"
+            badge = (f"<span class='tag t-{esc(node.type)}'>{tag_inner(node)}</span>" if node.tag
+                     else f"<span class='kind-pill'>{esc(kind)}</span>")
+            # one link: the tag (or the kind) and the title
+            return (f"<a class='row-link' href='{esc(node_href(node, prefix))}' title='{esc(hover_text(node, note))}'>"
+                    f"{badge} <span class='row-title'>{esc(node.title)}</span></a>")
         hrefs = {key: relative for relative, (key, _) in self.pages.items() if key in tree.nodes}
         parts = [crumbs([("Progress", None)], prefix), "<h1>Progress</h1>",
                  "<div class='short'>Where the review round stands, what waits for you, and where each question "
@@ -1132,26 +1141,26 @@ class SiteRenderer:
         ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
                        key=order)
         waiting = signing.sign_order(tree)                # top down: the order "Approve & next" walks
-        parts.append(f"<h2>Needs your sign-off <span class='count'>{len(waiting)}</span></h2>")
+        parts.append(f"<h2>Needs your sign-off <span class='count' title='Pages still waiting for a sign-off'>{len(waiting)}</span></h2>")
         if waiting:
             first = node_href(waiting[0], prefix)
             parts.append("<p class='help'>Top down, one page at a time: read the page, then press <b>✓ Approve &amp; "
                          "next</b> on it; it signs that page only and opens the next one. Nothing starts when you "
                          "click: Claude writes the sign-offs onto the pages at the next Harvest.</p>"
-                         f"<p class='not-annotatable'><a class='sign-start' id='sign-start' href='{esc(first)}'>"
+                         f"<p class='not-annotatable'><a class='sign-start' id='sign-start' href='{esc(first)}' title='Open the first page in this list that is not signed yet; on it, ✓ Approve &amp; next signs it and opens the next.'>"
                          "Start signing at the top →</a></p>")
             rows = []
             for number, node in enumerate(waiting, 1):
-                stands = ("<span class='rs rs-you'>● changed since signed</span>" if signing.stale(node)
-                          else "<span class='rs rs-you'>● needs your sign-off</span>")
-                rows.append(f"<tr data-page='{esc(node.key)}'><td class='nowrap help'>{number}</td><td class='rq'>{link(node)}"
+                stands = ("<span class='rs rs-you' title='Someone signed this page, but its wording changed since (beyond a minor edit), so the signature no longer holds. Read it again and approve it, or ask for a revision.'>● changed since signed</span>" if signing.stale(node)
+                          else "<span class='rs rs-you' title='Claude stopped here for your review. Read the page and press ✓ Approve on it, or Change ▸ to revise or drop it. The sign-off is written onto the page at the next Harvest.'>● needs your sign-off</span>")
+                rows.append(f"<tr data-page='{esc(node.key)}'><td class='nowrap help' title='Position in the sign-off order: top down through the tree'>{number}</td><td class='rq'>{link(node)}"
                             + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
                             + f"</td><td>{stands}<div class='live-cell help'></div></td></tr>")
             parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>#</th><th>Page</th>"
                          "<th>Where it stands</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
         else:
             parts.append("<p class='help'>No page needs a sign-off.</p>")
-        parts.append(f"<h2>Claude's next steps <span class='count'>{len(ready)}</span></h2>")
+        parts.append(f"<h2>Claude's next steps <span class='count' title='Steps that go into the plan at the next Harvest'>{len(ready)}</span></h2>")
         if ready:
             parts.append("<p class='help'>These pages are signed off (or need no sign-off), and the next step is "
                          "Claude's. Nothing to press on the page: the step goes into the plan at the next "
@@ -1161,13 +1170,13 @@ class SiteRenderer:
             for node in ready:
                 signed = graph.signatures(node)
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
-                stands = (f"<span class='rs rs-done'>✓ signed off</span> <span class='help'>by {esc(names)}</span>"
-                          if signed else "<span class='rs rs-free'>no sign-off needed</span>")
+                stands = (f"<span class='rs rs-done' title='Signed off by {esc(names)}; the next step is Claude&#39;s'>✓ signed off</span> <span class='help'>by {esc(names)}</span>"
+                          if signed else "<span class='rs rs-free' title='This kind of page needs no sign-off (or the project runs with pace: free)'>no sign-off needed</span>")
                 action = graph.go_action(tree, node)
                 rows.append(f"<tr><td class='rq'>{link(node)}"
                             + (f" <span class='help'>({esc(node.project)})</span>" if len(tree.projects) > 1 else "")
-                            + f"</td><td>{stands}</td><td>{esc(action[0].upper() + action[1:])}</td>"
-                              "<td class='next-when help'>next Harvest → plan; runs at Implement</td></tr>")
+                            + f"</td><td>{stands}</td><td title='What Claude does next for this page, once a PI presses Implement'>{esc(action[0].upper() + action[1:])}</td>"
+                              "<td class='next-when help' title='It goes into the plan at the next Harvest, and runs only when a PI presses Implement'>next Harvest → plan; runs at Implement</td></tr>")
             parts.append("<div class='scroll'><table class='progress-table'><thead><tr><th>Page</th><th>Signed</th>"
                          "<th>Next step</th><th>When</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
         else:

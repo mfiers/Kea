@@ -9,7 +9,7 @@
  * - The round has four steps (since 1.31, again): Review (readers comment and sign off; Claude does nothing),
  *   Harvest (Claude records the sign-offs and writes the plan), Implement (Claude does what the plan lists),
  *   Release. The menu bar names the step for every reader (a button for PIs); the Progress and plan pages mark it
- *   on their four-step strip (#round-steps) with one line on what happens now and what comes next (#progress-live).
+ *   on their four-step strip (#round-steps); Progress also shows Claude's session (#progress-live).
  *   A "kea-status" event hands each status to feedback.js (pages signed with their stage elsewhere).
  * - On the plan page (#fb-plan-actions) shows the buttons and a live indicator: are all comments in the plan,
  *   and the Claude session (status.watcher, cycle.watcher_status): watching, working, ended or gone, with the time
@@ -215,23 +215,28 @@
     } else if (cycle.state === "harvest-requested") {
       content = button("ct-busy", "⟳ Claude is writing the plan", `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude records the sign-offs and folds the comments into the plan. It runs nothing.`, toPlan);
     } else if (cycle.state === "harvested") {
-      if (steer && (items === null || items > 0)) {
-        content = button("ct-implement", "▶ Implement", "The plan is ready. Implement: Claude does what the plan lists, nothing more (comments pause until the release)" +
-          (waiting ? `; ${waiting} comment(s) made after the harvest stay for the next round (Harvest again on the plan page)` : ""), () => {
-            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next round.` : "";
+      const planned = items === null || items > 0;
+      // comments made after the plan: the round is back in Review; Harvest again takes them in (it rewrites the plan)
+      const again = steer && waiting ? button("ct-harvest", `⇣ Harvest again · ${waiting}`, `${waiting} comment(s) or sign-off(s) came in after the plan `
+        + "was written. Harvest again: Claude takes them into the plan too; nothing runs until Implement", () => post("harvest")) : null;
+      const implement = steer && planned ? button(again ? "ct-implement ct-minor" : "ct-implement", "▶ Implement", "The plan is ready. Implement: Claude does what the plan lists, nothing more (comments pause until the release)" +
+          (waiting ? `; the ${waiting} comment(s) made after the harvest are not in it and stay for the next round` : ""), () => {
+            const left = waiting ? `\n\n${waiting} comment(s) made after the harvest are not in this plan; they stay for the next round. To take them in first, press Harvest again.` : "";
             if (confirm("Ask Claude to implement the plan now? Claude does what the plan lists, nothing more. Comments are paused until the new version is released." + left)) post("implement");
-          });
-      } else if (steer && waiting) content = button("ct-harvest", `⇣ Harvest again · ${waiting}`, "The plan is empty; harvest the comments made since", () => post("harvest"));
-      else if (items === null || items > 0) content = button("ct-busy", "Plan ready", "Claude has written the plan; it runs when a PI presses Implement", toPlan);
+          }) : null;
+      if (again || implement) content = [again, implement].filter(Boolean);
+      else if (waiting) content = button("ct-busy", `Review · ${waiting} since the plan`, "Comments came in after the plan; a PI can harvest again", toProgress);
+      else if (planned) content = button("ct-busy", "Plan ready", "Claude has written the plan; it runs when a PI presses Implement", toPlan);
     } else if (cycle.state === "implement-requested") {
       content = button("ct-busy", "▶ Implement asked", `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
     } else if (cycle.state === "implementing") {
       content = button("ct-busy", "⟳ Claude is working", `Claude is implementing the plan (since ${when(cycle.since)}); comments pause until the release`, toPlan);
     }
-    const label = content ? content.textContent + "|" + content.title : "";
-    if (slot.dataset.label === label) return;          // unchanged: keep the button (and any focus on it)
+    const shown = content ? [].concat(content) : [];
+    const label = shown.map(node => node.textContent + "|" + node.title).join("||");
+    if (slot.dataset.label === label) return;          // unchanged: keep the buttons (and any focus on them)
     slot.dataset.label = label;
-    slot.replaceChildren(...(content ? [content] : []));
+    slot.replaceChildren(...shown);
     slot.hidden = !content;
     window.dispatchEvent(new Event("resize"));          // the menu bar fits itself again (render.TOPBAR_JS)
   }
@@ -252,48 +257,32 @@
     return true;
   }
 
-  /* The four-step strip (pages.ROUND_STEPS, on Progress and the plan page): mark the step the round is in, and say
-     in one line what happens now and what comes next (#progress-live on Progress). */
+  /* The four-step strip (pages.ROUND_STEPS, on Progress and the plan page): mark the step the round is in. When
+     comments came in after the harvest, the round is back in Review and Harvest says the plan is out of date. */
   function roundSteps(status) {
     const strip = document.getElementById("round-steps");
     if (!strip) return;
-    const state = status.cycle.state;
-    const [step, word] = { "collecting": ["review", "now"], "harvest-requested": ["harvest", "now"],
+    const state = status.cycle.state, comments = status.unplanned || 0;
+    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    // a harvest done while readers go on commenting: the round is back in Review, and the plan misses those comments
+    const reopened = state === "harvested" && comments > 0;
+    const [step, word] = reopened ? ["review", `again: ${plural(comments, "comment")} since the plan`]
+      : { "collecting": ["review", "now"], "harvest-requested": ["harvest", "now"],
       "harvested": ["harvest", "done: plan ready"], "implement-requested": ["implement", "asked"],
       "implementing": ["implement", "now"] }[state] || ["", ""];
     for (const item of strip.querySelectorAll("li")) {
       item.classList.toggle("now", item.dataset.step === step);
-      item.querySelector("b").dataset.now = item.dataset.step === step ? word : "";
+      const warn = reopened && item.dataset.step === "harvest";
+      item.classList.toggle("warn", warn);
+      item.querySelector("b").dataset.now = item.dataset.step === step ? word : warn ? "plan out of date" : "";
+      item.title = warn ? `A plan was written, but ${plural(comments, "comment")} came in after it and ${comments === 1 ? "is" : "are"} not in it. `
+        + "A PI can press Harvest again to take them in; or they wait for the next round." : item.dataset.help || "";
     }
-  }
-  function nowLine(status) {
-    const cycle = status.cycle, waiting = status.unplanned || 0, signed = (status.signing || []).length;
-    const signOffs = Math.min(status.sign_offs || 0, waiting), comments = waiting - signOffs;
-    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
-    const waits = [comments ? plural(comments, "comment") : "", signOffs ? plural(signOffs, "sign-off") + ` (${plural(signed, "page")})` : ""].filter(Boolean).join(" and ");
-    const watcher = status.watcher || {};
-    const watching = ["watching", "working"].includes(watcher.state);
-    const noSession = watching ? "" : " No Claude session is watching at the moment: it waits for the next one.";
-    const harvestButton = status.can_steer ? el("button", { class: "fb-secondary round-go", onclick: () => post("harvest") }, "⇣ Harvest now") : null;
-    const plan = el("a", { href: PREFIX + "plan.html" }, "the plan");
-    const lines = {
-      "collecting": [el("b", {}, "Now: Review. "), "Claude does nothing. ",
-        waiting ? `Waiting for the Harvest: ${waits}. ` : "Nothing waits for the Harvest yet. ",
-        el("b", {}, "Next: "), status.can_steer ? "when the round is done, press Harvest. " : "a PI presses Harvest. ", harvestButton && waiting ? harvestButton : null],
-      "harvest-requested": [el("b", {}, "Now: Harvest. "), `${cycle.by} pressed Harvest (${when(cycle.since)}). Claude records the sign-offs and writes `, plan,
-        ". It runs nothing and changes no other page." + noSession],
-      "harvested": [el("b", {}, "Now: the plan is ready. "), "Read ", plan, ". ", el("b", {}, "Next: "),
-        status.can_steer ? "press ▶ Implement in the menu bar; Claude then does what the plan lists, nothing more." : "a PI presses Implement; Claude then does what the plan lists, nothing more.",
-        waiting ? ` ${waiting} comment(s) made since the harvest are not in it (Harvest again, or they wait for the next round).` : ""],
-      "implement-requested": [el("b", {}, "Now: Implement asked. "), `${cycle.by} asked Claude to implement `, plan, ` (${when(cycle.since)}); Claude has not started yet. Comments are paused.` + noSession],
-      "implementing": [el("b", {}, "Now: Implement. "), "Claude is doing what ", plan, " lists" + (watcher.doing ? `: ${watcher.doing}` : "") + ". Comments are paused; the pages reload when the new version is released."],
-    }[cycle.state] || [];
-    return el("div", { class: "round-now" }, ...lines);
   }
   function progressLive(status) {
     const box = document.getElementById("progress-live");
     if (!box) return;
-    box.replaceChildren(nowLine(status), sessionLine(status));
+    box.replaceChildren(sessionLine(status));
     /* Pages signed on the site (an Approve; before 1.31.1 also every page on its Signs: line): the sign-off waits
        for the harvest (or is being harvested). */
     const state = status.cycle.state;

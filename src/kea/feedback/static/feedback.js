@@ -350,7 +350,7 @@
   }
 
   /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
-     across the site). Comment · Edit | Approve or Keep as is · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
+     across the site). Comment · Edit | Approve (pages that wait) · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
      requests for the next plan; they stay highlighted while pending, and Confirm stays on once the page records it. */
   const DOCK_KEY = "kea-dock-open";
   function dockOpen() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch (error) { return true; } }
@@ -403,7 +403,7 @@
     edit.hidden = true;
     items.append(toggleBtn, edit);
     if (PAGE.includes(":")) {
-      /* Comment · ✓ Approve (the main button on a page that waits; Keep as is on a settled page) · Change ▸ (Edit,
+      /* Comment · ✓ Approve (on a page that waits; a settled page has none) · Change ▸ (Edit,
          Revise, Drop) · More ▸ (Propose, Next run, Manuscript): two groups that open in place, one at a time.
          Every button records a request; nothing changes on the site before a Harvest and an Implement. */
       const confirm = pill("fb-d-confirm", "✓ Keep as is", "", () => {});
@@ -487,6 +487,9 @@
       confirm.textContent = "✓ " + word;
       confirm.title = "This page is settled. Say it is right as it is: Claude records your confirmation on the page at the next Harvest and changes nothing. Nothing else starts.";
     }
+    // a settled page has no green button: it is signed already, or never waited; only an old confirmation request
+    // (before 1.31.3) still shows, so it can be taken back
+    confirm.hidden = !waitingPage && !asked && !unasked;
     confirm.onclick = async () => {
       if (signedWith) return;
       if (asked) return withdraw(asked, (waitingPage ? "approval" : "confirmation") + " taken back");
@@ -1033,7 +1036,7 @@
         "; this page is now version ", el("a", { href: BASE + "commits/" + COMMIT.split("+")[0] + ".html" }, COMMIT), "."));
     }
     // reply + resolve
-    const textarea = el("textarea", { rows: "2", placeholder: "Reply…" });
+    const textarea = el("textarea", { rows: "2", placeholder: "Reply…", title: "Ctrl+Enter (⌘+Enter) sends · Esc clears" });
     const actions = el("div", { class: "fb-actions" },
       el("button", { onclick: async () => {
         if (!textarea.value.trim()) return;
@@ -1126,11 +1129,32 @@
     panel.classList.remove("fb-open");
     document.documentElement.classList.remove("fb-panel-open");
   }
+  /* In a comment, reply or proposal field: Ctrl/Cmd+Enter presses its Send (or Reply) button; Esc presses its
+     Cancel button, or, where the form has none (the page's comment box, a reply), clears the field and leaves it. */
+  document.addEventListener("keydown", event => {
+    const field = event.target;
+    if (!(field instanceof HTMLTextAreaElement) || !field.closest(".fb-panel, .fb-propose")) return;
+    let box = field.parentElement;
+    while (box && !box.querySelector(":scope > .fb-actions, :scope > .fb-propose-actions")) box = box.parentElement;
+    const actions = box && box.querySelector(":scope > .fb-actions, :scope > .fb-propose-actions");
+    if (!actions) return;
+    const buttons = Array.from(actions.querySelectorAll("button"));
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      const send = buttons.find(button => !button.classList.contains("fb-secondary"));
+      if (send) send.click();
+    } else if (event.key === "Escape") {
+      event.preventDefault(); event.stopPropagation();
+      const cancel = buttons.find(button => button.textContent.trim() === "Cancel");
+      if (cancel) cancel.click();
+      else { field.value = ""; field.dispatchEvent(new Event("input")); field.blur(); }
+    }
+  }, true);
   function newCommentForm(selection, tagging) {
     const form = el("div", { class: "fb-new" });
     form.append(el("h3", {}, selection ? "Comment on the selected text" : "Comment on the whole page"));
     if (selection) form.append(el("blockquote", { class: "fb-quote" }, selection.quote));
-    const textarea = el("textarea", { rows: "4", placeholder: selection
+    const textarea = el("textarea", { rows: "4", title: "Ctrl+Enter (⌘+Enter) sends · Esc cancels", placeholder: selection
       ? "What is unclear, wrong or missing here?" : "A question or remark about this page…" });
     form.append(textarea, el("div", { class: "fb-actions" },
       el("button", { onclick: async () => {
