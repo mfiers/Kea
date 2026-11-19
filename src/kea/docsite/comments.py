@@ -119,6 +119,74 @@ def source_version(source: Path | None) -> str:
     return commits[0][0] + ("+edited" if relative in known["dirty"] else "")
 
 
+_BLOBS: dict[str, str | None] = {}         # "commit:path" -> text (None: not there); per build process
+
+
+def blob(commit: str, path: str) -> str | None:
+    """The text of `path` at `commit` (git show), or None where it did not exist; cached."""
+    spec = f"{commit}:{path}"
+    if spec not in _BLOBS:
+        result = subprocess.run(["git", "show", spec], capture_output=True, cwd=PROJECT_ROOT)
+        _BLOBS[spec] = result.stdout.decode("utf-8", "replace") if result.returncode == 0 else None
+    return _BLOBS[spec]
+
+
+def _words(old: str, new: str) -> str:
+    """One changed line as a word diff: <del> for words taken out, <ins> for words put in."""
+    import difflib
+    split = lambda text: re.findall(r"\s+|[^\s]+", text)        # noqa: E731
+    before, after = split(old), split(new)
+    out = []
+    for kind, i1, i2, j1, j2 in difflib.SequenceMatcher(None, before, after, autojunk=False).get_opcodes():
+        if kind == "equal":
+            out.append(esc("".join(before[i1:i2])))
+        if kind in ("delete", "replace"):
+            out.append(f"<del>{esc(''.join(before[i1:i2]))}</del>")
+        if kind in ("insert", "replace"):
+            out.append(f"<ins>{esc(''.join(after[j1:j2]))}</ins>")
+    return "".join(out)
+
+
+def text_diff_html(old: str, new: str) -> str:
+    """What changed between two versions of a page, for a reader: only the changed lines (a paragraph is one line in
+    doc/), each as a word diff; '…' between changes that are apart. Empty when nothing changed."""
+    import difflib
+    before, after = old.splitlines(), new.splitlines()
+    rows, last = [], None
+    for kind, i1, i2, j1, j2 in difflib.SequenceMatcher(None, before, after, autojunk=False).get_opcodes():
+        if kind == "equal":
+            continue
+        if last is not None and i1 > last:
+            rows.append("<div class='pd-gap'>…</div>")
+        old_lines, new_lines = before[i1:i2], after[j1:j2]
+        paired = min(len(old_lines), len(new_lines)) if kind == "replace" else 0
+        for index in range(paired):
+            if old_lines[index].strip() or new_lines[index].strip():
+                rows.append(f"<div class='pd-line pd-changed'>{_words(old_lines[index], new_lines[index])}</div>")
+        rows += [f"<div class='pd-line pd-removed'><del>{esc(line)}</del></div>" for line in old_lines[paired:] if line.strip()]
+        rows += [f"<div class='pd-line pd-added'><ins>{esc(line)}</ins></div>" for line in new_lines[paired:] if line.strip()]
+        last = i2
+    return "".join(rows)
+
+
+def round_diff_html(relative: str, oldest: str, newest: str, older_name: str | None) -> str:
+    """The page as it changed over one round: from before its oldest commit in the round to its newest."""
+    new = blob(newest, relative)
+    if new is None:
+        return ""
+    old = blob(oldest + "^", relative)
+    if old is None and older_name:
+        old = blob(oldest + "^", older_name)
+    if old is None:
+        return "<p class='help'>The page was created in this round: all of its text is new.</p>"
+    shown = text_diff_html(old, new)
+    if not shown:
+        return "<p class='help'>No change to the text (the file was only moved or touched).</p>"
+    return ("<div class='page-diff'>" + shown + "</div>"
+            "<p class='help'>Struck through: taken out; underlined: put in. Only changed lines are shown, the front "
+            "matter (title, summary, links) as <code>key: value</code>.</p>")
+
+
 def history_html(source: Path, prefix: str) -> str:
     """'Changes to this page': one line per version (the release a change went into, or 'not released yet'), with
     the date and what each change was; the diffs themselves are on the commit pages under History."""
@@ -154,10 +222,16 @@ def history_html(source: Path, prefix: str) -> str:
                           if mode.WITH_CHANGELOG and commit in commit_page_shorts() else f"<code>{esc(commit)}</code>")
                          for commit, _, _ in commits)
         badge = f"<span class='pill'>{esc(release)}</span>" if release else "<span class='pill'>not released yet</span>"
-        items.append(f"<li>{badge} {esc(when)} · {esc(what)} <span class='help'>{links}</span></li>")
+        older_name = known["origin"].get(relative, (None, None))[1]
+        diff = round_diff_html(relative, commits[-1][0], commits[0][0], older_name if older_name != relative else None)
+        # the newest round open: what changed last is what a reviewer looks for
+        shown = (f"<details class='round-diff'{' open' if not items else ''}><summary>What changed on this page"
+                 f"{(' in ' + esc(release)) if release else ' since the last release'}</summary>{diff}</details>"
+                 if diff else "")
+        items.append(f"<li>{badge} {esc(when)} · {esc(what)} <span class='help'>{links}</span>{shown}</li>")
     return ("<section class='fb-history not-annotatable' id='history'><h2>Changes to this page</h2>"
-            f"<p class='help'>Newest first, one line per version (at most {HISTORY_LIMIT} changes)"
-            + (", with what changed in each; the commit links show the exact text." if mode.WITH_CHANGELOG else ".")
+            f"<p class='help'>Newest first, one line per version (at most {HISTORY_LIMIT} changes), each with what "
+            "changed on this page alone" + ("; the commit links show the whole commit." if mode.WITH_CHANGELOG else ".")
             + f"</p><ul class='page-versions'>{''.join(items)}</ul></section>")
 
 
