@@ -792,27 +792,60 @@ class SiteRenderer:
                 + f"<script src='{prefix}_assets/objects.js'></script>")
         self.write(relative, page(f"Objects · {project}", body, prefix, project, self.tree, here="Objects"))
 
+    def tree_size(self, node: Node) -> int:
+        """How many pages lie under `node` in the tree (all depths)."""
+        return sum(1 + self.tree_size(child) for child in self.tree.children(node))
+
     def map_page(self, project: str) -> None:
         relative = f"{project}/map.html"
         prefix = prefix_for(relative)
         home = self.tree.projects[project]
 
-        def branch(node: Node) -> str:
+        def branch(node: Node, open_: bool = True) -> str:
             children = self.tree.children(node)
             info = self.stability.of(node.source)
             line = (f"{tagline(node, prefix) if node.tag else type_badge(node) + node_link(node, prefix)} "
                     f"{status_pill(node)} <span class='dot stab-{info.state}' title='{esc(info.text)}'></span>")
             if not children:
                 return f"<li>{line}</li>"
-            return (f"<li><details class='tree' open><summary>{line}</summary><ul class='tree'>"
+            count = f" <span class='help' title='Pages under it'>({self.tree_size(node)})</span>"
+            return (f"<li><details class='tree'{' open' if open_ else ''}><summary>{line}{count}</summary><ul class='tree'>"
                     + "".join(branch(child) for child in children) + "</ul></details></li>")
+
+        def group(title: str, nodes: list[Node], hint: str) -> str:
+            """A heading of its own that folds a kind of page away (shut when the map opens)."""
+            if not nodes:
+                return ""
+            return (f"<details class='tree map-group'><summary><h2 title='{esc(hint)}'>{esc(title)} "
+                    f"<span class='count'>{len(nodes)}</span></h2></summary><ul class='tree not-annotatable'>"
+                    + "".join(branch(node, False) for node in nodes) + "</ul></details>")
+        # the experiment first; then its questions, each folded to one line (the route of a question opens on a
+        # click); then the other pages under it; the reference material last, under headings, folded
+        children = self.tree.children(home)
+        aside = {"resource": ("Resources", "Data, software, protocols and services the work uses"),
+                 "term": ("Terms", "The glossary"), "reference": ("References", "The literature cited")}
+        questions = [node for node in children if node.type == "question"]
+        rest = [node for node in children if node.type != "question" and node.type not in aside]
+        kinds = list(dict.fromkeys(TYPE_PLURALS.get(node.type, node.type) for node in rest))
+        rest_title = (" and ".join([", ".join(kinds[:-1]), kinds[-1]]) if len(kinds) > 1 else kinds[0]) if kinds else ""
+        rest_title = rest_title[:1] + rest_title[1:].lower()
+        info = self.stability.of(home.source)
+        top = (f"{type_badge(home)}{node_link(home, prefix)} {status_pill(home)} "
+               f"<span class='dot stab-{info.state}' title='{esc(info.text)}'></span>")
         body = (crumbs([(project, f"{prefix}{home.url}"), ("Map", None)], prefix)
-                + f"<h1>Map of {esc(project)}</h1><p class='help'>Every page in its place in the tree; hover a title "
-                  "for its one-line summary; the dot shows how settled a page is (amber: changed in the latest release or now, grey: "
-                  "unchanged since, green: unchanged for 3 or more releases). <a href='#' onclick=\"document.querySelectorAll('details.tree')"
+                + f"<h1>Map of {esc(project)}</h1><p class='help'>Every page in its place in the tree, the questions "
+                  "first, each folded to one line (▸ opens it); hover a title for its one-line summary; the dot shows "
+                  "how settled a page is (amber: changed in the latest release or now, grey: unchanged since, green: "
+                  "unchanged for 3 or more releases). <a href='#' onclick=\"document.querySelectorAll('details.tree')"
                   ".forEach(d=>d.open=true);return false\">expand all</a> · <a href='#' onclick=\"document"
                   ".querySelectorAll('details.tree').forEach(d=>d.open=false);return false\">collapse all</a></p>"
-                + f"<ul class='tree not-annotatable'>{branch(home)}</ul>")
+                + f"<p class='not-annotatable map-top'>{top}</p>"
+                + (f"<h2>Questions <span class='count'>{len(questions)}</span></h2><ul class='tree not-annotatable'>"
+                   + "".join(branch(node, False) for node in questions) + "</ul>" if questions else "")
+                + (f"<h2>{esc(rest_title)} <span class='count'>{len(rest)}</span></h2><ul class='tree not-annotatable'>"
+                   + "".join(branch(node, False) for node in rest) + "</ul>" if rest else "")
+                + "".join(group(title, [node for node in children if node.type == kind], hint)
+                          for kind, (title, hint) in aside.items()))
         self.write(relative, page(f"Map · {project}", body, prefix, project, self.tree, here="Map"))
 
 
