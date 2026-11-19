@@ -36,3 +36,9 @@
 - Summary lines are written for the reader, without internal labels; dates in the text carry their version.
 - Do not hard-wrap Markdown in `doc/`: one line per paragraph and per list item (readers edit pages in the site's editor, where wrapped lines look broken).
 <!-- kea:end -->
+
+## Kea's own version numbers
+
+- The page scripts (`src/kea/feedback/static/`) are copied into every built site and published with it; the hub's own Kea only serves the API (`src/kea/feedback/server.py`, `hub.py`, `store.py`, `cycle.py`, the publish format, `/api/status` fields).
+- A change that needs the hub (or `kea serve`) to be upgraded before a site built with it works (a new or changed endpoint, status field, event type, tag rule or publish format) is at least a MINOR release (1.31 → 1.32), never a patch. A patch must run against a hub on any patch of the same minor version: the reader's menu turns the hub version red only when MAJOR.MINOR differ.
+- In each change entry say whether the hub must be upgraded.

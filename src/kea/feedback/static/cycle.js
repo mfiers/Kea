@@ -385,18 +385,28 @@
   /* The reader in the menu bar (render.py: <span class='user'>): the signed-in name opens a small menu with the
      reader's comments, help and sign out; a public site read without a login shows Help and Sign in. */
   let userKey = null;
-  /* The versions, at the foot of the reader's menu (render.py puts data-kea and data-site-version on the slot): the
-     Kea that built the site, the site's own version, and the Kea of the comment server or hub, marked when the two
-     differ (some features may then not work). */
+  /* The versions, at the foot of the reader's menu (render.py puts data-kea and data-site-version on the slot). First
+     row: the version of this site's content (its pages, results and conclusions; one per release). Second row: the
+     Kea that built the site and the Kea of the hub (or comment server), red when their MAJOR.MINOR differ: the hub's
+     API changes only with a minor version (a patch never needs a hub upgrade, so 1.31.1 with 1.31.2 is fine). */
   function versionLine(slot, status) {
     const built = slot.dataset.kea, server = status && status.server_version;
     const where = status && status.on_hub ? "hub" : "server";
-    const parts = [`Kea ${built}`];
-    if (slot.dataset.siteVersion) parts.push(`site ${slot.dataset.siteVersion}`);
-    if (server) parts.push(server === built ? `${where} the same` : `${where} Kea ${server}`);
-    return el("div", { class: "versions" + (server && server !== built ? " differs" : ""),
-      title: server && server !== built ? `The site was built with Kea ${built}; the ${status.on_hub ? "Kea hub" : "comment server"} `
-        + `runs Kea ${server}: some features may not work until both match.` : "" }, parts.join(" · "));
+    const minor = version => String(version || "").split(".").slice(0, 2).join(".");
+    const apart = !!(server && minor(server) !== minor(built));
+    const rows = [];
+    if (slot.dataset.siteVersion) rows.push(el("div", { class: "site-version",
+      title: "The version of this project's content: its pages, results and conclusions. It changes with every release "
+        + "(MAJOR when a conclusion changes direction, MINOR for new results or pages, PATCH for wording)." },
+      "This site ", el("b", {}, (/^\d/.test(slot.dataset.siteVersion) ? "v" : "") + slot.dataset.siteVersion)));
+    const kea = [el("span", { title: `The Kea that built this site` }, `Kea ${built}`)];
+    if (server) kea.push(" · ", el("span", { class: apart ? "apart" : "",
+      title: apart ? `The site was built with Kea ${built}, the ${status.on_hub ? "hub" : "comment server"} runs Kea ${server}: `
+        + "a different minor version, so some features may not work until both are upgraded."
+        : `The ${status.on_hub ? "hub" : "comment server"} runs Kea ${server}; patch versions differ only in details and work together.` },
+      `${where} ${server}`));
+    rows.push(el("div", { class: "versions" + (apart ? " differs" : "") }, ...kea));
+    return el("div", {}, ...rows);
   }
 
   function renderUser(status) {
