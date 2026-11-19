@@ -171,6 +171,13 @@ table.nodes td:first-child .tagline,table.nodes td:first-child .tl-text{display:
 table.nodes td:nth-child(2){font-size:14px;color:#3b4252;margin-top:3px}table.nodes td:nth-child(2):empty{display:none}
 table.nodes tr:has(.m-status) td:last-child{display:none}
 table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-left-color:#5f2120}table.nodes tr.st-mid{border-left-color:#e0a030}}
+.kea-keys{position:fixed;z-index:1000;top:60px;right:16px;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 80px);overflow:auto;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.25);padding:12px 16px;font-size:.9em}
+.kea-keys h2{margin:0 0 4px;font-size:1.1em}.kea-keys h3{margin:12px 0 4px;font-size:.95em;color:var(--muted)}
+.kea-keys p{margin:0;color:var(--muted)}.kea-keys table{display:table;border-collapse:collapse;width:100%;margin:0;border:0;table-layout:fixed}.kea-keys td{padding:3px 6px 3px 0;vertical-align:top;border:0;white-space:normal;background:none}
+.kea-keys td:first-child{width:44px}.kea-keys tr.off{opacity:.4}.kea-keys kbd{display:inline-block;min-width:1.4em;text-align:center;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;font:inherit;font-size:.9em}
+.kea-keys-go{top:50%;left:50%;right:auto;transform:translate(-50%,-50%);width:min(320px,calc(100vw - 32px))}
+.kea-keys tr[data-href]{cursor:pointer}.kea-keys tr[data-href]:hover{background:var(--soft)}
+.kea-keys-close{float:right;border:0;background:none;color:var(--muted);font-size:1.4em;line-height:1;cursor:pointer}
 /* the sections after a page's text as tabs hanging from the separator (pages.tab_strip, _assets/kea.js): the open
    tab in the type's colour and hanging lower, the others pale; without scripts (and in print) every panel shows */
 .node-data-sep span.sep-tabs{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start;gap:3px;margin-left:auto;background:none;padding:0;border-radius:0;letter-spacing:0;text-transform:none;line-height:0}
