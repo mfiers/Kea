@@ -28,12 +28,6 @@ def test_linkcheck_reports_missing_pages_only(tmp_path):
                         "index.html: link to gone.html#x (no such file in the site)"]
 
 
-def test_diff_lines_are_blocks_without_newlines_between():
-    html = changes.diff_html("diff --git a/x b/x\n@@ -1 +1 @@\n-old\n+new\n context\n")
-    assert "\n" not in html
-    assert "<span class='del'>-old</span><span class='add'>+new</span><span class='ctx'> context</span>" in html
-
-
 def test_run_link_only_when_the_run_page_exists(tmp_path, monkeypatch):
     monkeypatch.setattr(changes, "DOC", tmp_path)
     write(tmp_path / "_changes" / "2026-11-07-a.md", "---\ntitle: a run\n---\n")

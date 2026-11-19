@@ -354,11 +354,13 @@ their comments; the agent works locally and talks to the hub only over https.
    (readers comment under any name) and an iteration password (also Harvest and Implement). Put
    `KEA_REMOTE_KEY=<key>` in `.env` (never print or commit it) and in `kea.yaml`:
    `remote: {url: https://<hub>, project: <project>}`.
-2. **Data files: ask first, in one batch.** Run `kea publish --files`: it lists every data file the site links to,
-   its size and whether it would go up. Files that may hold identifiers (donor, subject, sample … columns) or that
-   kea cannot inspect (h5ad, parquet, npz) stay home unless named. Ask the owner one question, e.g. "Upload the
-   12 small files (< 100 kB) without identifier columns? These 9 stay home: …", and record the answer in
-   `kea.yaml` (`upload_max_kb`, `upload_include`, `upload_exclude`). Default: nothing goes up. Controlled-access
+2. **Data files: small ones go up; ask about the rest, in one batch.** Files up to 10 kB go up without asking
+   (the default `upload_max_kb: 10`), unless flagged. Run `kea publish --files`: it lists every data file the site
+   links to, its size and whether it would go up. Files that may hold identifiers (donor, subject, sample … columns)
+   or that kea cannot inspect (h5ad, parquet, npz) stay home unless named, whatever their size. For larger files ask
+   the owner one question, e.g. "Upload the 12 files of 10-100 kB without identifier columns? These 9 stay home: …",
+   and record the answer in `kea.yaml` (`upload_max_kb`, `upload_include`, `upload_exclude`; `upload_max_kb: 0`
+   sends none). Controlled-access
    data never goes up without the owner's explicit yes, file by file. On the hub, files that stay home show no
    download link and no preview.
 3. **Publish** after every `make site`: `kea publish` (it sends the site, the Markdown for the editor and the chosen

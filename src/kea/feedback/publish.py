@@ -10,7 +10,7 @@ Which data files go up (kea.yaml):
     remote:
       url: https://kea.example.org
       project: trajectories
-      upload_max_kb: 100            # data files up to this size go up, unless flagged (default 0: none)
+      upload_max_kb: 100            # data files up to this size go up, unless flagged (default 10; 0: none)
       upload_include: [data/final/summary.tsv, "data/final/*.png"]   # always (also flagged or larger ones)
       upload_exclude: ["data/intermediate/*"]                        # never
 The hub keeps every file by checksum: a publish asks which files it lacks and sends only those, in 4 MB chunks
@@ -80,9 +80,12 @@ def identifier_hint(path: Path) -> str:
     return f"may hold identifiers ({', '.join(found[:5])})" if found else ""
 
 
+DEFAULT_UPLOAD_KB = 10      # small files go up without asking (owner, 2026-11-19); flagged files still stay home
+
+
 def decide(paths: list[str], remote: dict) -> list[dict]:
     """One row per linked data file: path, size, upload (bool) and the reason."""
-    max_bytes = float(remote.get("upload_max_kb", 0) or 0) * 1024
+    max_bytes = float(remote.get("upload_max_kb", DEFAULT_UPLOAD_KB) or 0) * 1024
     include = [str(item) for item in remote.get("upload_include", []) or []]
     exclude = [str(item) for item in remote.get("upload_exclude", []) or []]
     rows = []
@@ -101,7 +104,7 @@ def decide(paths: list[str], remote: dict) -> list[dict]:
         elif size <= max_bytes:
             upload, reason = True, f"≤ {max_bytes / 1024:.0f} kB"
         else:
-            upload, reason = False, ("larger than upload_max_kb" if max_bytes else "upload_max_kb not set (0)")
+            upload, reason = False, ("larger than upload_max_kb" if max_bytes else "upload_max_kb: 0 (none)")
         rows.append({"path": relative, "size": size, "upload": upload, "reason": reason})
     return rows
 

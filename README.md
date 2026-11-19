@@ -262,7 +262,7 @@ kea hub serve --host 127.0.0.1 --port 8300       # behind the proxy, e.g. Caddy:
 remote:
   url: https://kea.example.org
   project: trajectories
-  upload_max_kb: 100                 # data files up to this size go up (default 0: none) …
+  upload_max_kb: 100                 # data files up to this size go up, unless flagged (default 10; 0: none) …
   upload_include: []                 # … plus these (also flagged ones), never these:
   upload_exclude: []
 # .env: KEA_REMOTE_KEY=<project key>

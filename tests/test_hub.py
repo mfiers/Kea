@@ -218,7 +218,11 @@ def test_upload_decision_flags_identifiers(tmp_path, monkeypatch):
     assert not rows["data/cells.parquet"]["upload"]
     rows = {row["path"]: row for row in publish.decide(["data/donors.tsv"], {"upload_include": ["data/donors.tsv"]})}
     assert rows["data/donors.tsv"]["upload"]                  # the owner named it explicitly
-    assert publish.decide(["data/summary.tsv"], {})[0]["upload"] is False          # default: nothing goes up
+    # default: files up to 10 kB go up, unless flagged; upload_max_kb: 0 sends none
+    assert publish.decide(["data/summary.tsv"], {})[0]["upload"] is True
+    assert publish.decide(["data/donors.tsv"], {})[0]["upload"] is False
+    assert publish.decide(["data/big.tsv"], {})[0]["upload"] is False
+    assert publish.decide(["data/summary.tsv"], {"upload_max_kb": 0})[0]["upload"] is False
 
 
 def test_remote_lease_of_an_ended_session_on_this_host_is_taken_over(live_hub, tmp_path, monkeypatch):

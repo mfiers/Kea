@@ -2,7 +2,7 @@
 
 A run is a Markdown file ``doc/_changes/<run id>.md`` (written by the agent at the end of the run: asked,
 changed, findings, not done). Its commits are those whose message carries the trailer ``Run: <run id>``.
-Generated per run: the commits; documentation pages added, changed or removed (with the Markdown diff);
+Generated per run: the commits; documentation pages added, changed or removed (linked to their Changes tab, where the word diff is);
 status changes of pages (front matter before the run vs after it); comment threads answered by the run's commits.
 
 A commit answers a comment thread when a status event of that thread names the commit, or the commit message has
@@ -26,7 +26,6 @@ from kea.docsite.nodes import DOC, PROJECT_ROOT, Node, Tree, safe_yaml, split_fr
 from kea.docsite.render import esc, tagline
 from kea.feedback import store
 
-DIFF_LINE_LIMIT = 500
 
 
 def git(*args: str) -> str:
@@ -122,21 +121,6 @@ def threads_answered(commit: Commit, threads: list[store.Thread]) -> list[store.
             or (thread.commit and thread.commit.split("+")[0] in (commit.short, commit.full))]
 
 
-def diff_html(diff: str) -> str:
-    lines = diff.splitlines()
-    shown = []
-    for line in lines[:DIFF_LINE_LIMIT]:
-        if line.startswith(("index ", "new file", "similarity", "rename", "deleted file")):
-            continue
-        css = ("add" if line.startswith("+") and not line.startswith("+++") else
-               "del" if line.startswith("-") and not line.startswith("---") else
-               "hunk" if line.startswith(("@@", "diff --git", "+++", "---")) else "")
-        shown.append(f"<span class='{css or 'ctx'}'>{esc(line) or ' '}</span>")
-    if len(lines) > DIFF_LINE_LIMIT:
-        shown.append(f"<span class='hunk'>… {len(lines) - DIFF_LINE_LIMIT} more lines</span>")
-    return f"<pre class='diff'>{''.join(shown)}</pre>"      # every span is display:block (render.py CSS)
-
-
 def file_link(path: str, tree: Tree, code_href, prefix: str) -> str:
     """A changed file, linked to the page readers see (doc node) or its code page."""
     sources = _SOURCES.get(id(tree))
@@ -149,27 +133,54 @@ def file_link(path: str, tree: Tree, code_href, prefix: str) -> str:
     return f"<a href='{esc(href)}'><code>{esc(path)}</code></a>" if href else f"<code>{esc(path)}</code>"
 
 
+def changes_link(path: str, tree: Tree, code_href, prefix: str) -> str:
+    """'what changed →': the Changes tab of the page readers see for `path` (its word diff per round), if any."""
+    sources = _SOURCES.get(id(tree)) or {}
+    node = sources.get((PROJECT_ROOT / path).resolve())
+    from kea.docsite.render import node_href
+    href = (node_href(node, prefix) if node is not None else code_href(path, prefix)) or ""
+    return (f" <a class='help' href='{esc(href.split('#')[0])}#history' title='The Changes tab of this page: what "
+            f"changed on it, word by word, per round'>what changed →</a>") if href else ""
+
+
+SIZE_WORDS = {"A": "added", "M": "changed", "D": "removed", "R": "renamed", "C": "copied"}
+
+
 def commit_body(commit: Commit, tree: Tree, threads: list[store.Thread], code_href, prefix: str) -> str:
+    """One commit: message, the comments it answered, and the files it touched with their size of change. The diff
+    itself is on each page (its Changes tab), where it is about that page alone; a whole commit's diff was too long
+    to read."""
+    from kea.docsite import mode
+    from kea.config import SETTINGS
     files = git_fixed("show", "--format=", "--name-status", commit.full).strip().splitlines()
-    file_items = "".join(f"<li><code>{esc(line.split(chr(9))[0])}</code> "
-                         f"{file_link(line.split(chr(9))[-1], tree, code_href, prefix)}</li>" for line in files)
+    sizes = {}
+    for line in git_fixed("show", "--format=", "--numstat", commit.full).strip().splitlines():
+        added, removed, *names = line.split("\t")
+        sizes[names[-1].split(" => ")[-1].rstrip("}")] = (added, removed)
+    hidden = ("data/", SETTINGS["feedback_dir"].rstrip("/") + "/", "doc/_cycles/") if mode.MODE == "public" else ()
+    items = []
+    for line in files:
+        status, path = line.split(chr(9))[0], line.split(chr(9))[-1]
+        if path.startswith(hidden):
+            continue
+        added, removed = sizes.get(path, ("", ""))
+        size = (f" <span class='help'>+{esc(added)} −{esc(removed)} lines</span>" if added not in ("", "-") else "")
+        items.append(f"<li><span class='help'>{esc(SIZE_WORDS.get(status[:1], status))}</span> "
+                     f"{file_link(path, tree, code_href, prefix)}{size}"
+                     f"{changes_link(path, tree, code_href, prefix) if status[:1] != 'D' else ''}</li>")
+    file_items = "".join(items)
     answered = threads_answered(commit, threads)
     answered_html = ("".join(f"<li><a href='{prefix}feedback.html#fbs-{esc(thread.thread_id)}'>{esc(thread.thread_id)}</a>"
                              f" on {esc(thread.page_title or thread.page)}: {esc(thread.text[:160])}</li>"
                              for thread in answered))
     run_html = (f"<div><b>Run:</b> {run_link(commit.run, prefix)}</div>" if commit.run else "")
-    from kea.config import SETTINGS
-    from kea.docsite import mode
-    excluded = [":(exclude)uv.lock"]
-    if mode.MODE == "public":                      # data files (and the comment logs) are never shown in a public copy
-        excluded += [":(exclude)data", f":(exclude){SETTINGS['feedback_dir']}", ":(exclude)doc/_cycles"]
-    diff = git_fixed("show", "--format=", "--unified=2", commit.full, "--", ".", *excluded)
     return (f"<h1>Commit <code>{esc(commit.short)}</code></h1><div class='short'>{esc(commit.subject)}</div>"
             f"<div class='box'><div><b>Date:</b> {esc(commit.date)} · <b>author:</b> {esc(commit.author)}</div>"
             f"{run_html}<div><b>Full id:</b> <code>{esc(commit.full)}</code></div></div>"
             + (f"<pre>{esc(commit.body.strip())}</pre>" if commit.body.strip() else "")
             + (f"<h2>Comments this commit answered</h2><ul>{answered_html}</ul>" if answered else "")
-            + f"<h2>Files</h2><ul>{file_items}</ul><h2>Diff</h2><div class='not-annotatable'>{diff_html(diff)}</div>")
+            + f"<h2>Files</h2><p class='help'>What changed on a page, word by word, is on that page: <i>what changed "
+              f"→</i> opens its Changes tab.</p><ul>{file_items}</ul>")
 
 
 @dataclass
@@ -204,7 +215,8 @@ def _status_at(revision: str, path: str) -> str | None:
 
 
 def run_generated(run: Run, tree: Tree, threads: list[store.Thread], code_href, prefix: str) -> str:
-    """Commits, documentation pages changed (with diffs), status changes and answered comments of one run."""
+    """Commits, documentation pages changed (each linked to its own Changes tab), status changes and answered
+    comments of one run."""
     if not run.commits:
         return "<p class='help'>No commits carry this run's trailer yet (uncommitted run).</p>"
     oldest, newest = run.commits[-1], run.commits[0]
@@ -219,9 +231,7 @@ def run_generated(run: Run, tree: Tree, threads: list[store.Thread], code_href, 
     status_rows = []
     for line in changed.splitlines():
         kind, path = line.split("\t")[0][0], line.split("\t")[-1]
-        diff = git_fixed("diff", base, newest.full, "--", path) if base else git_fixed("show", "--format=", newest.full, "--", path)
-        item = (f"<li>{file_link(path, tree, code_href, prefix)}"
-                f"<details><summary class='help'>show the change</summary>{diff_html(diff)}</details></li>")
+        item = f"<li>{file_link(path, tree, code_href, prefix)}{changes_link(path, tree, code_href, prefix) if kind != 'D' else ''}</li>"
         sections.setdefault(kind, []).append(item)
         if path.endswith(".md") and kind == "M":
             before, after = _status_at(base, path), _status_at(newest.full, path)
