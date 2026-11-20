@@ -662,11 +662,11 @@
       ]],
     ];
   };
-  /* N / P: the next or previous page that needs attention, top down (wraps around); the first or last from a page
-     outside the list. */
+  /* N / P: the next or previous page of this round's attention list, top down (wraps around), including the pages
+     approved on the site since the Harvest; from a page outside the list, the nearest one in the reading order. */
   window.keaAttention = function (step, reading) {
-    const signed = signedOnSite();
-    const order = signOrder(), open = order.filter(item => item.href && (item.key === PAGE || !signed.has(item.key)));
+    // this round's list, pages approved since the last Harvest included (kea.js's bar shows them green)
+    const order = signOrder(), open = order.filter(item => item.href);
     const others = open.filter(item => item.key !== PAGE);
     if (!others.length) return null;
     const here = open.findIndex(item => item.key === PAGE);

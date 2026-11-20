@@ -88,18 +88,69 @@
     const here = hereIn(list);
     const index = here < 0 ? (step > 0 ? 0 : list.length - 1) : here + step;
     if (index < 0 || index >= list.length) { flash(step > 0 ? "This is the last page." : "This is the first page."); return; }
+    markStep("reading");
     location.href = new URL(list[index].href, root).href;
+  }
+  /* After n/p or N/P: a thin bar under the menu bar for a moment, one segment per page of the order walked (amber:
+     needs attention, green: approved on the site this round, grey: nothing to do), the page you are on raised,
+     with where you are in words. The step is remembered across the page load in sessionStorage. */
+  function markStep(kind) { try { sessionStorage.setItem("kea-step", JSON.stringify({ kind, at: Date.now() })); } catch (error) { /* private mode */ } }
+  function statusReady() {
+    if (window.keaStatus) return Promise.resolve(window.keaStatus);
+    return new Promise((resolve) => {
+      window.addEventListener("kea-status", () => resolve(window.keaStatus), { once: true });
+      setTimeout(() => resolve(window.keaStatus || null), 3000);
+    });
+  }
+  async function showStepBar(kind) {
+    const root = siteRoot();
+    if (!root) return;
+    const [list, status] = await Promise.all([loadOrder(), statusReady()]);
+    const order = status ? ((status.build || {}).sign_order || []).filter((item) => item.href) : [];
+    const signed = new Set(status ? status.signing || [] : []), attention = new Set(order.map((item) => item.key));
+    const items = kind === "attention" ? order : list;
+    const here = hereIn(items);
+    if (here < 0 || !items.length) return;
+    const key = items[here].key, state = (item) => signed.has(item.key) ? "ok" : attention.has(item.key) ? "open" : "";
+    const bar = document.createElement("div");
+    bar.className = "kea-stepbar not-annotatable";
+    const top = document.querySelector(".topbar");
+    bar.style.top = (top ? Math.max(0, top.getBoundingClientRect().bottom) : 0) + "px";
+    const track = document.createElement("div");
+    track.className = "kea-stepbar-track" + (items.length > 80 ? " dense" : "");
+    items.forEach((item, index) => {
+      const segment = document.createElement("span");
+      segment.className = ["seg", state(item), index === here ? "here" : ""].filter(Boolean).join(" ");
+      track.append(segment);
+    });
+    const open = order.filter((item) => !signed.has(item.key)).length, done = order.length - open;
+    const mine = signed.has(key) ? "approved this round" : attention.has(key) ? "needs attention" : "";
+    const words = kind === "attention"
+      ? `Needs attention · ${here + 1} of ${items.length} · ${open} open, ${done} approved this round`
+      : `Reading order · ${here + 1} of ${items.length}` + (order.length ? ` · ${open} need attention` : "");
+    const label = document.createElement("div");
+    label.className = "kea-stepbar-label";
+    label.textContent = words + (mine ? ` · this page: ${mine}` : "");
+    bar.append(track, label);
+    document.body.append(bar);
+    setTimeout(() => bar.classList.add("gone"), 2600);
+    setTimeout(() => bar.remove(), 3200);
+  }
+  function pendingStep() {
+    let step = null;
+    try { step = JSON.parse(sessionStorage.getItem("kea-step") || "null"); sessionStorage.removeItem("kea-step"); } catch (error) { step = null; }
+    if (step && Date.now() - step.at < 10000) showStepBar(step.kind);
   }
   async function attentionStep(step) {
     if (window.keaAttention) {
       const list = await loadOrder();
       const item = window.keaAttention(step, list.map((entry) => entry.key));
-      if (item) { window.keaGoTo(item); return; }
+      if (item) { markStep("attention"); window.keaGoTo(item); return; }
       flash("No page needs attention.");
       return;
     }
     const button = step > 0 ? (visible(".fb-sn-next") || visible(".fb-d-tosign")) : visible(".fb-sn-prev");
-    if (button) button.click(); else flash("No page needs attention (or the comment server is not reachable).");
+    if (button) { markStep("attention"); button.click(); } else flash("No page needs attention (or the comment server is not reachable).");
   }
   function flash(text) {
     const note = document.createElement("div");
@@ -149,8 +200,8 @@
     ["c", "Comments on this page (open or close)", () => visible(".fb-d-comment")],
     ["n", "Next page, in the reading order (always the same)", () => true],
     ["p", "Previous page, in the reading order", () => true],
-    ["N", "Next page that needs attention", () => !!window.keaAttention || visible(".fb-sn-next") || visible(".fb-d-tosign")],
-    ["P", "Previous page that needs attention", () => !!window.keaAttention || visible(".fb-sn-prev")],
+    ["N", "Next page of this round's attention list (approved ones included, shown green)", () => !!window.keaAttention || visible(".fb-sn-next") || visible(".fb-d-tosign")],
+    ["P", "Previous page of that list", () => !!window.keaAttention || visible(".fb-sn-prev")],
     ["]", "Next tab below the text", () => tabStep(1)],
     ["[", "Previous tab", () => tabStep(-1)],
     ["1–9", "Tab 1 to 9", () => tabStep({ index: 0 })],
@@ -277,6 +328,7 @@
   }
 
   function start() {
+    pendingStep();
     for (const strip of document.querySelectorAll(".sep-tabs")) {
       for (const button of strip.querySelectorAll(".sep-tab")) button.tabIndex = button.classList.contains("on") ? 0 : -1;
     }
