@@ -197,3 +197,15 @@ def test_kea_sign_pending_applies_every_open_sign_off(tmp_path, monkeypatch, cap
     assert "revise" not in out and "kea reply" in out and "add the next step" in out
     tree = nodes.load_tree(doc)
     assert all(graph.approved(tree.nodes[node.key]) for node in stage)
+
+
+def test_reading_order_holds_every_page_and_the_sign_order_follows_it(tmp_path):
+    doc = _doc(tmp_path)
+    (tmp_path / "kea.yaml").write_text("pace: guided\n")
+    _hypothesis(doc)
+    _sign_all(doc, "home.md", "q-a.md")
+    tree = nodes.load_tree(doc)
+    reading = [node.key for node in signing.reading_order(tree)]
+    assert sorted(reading) == sorted(tree.nodes) and reading[0] == "p:home"
+    waiting = [node.key for node in signing.sign_order(tree)]
+    assert waiting and waiting == [key for key in reading if key in set(waiting)]

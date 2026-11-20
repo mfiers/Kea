@@ -241,19 +241,27 @@ def minor_reasons(old_header: dict, old_body: str, new_header: dict, new_body: s
 # ------------------------------------------------------------------ the order of sign-offs: one page per click
 
 def sign_order(tree) -> list:
-    """Every page that waits for a sign-off (pace: guided), in the order a reader should read and sign them: top
-    down through the tree. Per experiment: the experiment, its premises and decisions; then each question in turn
-    with its hypotheses, planned steps, results and conclusions (the route's order); a page that fits nowhere comes
-    right after its parent, else at the end. One Approve signs one page (since 1.31.1); the site's "Approve & next"
-    walks this list."""
+    """Every page that waits for a sign-off (pace: guided), in the reading order (:func:`reading_order`): the
+    site's "Approve & next" and the N/P keys walk this list; one Approve signs one page (since 1.31.1)."""
+    return [node for node in reading_order(tree) if node.waiting]
+
+
+def reading_order(tree) -> list:
+    """Every page in the order a reader should read (and sign) them: top down through the tree. Per experiment:
+    the experiment, its premises and decisions; then each question in turn with its hypotheses, planned steps,
+    results and conclusions (the route's order); a page that fits nowhere comes right after its parent, else at
+    the end. Always the same order: the site's n/p keys walk it, and the sign-off order is this list filtered."""
     from kea.docsite import graph, questions
     from kea.docsite.nodes import natural
     rank = {"experiment": 0, "premise": 1, "decision": 2, "question": 3, "hypothesis": 4, "step": 5, "result": 6,
             "figure": 7, "conclusion": 8}
     order: list = []
 
+    seen: set[str] = set()
+
     def add(node) -> None:
-        if node.waiting and node not in order:
+        if node.key not in seen:
+            seen.add(node.key)
             order.append(node)
     for project, home in tree.projects.items():
         add(home)
@@ -266,7 +274,7 @@ def sign_order(tree) -> list:
             for stage in graph.question_route(tree, question)["stages"]:
                 for node in sorted(stage["pages"], key=lambda node: (rank.get(node.type, 9), natural(node.number or node.id))):
                     add(node)
-    rest = sorted((node for node in tree.nodes.values() if node.waiting and node not in order),
+    rest = sorted((node for node in tree.nodes.values() if node.key not in seen),
                   key=lambda node: (node.project, rank.get(node.type, 9), natural(node.number or node.id)))
     for node in rest:                              # after its parent (and the parent's earlier children), if listed
         parent = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None

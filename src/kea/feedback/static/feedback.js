@@ -567,6 +567,87 @@
   }
   // the status poll (cycle.js) hands over the sign-off order and the pages signed on the site
   window.addEventListener("kea-status", () => renderDock());
+
+  /* Keyboard (kea.js): the page's actions behind "a", grouped as the dock is (sign-off · Change · More), each doing
+     exactly what its button does; and N/P, the pages that need attention. A key never signs more than this page,
+     and nothing starts: like a click, a sign-off waits for the Harvest. */
+  function pressPill(cls) {
+    const pill = dockEl && dockEl.querySelector("." + cls);
+    if (!pill || pill.hidden) return;
+    const items = dockEl.querySelector(".fb-dock-items");
+    if (items.hidden) dockEl.querySelector(".fb-dock-head").click();
+    const group = pill.closest(".fb-dgroup");
+    if (group && group.querySelector(".fb-dgroup-items").hidden) group.querySelector(".fb-dgroup-head").click();
+    pill.click();
+  }
+  const pillThere = cls => !!(dockEl && dockEl.querySelector("." + cls) && !dockEl.querySelector("." + cls).hidden);
+  function signState() {
+    const content = container && container.querySelector(".node-content");
+    const waitingPage = !!(content && content.dataset.waiting);
+    const asked = openThread("approve");
+    const signedWith = waitingPage && !asked && ((window.keaStatus || {}).signing || []).includes(PAGE);
+    return { waitingPage, asked, signedWith, canSign: waitingPage && !asked && !signedWith && !readOnly && !!dockEl };
+  }
+  async function approveByKey(andNext) {
+    const state = signState();
+    if (!state.canSign) return;
+    const dropped = openThread("drop") || openThread("reject");
+    if (dropped) await withdraw(dropped, "drop replaced by approve");
+    const made = await tagThread(null, ["approve"]);
+    if (!made) return;
+    const left = nextToSign();
+    if (andNext) {
+      if (!left) toast("Signed. Every page that waited is signed now: next, a PI presses Harvest.");
+      setTimeout(() => goTo(left), left ? 400 : 1600);
+    } else toast("Approved: Claude writes the sign-off onto the page at the next Harvest. a then d takes it back.");
+  }
+  const titleNode = () => container && container.querySelector(".node-content h1 .node-title");
+  const shortNode = () => container && container.querySelector(".node-content .short");
+  window.keaPageActions = function () {
+    if (!PAGE.includes(":")) return [];
+    const state = signState(), following = state.waitingPage ? nextToSign() : null;
+    const name = item => item ? (item.label ? item.label + " " : "") + item.title : "";
+    return [
+      ["Sign-off", [
+        ["a", "Approve this page (only this one)", state.canSign, () => approveByKey(false)],
+        ["n", "Approve &amp; next" + (following ? ": then open " + name(following) : ""), state.canSign, () => approveByKey(true)],
+        ["d", "Take back my Approve (before the Harvest)", !!state.asked && !readOnly,
+         () => withdraw(state.asked, "approval taken back")],
+      ]],
+      ["Change", [
+        ["t", "Edit the title", editable && !!titleNode(), () => editInPlace(titleNode(), "title")],
+        ["s", "Edit the summary", editable && !!shortNode(), () => editInPlace(shortNode(), "short")],
+        ["p", "Edit the page: title, summary and text", editable, () => openEditor(null)],
+        ["r", "Revise: ask Claude to rewrite it …", pillThere("fb-d-revise"), () => pressPill("fb-d-revise")],
+        ["x", "Drop the page …", pillThere("fb-d-reject"), () => pressPill("fb-d-reject")],
+      ]],
+      ["More", [
+        ["c", "Comment on the page", pillThere("fb-d-comment"), () => pressPill("fb-d-comment")],
+        ["+", "Propose a next step …", pillThere("fb-d-propose"), () => pressPill("fb-d-propose")],
+        ["w", "Work for the next run …", pillThere("fb-d-next"), () => pressPill("fb-d-next")],
+        ["m", "Manuscript: where the page belongs …", pillThere("fb-d-ms"), () => pressPill("fb-d-ms")],
+      ]],
+    ];
+  };
+  /* N / P: the next or previous page that needs attention, top down (wraps around); the first or last from a page
+     outside the list. */
+  window.keaAttention = function (step, reading) {
+    const signed = signedOnSite();
+    const order = signOrder(), open = order.filter(item => item.href && (item.key === PAGE || !signed.has(item.key)));
+    const others = open.filter(item => item.key !== PAGE);
+    if (!others.length) return null;
+    const here = open.findIndex(item => item.key === PAGE);
+    if (here >= 0) return open[(here + step + open.length) % open.length];
+    // this page is not in the list: the nearest one after (before) it in the reading order (kea.js passes the keys)
+    const position = key => (reading || []).indexOf(key), mine = position(PAGE);
+    if (mine >= 0) {
+      const after = others.filter(item => position(item.key) > mine), before = others.filter(item => position(item.key) < mine);
+      if (step > 0) return after[0] || others[0];
+      return before[before.length - 1] || others[others.length - 1];
+    }
+    return step > 0 ? others[0] : others[others.length - 1];
+  };
+  window.keaGoTo = item => goTo(item);
   const confirm_ = text => window.confirm(text);
   /* The popup of Next run / Manuscript chips, to the left of its pill. */
   let dockPop = null, dockPopGroup = "", dockPopAnchor = null;

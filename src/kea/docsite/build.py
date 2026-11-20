@@ -94,6 +94,10 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     # the pages that wait for a sign-off, top down (the site's "Approve & next" and ‹ › walk this list)
     sign_order = [{"key": node.key, "href": hrefs.get(node.key, ""), "label": node.label or "", "title": node.title,
                    "type": node.type} for node in signing.sign_order(tree)] if tree.pace == "guided" else []
+    # every page, top down, always in the same order (the site's n/p keys walk it; kea.js)
+    (site / "_order.json").write_text(json.dumps(
+        [{"key": node.key, "href": hrefs[node.key], "label": node.label or "", "title": node.title}
+         for node in signing.reading_order(tree) if hrefs.get(node.key)], ensure_ascii=False))
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
                                                   "plan_items": plan_items, "sign_order": sign_order,
                                                   "previews_marked": True,      # kea publish relies on this
