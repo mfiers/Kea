@@ -655,7 +655,7 @@
         ["x", "Drop the page …", pillThere("fb-d-reject"), () => pressPill("fb-d-reject")],
       ]],
       ["More", [
-        ["c", "Comment on the page", pillThere("fb-d-comment"), () => pressPill("fb-d-comment")],
+        ["c", "Comment on the page (the cursor goes in the box)", pillThere("fb-d-comment"), () => commentByKey(false)],
         ["+", "Propose a next step …", pillThere("fb-d-propose"), () => pressPill("fb-d-propose")],
         ["w", "Work for the next run …", pillThere("fb-d-next"), () => pressPill("fb-d-next")],
         ["m", "Manuscript: where the page belongs …", pillThere("fb-d-ms"), () => pressPill("fb-d-ms")],
@@ -1240,6 +1240,17 @@
       if (target) { target.scrollIntoView({ block: "center" }); target.classList.add("fb-flash"); setTimeout(() => target.classList.remove("fb-flash"), 1600); }
     }
   }
+  /* A key (a then c, or c): open the comments with the cursor in the whole-page comment box, so typing starts the
+     comment (Esc leaves the box and closes the panel; c again also closes it when the cursor is not in a field). */
+  function commentByKey(toggle) {
+    if (toggle && panel.classList.contains("fb-open")) { closePanel(); return true; }
+    if (!dockEl || !dockEl.querySelector(".fb-d-comment") || dockEl.querySelector(".fb-d-comment").hidden) return false;
+    openPanel();
+    const field = panel.querySelector(".fb-body > .fb-new textarea");
+    if (field) setTimeout(() => field.focus(), 50);
+    return true;
+  }
+  window.keaCommentKey = () => commentByKey(true);
   function closePanel() {
     panel.classList.remove("fb-open");
     document.documentElement.classList.remove("fb-panel-open");

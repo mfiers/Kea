@@ -64,7 +64,7 @@
   /* feedback.js hides the build-time copy of the comments when the comment server answers (the live ones are in
      the Comments panel): then the Comments tab goes too */
   /* Keyboard shortcuts, outside a text field and without Ctrl, Alt or ⌘ (render.CSS .kea-keys). Two menus that
-     mirror the menu bar and the page's buttons: g opens a menu of places (g then m: Map), a a menu of this page's
+     mirror the menu bar and the page's buttons: g opens a menu of places (g then q: this page's question; g then M: Map), a a menu of this page's
      actions (a then t: edit the title), grouped as the buttons are (sign-off · Change · More; feedback.js
      keaPageActions does exactly what each button does). n / p walk every page in the reading order, always the same
      (_order.json, written by kea build); N / P only the pages that need attention, in that same order. A key
@@ -159,26 +159,90 @@
     document.body.append(note);
     setTimeout(() => note.remove(), 1800);
   }
+  /* g, places on the site: capital letters (g P Plan, g M Map), in the menu bar's order. */
   const GO = [
-    ["s", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
-    ["e", "The experiment's front page", topLink("/home.html")],
-    ["u", "Up: the page above this one", () => { const links = document.querySelectorAll("nav.crumbs a"); return links[links.length - 1]; }],
-    ["a", "The first page that needs attention", () => window.keaAttention ? { go: () => attentionStep(1) } : null],
-    ["r", "Progress: what waits for whom", topLink("progress.html")],
-    ["p", "Plan of the current round", topLink("plan.html")],
-    ["c", "Current comments", topLink("comments.html")],
-    ["m", "Map", topLink("map.html")],
-    ["l", "Relations: the graph of links", topLink("relations.html")],
-    ["o", "Objects: every page by type", topLink("objects.html")],
-    ["t", "Terms", topLink("objects.html#type=term")],
-    ["b", "References (bibliography)", topLink("objects.html#type=reference")],
-    ["d", "Data files", topLink("data.html")],
-    ["k", "Code", topLink("code/index.html")],
-    ["w", "What changed, per working session", topLink("changes/index.html")],
-    ["h", "History: the review cycles", topLink("history.html")],
-    ["f", "The PDF", () => document.querySelector(".topbar a[href$='.pdf']")],
+    ["S", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
+    ["A", "The first page that needs attention", () => window.keaAttention ? { go: () => attentionStep(1) } : null],
+    ["R", "Progress: what waits for whom", topLink("progress.html")],
+    ["P", "Plan of the current round", topLink("plan.html")],
+    ["C", "Current comments", topLink("comments.html")],
+    ["M", "Map", topLink("map.html")],
+    ["L", "Relations: the graph of links", topLink("relations.html")],
+    ["O", "Objects: every page by type", topLink("objects.html")],
+    ["T", "Terms", topLink("objects.html#type=term")],
+    ["B", "References (bibliography)", topLink("objects.html#type=reference")],
+    ["D", "Data files", topLink("data.html")],
+    ["K", "Code", topLink("code/index.html")],
+    ["W", "What changed, per working session", topLink("changes/index.html")],
+    ["H", "History: the review cycles", topLink("history.html")],
+    ["F", "The PDF", () => document.querySelector(".topbar a[href$='.pdf']")],
     ["?", "Help", topLink("help.html")],
   ];
+  /* g, this page's neighbours: small letters, the letter of their number (g q its question, g r its results, g w its
+     caveats). The pages linked in the page's relations (its About part, both directions, provenance included) and
+     then in its text; one page opens at once, several open a numbered choice. */
+  const NEAR_TYPES = [
+    ["q", "question", "Question", "Questions"], ["p", "premise", "Premise", "Premises"],
+    ["h", "hypothesis", "Hypothesis", "Hypotheses"], ["s", "step", "Step", "Steps"], ["r", "result", "Result", "Results"],
+    ["f", "figure", "Figure", "Figures"], ["c", "conclusion", "Conclusion", "Conclusions"], ["w", "caveat", "Caveat", "Caveats"],
+    ["d", "decision", "Decision", "Decisions"], ["a", "artefact", "Artefact", "Artefacts"],
+    ["o", "resource", "Resource", "Resources"], ["t", "term", "Term", "Terms"], ["b", "reference", "Reference", "References"],
+  ];
+  const escHtml = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const folderOf = (path) => path.split("/").slice(-2, -1)[0] || "";
+  function relationOf(link) {
+    let item = link.closest("ul, table, ol");
+    for (let before = item && item.previousElementSibling; before; before = before.previousElementSibling)
+      if (/^H[23]$/.test(before.tagName)) return before.textContent.trim();
+    const heading = link.closest("section") && link.closest("section").querySelector("h2");
+    return heading ? heading.textContent.trim() : "";
+  }
+  function nearPages() {
+    const node = document.querySelector(".node-content");
+    if (!node) return [];
+    const seen = new Set([location.pathname]), found = [];
+    const skip = "nav, .fb-thread, .fb-history, .fb-static, .round-diff, .tab-panel[data-tab='changes'], .tab-panel[data-tab='comments'], .kea-keys";
+    const scopes = [...document.querySelectorAll("section.about")].map((scope) => [scope, null]).concat([[node, "in the text"]]);
+    for (const [scope, where] of scopes) for (const link of scope.querySelectorAll("a.tagline, a.tag")) {
+      if (link.closest(skip)) continue;
+      const tag = link.classList.contains("tag") ? link : link.querySelector(".tag");
+      const type = tag ? ([...tag.classList].find((name) => name.startsWith("t-")) || "").slice(2) : "";
+      if (!NEAR_TYPES.some(([, name]) => name === type)) continue;
+      const url = new URL(link.getAttribute("href"), location.href);
+      if (seen.has(url.pathname)) continue;
+      seen.add(url.pathname);
+      const label = tag.textContent.trim();
+      const hover = (link.getAttribute("title") || "").split(" — ")[0];
+      const words = link.querySelector(".tl-text") ? link.querySelector(".tl-text").textContent.trim() : hover.replace(/^[^·]*·\s*/, "");
+      const project = folderOf(url.pathname) !== folderOf(location.pathname) ? folderOf(url.pathname) : "";
+      found.push({ type, label, words: words === label ? "" : words, href: url.href, relation: where || relationOf(link), project });
+    }
+    return found;
+  }
+  const nearLine = (page) => `<b>${escHtml(page.label)}</b> ${escHtml(page.words)}`
+    + (page.project ? ` <small>(${escHtml(page.project)})</small>` : "")
+    + (page.relation ? ` <small class='kea-rel'>· ${escHtml(page.relation.toLowerCase())}</small>` : "");
+  const PICK_KEYS = "123456789abcdefghijklmnopqrstuvwxyz";
+  function pickMenu(plural, pages) {
+    keyBox("pick", plural + " linked from this page", [["", pages.slice(0, PICK_KEYS.length)
+      .map((page, index) => [PICK_KEYS[index], nearLine(page), () => ({ href: page.href })])]], "Press a key, or Esc.");
+  }
+  function nearRows() {
+    const rows = [], pages = nearPages();
+    const home = topLink("/home.html")();
+    if (home && new URL(home.href).pathname !== location.pathname) rows.push(["e", "The experiment's front page", () => home]);
+    const crumbs = document.querySelectorAll("nav.crumbs a"), up = crumbs[crumbs.length - 1];
+    if (up && document.querySelector(".node-content")) rows.push(["u", "Up: " + escHtml(up.textContent.trim()), () => up]);
+    for (const [key, type, one, many] of NEAR_TYPES) {
+      const mine = pages.filter((page) => page.type === type);
+      if (mine.length === 1) rows.push([key, `${one}: ${nearLine(mine[0])}`, () => ({ href: mine[0].href })]);
+      else if (mine.length > 1) rows.push([key, `${many} (${mine.length}): ` + mine.slice(0, 6).map((page) => escHtml(page.label + (page.project ? " (" + page.project + ")" : ""))).join(", ")
+        + (mine.length > 6 ? " …" : "") + " <small>· then pick one</small>", () => ({ go: () => pickMenu(many, mine) })]);
+    }
+    return rows;
+  }
+  const NEAR_HELP = NEAR_TYPES.map(([key, , one]) => [key, "Linked " + one.toLowerCase() + " (several: pick one)",
+    () => { const row = nearRows().find(([rowKey]) => rowKey === key); return row ? row[2]() : null; }]);
   function tabStep(step) {
     const strip = document.querySelector(".sep-tabs");
     if (!strip) return null;
@@ -195,9 +259,9 @@
     window.scrollTo({ top: Math.max(0, strip.getBoundingClientRect().top + window.scrollY - below - 8), behavior: "smooth" });
   }
   const PAGE_KEYS = [
-    ["g", "Go to … (a menu of places)", () => true],
+    ["g", "Go to … (this page's neighbours by their letter, places on the site by capitals)", () => true],
     ["a", "Act on this page … (approve, edit, revise, propose …)", () => !!(window.keaPageActions && window.keaPageActions().length)],
-    ["c", "Comments on this page (open or close)", () => visible(".fb-d-comment")],
+    ["c", "Comments on this page: opens with the cursor in the comment box (Esc closes)", () => visible(".fb-d-comment")],
     ["n", "Next page, in the reading order (always the same)", () => true],
     ["p", "Previous page, in the reading order", () => true],
     ["N", "Next page of this round's attention list (approved ones included, shown green)", () => !!window.keaAttention || visible(".fb-sn-next") || visible(".fb-d-tosign")],
@@ -223,10 +287,12 @@
     let html = `<button type='button' class='kea-keys-close' title='Close (Esc)'>×</button><h2>${title}</h2>`
       + (note ? `<p>${note}</p>` : "");
     const actions = [];
+    box.keaKeys = new Map();
     for (const [head, rows] of sections) {
-      html += (head ? `<h3>${head}</h3>` : "") + "<table>";
+      html += (head ? `<h3>${head}</h3>` : "") + (rows === GO && kind === "go" ? "<table class='cols2'>" : "<table>");
       for (const [key, text, find] of rows) {
         const target = find();
+        if (target && !box.keaKeys.has(key)) box.keaKeys.set(key, target);
         const href = target && target.href ? ` data-href='${esc(target.href)}'` : "";
         const act = target && (target.run || target.go) ? ` data-act='${actions.push(target.run || target.go) - 1}'` : "";
         html += `<tr${target ? href + act : " class='off' title='Not on this page'"}><td><kbd>${esc(key)}</kbd></td><td>${text}</td></tr>`;
@@ -244,14 +310,18 @@
     });
     document.body.append(box);
   }
-  const goMenu = () => keyBox("go", "Go to …", [["", GO]], "Press a key, or Esc.");
+  const goMenu = () => {
+    const near = nearRows();
+    keyBox("go", "Go to …", (near.length ? [["This page's neighbours", near]] : []).concat([["Places on the site (capitals)", GO]]),
+      "Press a key, or Esc. Small letters: pages linked to this one, by the letter of their number (q question, r result, w caveat …); capitals: places on the site.");
+  };
   const actMenu = () => {
     const sections = actionRows();
     if (!sections.length) { flash("Page actions need the comment server, on a page of the experiment."); return; }
     keyBox("act", "This page …", sections, "Press a key, or Esc. Nothing starts: like a click, a sign-off or request waits for the Harvest.");
   };
   const keyList = () => keyBox("all", "Keyboard shortcuts",
-    [["On any page", PAGE_KEYS], ["After g: go to", GO], ...actionRows().map(([head, rows]) => ["After a: " + head.toLowerCase(), rows])],
+    [["On any page", PAGE_KEYS], ["After g: this page's neighbours", [["e", "The experiment's front page", topLink("/home.html")], ["u", "Up: the page above this one", () => document.querySelector("nav.crumbs a")], ...NEAR_HELP]], ["After g: places on the site", GO], ...actionRows().map(([head, rows]) => ["After a: " + head.toLowerCase(), rows])],
     "Outside a text field. In a comment: Ctrl+Enter (⌘+Enter) sends, Esc cancels.");
   document.addEventListener("keydown", (event) => {
     const open = document.getElementById("kea-keys");
@@ -260,14 +330,14 @@
     const target = event.target;
     if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
     if (["Shift", "CapsLock"].includes(event.key)) return;
-    if (open && (open.dataset.kind === "go" || open.dataset.kind === "act")) {     // the second key after g or a
-      const kind = open.dataset.kind;
+    if (open && ["go", "pick", "act"].includes(open.dataset.kind)) {     // the key after g or a, or a pick
+      const kind = open.dataset.kind, keys = open.keaKeys;
       closeKeys();
       event.preventDefault();
-      if (kind === "go") {
-        const entry = GO.find(([key]) => key === event.key);
-        const link = entry && entry[2]();
+      if (kind !== "act") {
+        const link = keys && keys.get(event.key);
         if (link && link.go) link.go(); else if (link) location.href = link.href;
+        else if (kind === "go" && /^[a-z]$/.test(event.key)) flash("No such page linked to this one. Places on the site are capitals now: g P Plan, g M Map.");
       } else {
         for (const [, rows] of window.keaPageActions ? window.keaPageActions() : []) {
           const entry = rows.find(([key]) => key === event.key);
@@ -285,6 +355,7 @@
     else if (key === "N" || key === "P") { attentionStep(key === "N" ? 1 : -1); hit = true; }
     else if (/^[1-9]$/.test(key)) hit = tabStep({ index: Number(key) - 1 });
     else if (key === "]" || key === "[") hit = tabStep(key === "]" ? 1 : -1);
+    else if (key === "c" && window.keaCommentKey) hit = window.keaCommentKey();
     else if (key === "c") hit = visible(".fb-d-comment");
     if (hit && hit !== true) { hit.click(); if (hit.classList.contains("sep-tab")) tabToTop(hit); }
     if (hit) event.preventDefault();
