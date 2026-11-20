@@ -253,19 +253,19 @@
     bar.append(el("span", { class: "fb-pop-arrow" }),
       el("div", { class: "fb-sel-actions" },
         el("button", { class: "fb-sel-btn", title: "Ask about this text or say what is wrong (opens the comment panel)",
-          onmousedown: event => event.preventDefault(), onclick: () => startForm(false) }, "💬 Comment"),
+          onmousedown: event => event.preventDefault(), onclick: () => startForm(false), "data-key": "c" }, "💬 Comment"),
         el("button", { class: "fb-sel-btn fb-sel-edit", title: "Suggest new wording for the paragraph(s) with this text",
           onmousedown: event => event.preventDefault(), onclick: () => {
             bar.hidden = true;
             if (pendingSelection) openEditor({ selection: pendingSelection.quote });
-          } }, "✎ Edit")),
+          }, "data-key": "e" }, "✎ Edit")),
       el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Next run"),
         el("div", { class: "fb-sel-row fb-sel-next" })),
       el("div", { class: "fb-sel-group fb-sel-propose" }, el("div", { class: "fb-sel-label" }, "Propose"),
         el("div", { class: "fb-sel-row fb-pr-row" })),
       el("div", { class: "fb-sel-group" }, el("div", { class: "fb-sel-label" }, "Manuscript"),
         el("div", { class: "fb-sel-row fb-ms-row" })),
-      el("div", { class: "fb-sel-hint" }, "One click saves a tag · Esc closes"));
+      el("div", { class: "fb-sel-hint" }, "One click (or its key) saves a tag · Esc closes"));
     bar.hidden = true;
     document.addEventListener("keydown", event => { if (event.key === "Escape") bar.hidden = true; });
     return bar;
@@ -314,7 +314,40 @@
         document.body.append(holder);
       } }, tag.label)));
     selectBtn.dataset.filled = "1";
+    selectionKeys();
   }
+  /* Keys in the selection popup: c Comment, e Edit, and one letter per tag, the first letter of its label not yet
+     taken (else a digit), shown on the chip. While the popup is open a single key belongs to it (kea.js's page keys
+     wait); Shift with the arrows still extends the selection, Esc closes. */
+  function selectionKeys() {
+    const taken = new Set(["c", "e"]);
+    for (const button of selectBtn.querySelectorAll(".fb-sel-actions .fb-sel-btn")) badge(button, button.dataset.key);
+    let digit = 1;
+    for (const chip of selectBtn.querySelectorAll(".fb-sel-next .fb-qchip, .fb-pr-row .fb-qchip, .fb-ms-row .fb-qchip")) {
+      const label = chip.textContent.toLowerCase().replace(/^(?:a|an|the)\s+/, "");     // "a premise": from premise
+      let key = [...label].find(letter => /[a-z]/.test(letter) && !taken.has(letter));
+      if (!key && digit <= 9) key = String(digit++);
+      if (!key) continue;
+      taken.add(key);
+      chip.dataset.key = key;
+      badge(chip, key);
+    }
+  }
+  function badge(button, key) {
+    if (!key || button.querySelector(".fb-key")) return;
+    button.append(el("kbd", { class: "fb-key", "aria-hidden": "true" }, key));
+    button.setAttribute("aria-keyshortcuts", key);
+  }
+  document.addEventListener("keydown", event => {
+    if (!selectBtn || selectBtn.hidden || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]")) return;
+    if (event.key.length !== 1) return;                       // arrows, Shift, Esc: as before
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const button = [...selectBtn.querySelectorAll("[data-key]")].find(item => item.dataset.key === event.key.toLowerCase()
+      && item.offsetParent !== null);
+    if (button) button.click();
+  }, true);
   /* What readers said about the page as a whole, as read-only pills next to the title: confirmed (yellow when the page
      changed since), removal asked, the manuscript section, open next-run tags. The controls are in the page popup. */
   function pageLevel() {

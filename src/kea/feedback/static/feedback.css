@@ -316,3 +316,5 @@ body.has-kindbar .fb-banner { margin-left: -30px; }
 .fb-sheet-close{display:none;position:absolute;top:4px;right:6px;border:0;background:none;font:20px/1 system-ui,sans-serif;color:#6b7488;cursor:pointer;padding:4px 6px}
 .fb-dock-sheet .fb-sheet-close{display:block}
 .fb-dpill[hidden]{display:none}
+.fb-key{display:inline-block;margin-left:6px;min-width:1.2em;padding:0 4px;border:1px solid currentColor;border-bottom-width:2px;border-radius:4px;font:600 10.5px/1.4 ui-monospace,monospace;opacity:.6;text-align:center;vertical-align:1px}
+@media (hover:none){.fb-key{display:none}}
