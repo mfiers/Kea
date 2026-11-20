@@ -726,6 +726,21 @@
     if (next) { cursor.classList.remove("cursor"); next.classList.add("cursor"); next.scrollIntoView({ block: "nearest" }); }
     return true;
   }
+  /* Pages approved on the site since the last build: the built pills ("waiting for approval") and the question
+     strip's tags say so at once, from the comment server's status (status.signing), and go back if it is taken back. */
+  function liveSignOffs() {
+    const signing = new Set((window.keaStatus && window.keaStatus.signing) || []);
+    for (const pill of document.querySelectorAll(".pill.s-waiting[data-key], .pill.s-signing[data-key]")) {
+      const signed = signing.has(pill.dataset.key);
+      if (!pill.dataset.built) pill.dataset.built = pill.title;
+      pill.classList.toggle("s-waiting", !signed);
+      pill.classList.toggle("s-signing", signed);
+      pill.textContent = signed ? "signed · waits for Harvest" : "waiting for approval";
+      pill.title = signed ? "Approved on the site; Claude writes the sign-off onto the page at the next Harvest" : pill.dataset.built;
+    }
+    for (const chip of document.querySelectorAll(".qstrip a.st[data-key]")) chip.classList.toggle("st-signing", signing.has(chip.dataset.key));
+  }
+  window.addEventListener("kea-status", liveSignOffs);
   async function startWhere() {
     if (!(await loadWhere())) return;
     drawThumb();

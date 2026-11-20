@@ -176,7 +176,7 @@ def strip_html(tree: Tree, node: Node, prefix: str) -> str:
 
     def chip(item: Node) -> str:
         state = ("" if graph.approved(item) else " st-open") + (" st-here" if item.key == node.key else "")
-        return (f"<a class='st t-{esc(item.type)}{state}' href='{prefix}{item.url}' "
+        return (f"<a class='st t-{esc(item.type)}{state}' data-key='{esc(item.key)}' href='{prefix}{item.url}' "
                 f"title='{esc(item.tag + ' · ' + item.title + (' · signed' if graph.approved(item) else ' · not signed'))}'>"
                 f"{esc(item.tag)}</a>")
 
