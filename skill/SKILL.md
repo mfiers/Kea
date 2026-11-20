@@ -169,12 +169,21 @@ a project does not change when Kea does. Check the newest tag with `git ls-remot
      --port <port> --enable` writes and starts a systemd user service `kea-<project>.service` (needs
      `loginctl enable-linger` to survive logout).
 
+## A minimal graph
+
+The site is a graph a reader grasps one page at a time. Keep it as small and as sharp as the analysis allows.
+- **Anything that can be a page is a page.** A limit is a caveat page (`limits:`), not a sentence in a result or conclusion; an assumption is a premise; a choice of method is a decision; a defined word is a term; a dataset or tool is a resource; a follow-up is a question. Link to it; do not restate it.
+- **One idea per page.** A question asks one thing: no numbered parts, no "…, and how …". A question with parts becomes one question page per part (sub-questions under it, or siblings). A result reports one observation, a conclusion draws one inference, a caveat names one limit.
+- **As short as the idea allows.** Title: one line that names the one thing (at most ~16 words). Summary line: one sentence. Text: only what is needed to grasp this page; what other pages say is a link. Rough ceilings in words of prose: question, hypothesis, premise, caveat, term 90; decision, conclusion 130; result 200; step, experiment 250 (tables, code and figures do not count). A page over its ceiling is usually two pages.
+- **Precise, not wordy.** Concrete nouns and measured quantities; the same word for the same thing; no preamble, no repetition, no filler ("in order to", "it should be noted that", "a number of").
+- `kea build` notes each breach (title or text too long, a question that asks more than one thing, a limit named in the text that no caveat page holds). Fix them when you next touch the page; restructuring a signed page (splitting, moving text to a new page) goes through the plan like any other change.
+
 ## Writing pages
 
 - **Permanent ids:** every page has a `uid:` (26 characters, minted once, never edited). After creating pages run `kea check --fix`, which writes one into every page without it; never copy a `uid:` to another page or change one. Cite a page from outside the site as `kea:<uid>`; `/id/<uid>` on the site redirects to it.
 - **No hard line wraps in `doc/`:** one line per paragraph and per list item. Readers edit pages in the site's
   editor, where wrapped lines look broken; the renderer joins them anyway.
-- One idea per page: `doc/<experiment>/<type>/<id>.md`, front matter `id, type, title, short, parent, status,
+- One idea per page (see A minimal graph): `doc/<experiment>/<type>/<id>.md`, front matter `id, type, title, short, parent, status,
   relations, sources`; ids unique on the site. Types and allowed relations: `doc/_schema.yaml`.
 - `result` = what a file shows (every number from a file named in `sources:` or an artefact page);
   `conclusion` = the interpretation, with `supported_by`/`opposed_by` results (each with `because:`) and `certainty:`;

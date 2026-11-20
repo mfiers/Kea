@@ -349,8 +349,10 @@ def _allowed(rule: dict, source_type: str, target_type: str) -> bool:
 def _validate(tree: Tree) -> None:
     schema_relations = tree.schema.get("relations", {})
     statuses = tree.schema.get("status_values", {})
+    limited = {key for item in tree.nodes.values() if item.type == "caveat" for key in item.relations.get("limits", [])}
     for node in tree.nodes.values():
         where = node.source.relative_to(DOC) if node.source.is_relative_to(DOC) else node.source
+        _minimal_graph_notes(tree, where, node, limited)
         if node.type not in TYPE_LABELS:
             tree.problems.append(f"{where}: unknown type {node.type!r}" + (
                 " (a dataset is a resource with kind: dataset)" if node.type == "dataset" else ""))
@@ -504,6 +506,52 @@ TEMPLATE_PLACEHOLDERS = ("One sentence on what this experiment asks and why",
                          "What is in and out, the data, and whether the experiment is exploratory")
 KIND_WITH_DIGIT = re.compile(r"\b(?:[Pp]remise|[Qq]uestion|[Hh]ypothesis|[Ss]tep|[Rr]esult|[Cc]onclusion|[Dd]ecision|"
                              r"[Cc]aveat)s? \d{1,2}\b(?! ?(?:%|cells|donors|days|genes|times))")
+
+
+# A minimal graph (skill: "A minimal graph"): one idea per page, short pages, limits as caveat pages. Notes, not
+# problems: the build names the page and what to split or move; the words are the reader's prose (no code, tables,
+# headings, link markup or front matter).
+BODY_WORDS = {"question": 90, "hypothesis": 90, "premise": 90, "caveat": 90, "term": 90, "decision": 130,
+              "conclusion": 130, "result": 200, "step": 250, "experiment": 250}
+TITLE_WORDS = 16
+# a question that asks two things: "…, and how …", "… and whether …", or two question marks
+SECOND_ASK = re.compile(r"(?:,|;)\s+(?:and|or)\s+(?:how|what|whether|which|why|when|where|who|does|do|is|are|can)\b|"
+                        r"\band\s+(?:whether|how)\b", re.I)
+LIMIT_WORDS = re.compile(r"\b(?:limitations?|caveats?|a weakness|cannot be ruled out|can ?not exclude|is limited by|"
+                         r"are limited by|should be interpreted with caution|confound(?:s|ed|ing)? (?:by|with))\b", re.I)
+
+
+def prose_words(text: str) -> int:
+    """Words a reader reads in a page's text: without code, tables, headings, comments and link markup."""
+    text = _without_code(text)
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    lines = [line for line in text.splitlines() if not line.lstrip().startswith(("|", "#", "![["))]
+    text = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", " ".join(lines))
+    text = re.sub(r"\[\[[^\]]*\]\]", "X", text)
+    return len(re.findall(r"[\w][\w'’.-]*", text))
+
+
+def _minimal_graph_notes(tree: Tree, where, node: Node, limited: set[str]) -> None:
+    """Notes where a page holds more than one idea, is longer than one idea needs, or keeps a limit in its text."""
+    title_words = len(node.title.split())
+    if title_words > TITLE_WORDS:
+        tree.notes.append(f"{where}: title has {title_words} words (aim for at most {TITLE_WORDS}: name one thing)")
+    if node.type == "question":
+        asks = node.title.count("?") + len(SECOND_ASK.findall(node.title))
+        body_asks = len(re.findall(r"\?(?:\s|\*|$)", _without_code(node.body)))
+        if asks > 1 or body_asks > 1:
+            tree.notes.append(f"{where}: the question asks {max(asks, body_asks)} things; split it into one "
+                              "question page each (sub-questions under it, or siblings)")
+    budget = BODY_WORDS.get(node.type)
+    words = prose_words(node.body)
+    if budget and words > budget:
+        tree.notes.append(f"{where}: text has {words} words (aim for at most {budget} on a {node.type}): cut it, or "
+                          "move what is a page of its own (a premise, decision, caveat, term, sub-question) to one")
+    if node.type not in ("caveat", "experiment") and node.key not in limited:
+        found = LIMIT_WORDS.search(_without_code(node.body + " " + node.short))
+        if found:
+            tree.notes.append(f"{where}: names a limit in its text ({found.group(0)!r}) but no caveat limits it: "
+                              "make the limit a caveat page with limits: this page")
 
 
 def _without_code(text: str) -> str:
