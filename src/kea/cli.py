@@ -19,6 +19,9 @@
     kea recheck --list | <id> … --because "…"
                                       pages to recheck after an upstream change; record that one was checked
     kea drop <id>                     what a Drop of that page removes (it and what rests only on it)
+    kea drop <id> --apply --because … retire it and what rests only on it (kept: premises, decisions, terms, …)
+    kea change <id> --because "…"     record why a signed page changed beyond a minor edit (shown downstream)
+    kea impact <id>                   what a change or a retirement of the page does downstream
     kea lease status|take|release     one agent per project (take it at the start of a session)
     kea publish [--files]             send the built site to the project's Kea hub (kea.yaml remote:)
     kea hub init|add|list|passwords|rotate-key|remove|serve
@@ -64,6 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     if command == "drop":
         from kea.docsite import graph
         return graph.drop_main(rest)
+    if command == "change":
+        from kea.docsite import propagation
+        return propagation.change_main(rest)
+    if command == "impact":
+        from kea.docsite import propagation
+        return propagation.impact_main(rest)
     if command == "sign":
         from kea.docsite import signing
         return signing.main(rest)

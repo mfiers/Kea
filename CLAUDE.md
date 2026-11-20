@@ -23,6 +23,7 @@
   every comment: at the harvest, `kea sign --pending` writes them onto the pages, and the next step of every stage
   that is signed becomes a plan item (`kea context` names it); a harvest runs nothing else. During Implement, tell
   readers what you are doing with `kea progress "…"`.
+- Changing a signed page (skill: sign-offs; Kea 1.32): minor → `kea sign <id> --minor --because`; substantive → `kea change <id> --because` (the pages built on it then wait for a sign-off each, showing the change; pages further down are held until those are signed); invalidating (a question's ask, a tested hypothesis's prediction) → a new page with `supersedes:` and `kea drop <old> --apply --replaced-by <new>` (retired, kept as a record; premises, decisions, terms, resources stay). Name the class and `kea impact <id>` in the plan item.
 - After any change, `kea recheck --list`: read every page downstream of a changed page against the change,
   update it if it is even slightly affected, then `kea recheck <id> --because "…"`; releases wait for this.
 - Versions: MAJOR = a conclusion changes direction or is withdrawn; MINOR = new results or pages; PATCH = wording

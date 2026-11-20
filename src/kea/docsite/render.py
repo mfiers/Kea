@@ -171,6 +171,8 @@ table.nodes td:first-child .tagline,table.nodes td:first-child .tl-text{display:
 table.nodes td:nth-child(2){font-size:14px;color:#3b4252;margin-top:3px}table.nodes td:nth-child(2):empty{display:none}
 table.nodes tr:has(.m-status) td:last-child{display:none}
 table.nodes tr.st-good{border-left-color:#2e9e5b}table.nodes tr.st-bad{border-left-color:#5f2120}table.nodes tr.st-mid{border-left-color:#e0a030}}
+.upstream-notice{margin:10px 0 14px;padding:10px 14px;border:1px solid #d9a441;border-left:5px solid #d9a441;border-radius:6px;background:rgba(217,164,65,.08);font-size:14px}.upstream-notice p{margin:6px 0}.upstream-notice.held{border-color:#9aa3b2;background:rgba(154,163,178,.08)}.upstream-notice .page-diff{margin:4px 0 0}
+.retired-notice{margin:10px 0 14px;padding:10px 14px;border:1px solid #8a8f99;border-left:5px solid #6b7180;border-radius:6px;background:rgba(107,113,128,.08);font-size:14px}
 .kea-keys{position:fixed;z-index:1000;top:60px;right:16px;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 80px);overflow:auto;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.25);padding:12px 16px;font-size:.9em}
 .kea-keys h2{margin:0 0 4px;font-size:1.1em}.kea-keys h3{margin:12px 0 4px;font-size:.95em;color:var(--muted)}
 .kea-keys p{margin:0;color:var(--muted)}.kea-keys table{display:table;border-collapse:collapse;width:100%;margin:0;border:0;table-layout:fixed}.kea-keys td{padding:3px 6px 3px 0;vertical-align:top;border:0;white-space:normal;background:none}
@@ -606,6 +608,11 @@ class LinkContext:
             return (f"<a class='data-chip' href='{esc(href)}' title='{esc(note or path)}'>{chip}</a>" if href
                     else f"<span class='data-chip' title='{esc(note or path)}'>{chip}</span>")
         node = self.tree.resolve(target, self.project)
+        retired = self.tree.resolve_retired(target, self.project) if node is None else None
+        if retired is not None:          # kea drop --apply: the link still works, marked as retired
+            return (f"<a class='ref ref-retired' href='{esc(self.prefix + retired.url)}' title='Retired: "
+                    f"{esc(str((retired.header.get('retired') or {}).get('because', '')))}'>{esc(text or retired.title)} "
+                    "(retired)</a>")
         if node is None and RUN_ID.fullmatch(target) and (DOC / "_changes" / f"{target}.md").exists():
             from kea.docsite import mode        # a run entry ([[2026-11-05-a]]): its change-log page
             if mode.WITH_CHANGELOG:

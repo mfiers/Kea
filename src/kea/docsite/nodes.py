@@ -95,6 +95,9 @@ class Node:
     incoming: dict[str, list[str]] = field(default_factory=dict)    # relation -> keys of nodes pointing here
     recheck: list[str] = field(default_factory=list)                # why to recheck it (graph.py), [] if not
     waiting: bool = False                                           # waits for the owner's approval (pace: guided)
+    held_by: list[str] = field(default_factory=list)                # signed pages above it that no longer count (propagation.py)
+    upstream_changed: list = field(default_factory=list)            # [(page key, hash when signed)]: changed since its sign-off
+    chain_ok: bool = True                                           # its sign-off counts with what it was built on
 
     @property
     def key(self) -> str:
@@ -165,6 +168,7 @@ class Tree:
     notes: list[str] = field(default_factory=list)      # warnings: links to projects without pages yet
     compromised: dict[str, list[str]] = field(default_factory=dict)   # key -> why to recheck it (graph.py)
     pace: str = "free"                                   # kea.yaml pace: guided = one step at a time (graph.py)
+    retired: dict = field(default_factory=dict)          # key -> Node: pages with retired: (propagation.py)
 
     def resolve(self, target: str, project: str) -> Node | None:
         """A node from a link target 'id' (same project) or 'project:id'."""
@@ -173,6 +177,11 @@ class Tree:
             return self.nodes.get(key)
         matches = [node for node in self.nodes.values() if node.id == target]   # Obsidian style: a bare id
         return matches[0] if len(matches) == 1 else None                        # elsewhere, if unique on the site
+
+    def resolve_retired(self, target: str, project: str) -> Node | None:
+        """A retired page (kea drop --apply) from a link target, None if there is none."""
+        key = target if ":" in target else f"{project}:{target}"
+        return self.retired.get(key)
 
     def reason(self, first: str, second: str) -> str:
         """Why the link between two pages holds (because: on either page), '' when not stated."""
@@ -277,8 +286,13 @@ def load_tree(doc: Path = DOC, baseline: bool = False) -> Tree:
                 problems.append(f"{source.relative_to(doc)}: duplicate id {node.key}")
                 continue
             nodes[node.key] = node
+    # retired pages (kea drop --apply) leave the tree: no map, route, sign order or count; their page stays
+    retired = {key: node for key, node in nodes.items() if node.header.get("retired") and node.id != "home"}
+    for key in retired:
+        del nodes[key]
     projects = {node.project: node for node in nodes.values() if node.id == "home"}
     tree = Tree(nodes=nodes, projects=projects, schema=schema, problems=problems)
+    tree.retired = retired
     tree.notes.extend(notes)
     _number(tree)
     _validate(tree)
@@ -428,7 +442,12 @@ def _validate(tree: Tree) -> None:
                 continue
             for target in targets:
                 target_node = tree.nodes.get(target)
-                if target_node is None:
+                if target_node is None and target in tree.retired:
+                    if relation != "supersedes":
+                        tree.problems.append(f"{where}: {relation} {tree.retired[target].id}, a retired page "
+                                             f"({tree.retired[target].header['retired'].get('because', '') if isinstance(tree.retired[target].header['retired'], dict) else ''}): "
+                                             "link a live page instead, or drop the link")
+                elif target_node is None:
                     _missing(tree, where, target)
                 elif node.type in ("artefact", "figure") and target_node.type == "experiment":
                     tree.problems.append(f"{where}: {relation} links a {node.type} to the experiment (link it to the "
@@ -446,7 +465,7 @@ def _validate(tree: Tree) -> None:
             target = match.group(1).strip()
             if target.startswith(("code:", "data:")):
                 continue
-            if tree.resolve(target, node.project) is None:
+            if tree.resolve(target, node.project) is None and tree.resolve_retired(target, node.project) is None:
                 _missing(tree, where, target if ":" in target else f"{node.project}:{target}")
     for project, home in tree.projects.items():
         if home.type != "experiment":

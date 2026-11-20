@@ -59,7 +59,13 @@ def test_a_signature_holds_until_the_page_says_something_else(tmp_path):
     node = tree.nodes["p:h-a"]
     assert not graph.approved(node) and node.waiting and signing.stale(node)
     assert any("changed since Mark signed it" in note for note in tree.notes)
-    assert tree.problems == []
+    # since 1.32 the change needs a recorded reason (kea change), which the pages built on it show
+    assert len(tree.problems) == 1 and "kea change h-a" in tree.problems[0]
+    from kea.docsite import propagation
+    ledger = graph.read_ledger(doc)
+    propagation.record_change(ledger, node, "the expected direction was reversed")
+    graph.write_ledger(doc, ledger)
+    assert nodes.load_tree(doc).problems == []
     assert "no longer holds" in signing.describe(signing.signatures(node)[0], node)
 
 

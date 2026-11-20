@@ -201,6 +201,10 @@ def waiting(node: Node) -> bool:
     from kea.docsite import signing
     if node.type not in WAITING_TYPES or approved(node) or node.status in GONE:
         return False
+    if node.held_by:                                         # a signed page above it waits first (propagation.py)
+        return False
+    if node.upstream_changed:                                # what it was built on changed since its sign-off
+        return True
     if signing.stale(node):                                  # signed, then changed: the signature no longer holds
         return True
     if node.type in ("hypothesis", "step"):
@@ -496,10 +500,15 @@ def fingerprint(node: Node) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
-def upstream(tree: Tree) -> dict[str, set[str]]:
-    """Page key -> keys of the pages it depends on."""
+def upstream(tree: Tree, parents: bool = False) -> dict[str, set[str]]:
+    """Page key -> keys of the pages it depends on. With ``parents``, also the page it sits under (a step on its
+    question; not terms, references, resources): a change of the parent itself flags its children, but nothing is
+    passed on "via" a parent (a question also depends on its results, for its answer)."""
     depends: dict[str, set[str]] = {key: set() for key in tree.nodes}
     for node in tree.nodes.values():
+        parent = f"{node.project}:{node.parent}" if node.parent and node.id != "home" else ""
+        if parents and parent in tree.nodes and node.type not in ("term", "reference", "resource"):
+            depends[node.key].add(parent)
         for relation, targets in node.relations.items():
             for target in targets:
                 if target not in tree.nodes or target == node.key:
@@ -535,7 +544,7 @@ def compromised(tree: Tree, ledger: dict) -> dict[str, list[str]]:
     depends = upstream(tree)
     prints = {key: fingerprint(node) for key, node in tree.nodes.items()}
     reasons: dict[str, list[str]] = {}
-    for key, sources in depends.items():
+    for key, sources in upstream(tree, parents=True).items():
         checked = (ledger.get(key) or {}).get("upstream") or {}
         changed = [tree.nodes[source].label for source in sorted(sources)
                    if source in checked and checked[source] != prints[source]]
@@ -558,7 +567,7 @@ def compromised(tree: Tree, ledger: dict) -> dict[str, list[str]]:
 
 def baseline(tree: Tree, ledger: dict) -> bool:
     """Record the current fingerprints for pages and links not yet in the ledger; True if anything was added."""
-    depends = upstream(tree)
+    depends = upstream(tree, parents=True)
     added = False
     for key, sources in depends.items():
         if not sources:
@@ -577,8 +586,10 @@ def baseline(tree: Tree, ledger: dict) -> bool:
 
 def recheck(tree: Tree, ledger: dict, key: str, because: str, run: str = "") -> None:
     """The agent checked the page against everything upstream of it: record the current fingerprints."""
-    sources = upstream(tree).get(key, set())
-    ledger[key] = {"upstream": {source: fingerprint(tree.nodes[source]) for source in sorted(sources)},
+    sources = upstream(tree, parents=True).get(key, set())
+    changes = (ledger.get(key) or {}).get("changes")
+    ledger[key] = {**({"changes": changes} if changes else {}),
+                   "upstream": {source: fingerprint(tree.nodes[source]) for source in sorted(sources)},
                    "checked": dt.date.today().isoformat(), "because": because, **({"run": run} if run else {})}
 
 
@@ -588,6 +599,8 @@ def apply(tree: Tree, doc: Path, write_baseline: bool) -> None:
     projects(tree, doc)
     from kea.config import load_settings
     tree.pace = str(load_settings(doc.parent).get("pace") or "free")
+    from kea.docsite import propagation
+    propagation.bind(tree)                  # sign-offs count only with what they were built on (Kea 1.32)
     if tree.pace == "guided":
         pace_rules(tree)
         for node in tree.nodes.values():
@@ -597,6 +610,8 @@ def apply(tree: Tree, doc: Path, write_baseline: bool) -> None:
     tree.problems.extend(sign_problems)
     tree.notes.extend(sign_notes)
     ledger = read_ledger(doc)
+    tree.__dict__["ledger"] = ledger                    # change records, for the pages built on a changed page
+    propagation.problems(tree, ledger)
     if write_baseline and baseline(tree, ledger):
         write_ledger(doc, ledger)
     tree.compromised = compromised(tree, ledger)
@@ -610,8 +625,33 @@ def apply(tree: Tree, doc: Path, write_baseline: bool) -> None:
 
 
 def drop_main(argv: list[str]) -> int:
-    """kea drop <id>: list the page and every page that rests only on it (what a Drop removes); writes nothing."""
+    """kea drop <id>: list the page and every page that rests only on it (what a Drop removes); writes nothing.
+    kea drop <id> --apply --because "…" [--replaced-by <id>] [--run R]: retire them (propagation.retire)."""
     from kea.docsite.nodes import DOC, load_tree
+    if "--apply" in argv:
+        import argparse
+        from kea.docsite import propagation
+        parser = argparse.ArgumentParser(prog="kea drop")
+        parser.add_argument("page")
+        parser.add_argument("--apply", action="store_true")
+        parser.add_argument("--because", required=True)
+        parser.add_argument("--replaced-by", default="")
+        parser.add_argument("--run", default="")
+        args = parser.parse_args(argv)
+        tree = load_tree(DOC)
+        node = tree.resolve(args.page, next(iter(tree.projects), ""))
+        if node is None:
+            print(f"no page {args.page!r}")
+            return 1
+        if args.replaced_by and tree.resolve(args.replaced_by, node.project) is None:
+            print(f"no page {args.replaced_by!r} to replace it (write the new page first, with supersedes: [{node.id}])")
+            return 1
+        gone, keep = propagation.retire(tree, node.key, args.because, args.replaced_by, args.run)
+        print(f"retired {len(gone)} page(s): {', '.join(tree.nodes[key].label for key in gone)}")
+        if keep:
+            print(f"kept and moved under {keep[0][1]}: {', '.join(tree.nodes[key].label for key, _ in keep)}")
+        print("then: make site (links from live pages to retired ones are problems; fix them), and commit")
+        return 0
     if len(argv) != 1:
         print("usage: kea drop <id>   (lists what a Drop of that page removes; changes nothing)")
         return 2

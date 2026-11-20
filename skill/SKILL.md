@@ -90,7 +90,30 @@ support). **Never write or edit `approved:` by hand: use `kea sign`.** The owner
   Commit a signed page before editing it, or Kea cannot find the signed wording. Never split a substantive change
   into several "minor" ones, and never reword to get past the check: if the meaning changed, it is not minor.
 - **Substantive** (anything else, including a deviation from a signed plan when a step runs): leave the page
-  waiting, say in the run entry and to the owner what changed and why, and let them sign the new wording.
+  waiting, record why with `kea change <id> --because "what changed and why"` (the build fails on a signed page
+  changed without it), say it in the run entry, and let the owner sign the new wording.
+- **Invalidating** (the ask of a question, the prediction or criterion of a tested hypothesis, the method of a step
+  that has run): not an edit. Write a new page with `supersedes: [<old id>]`, then retire the old branch:
+  `kea drop <old id> --apply --because "…" --replaced-by <new id>`. A tested hypothesis whose prediction or
+  criterion changes is always this case (the build says so).
+
+**What a change does below it (Kea 1.32, `propagation.py`).** A sign-off counts only with what the page was built
+on when it was signed (the page it sits under, for a question, hypothesis, step, decision or premise; the pages it
+relies on, a step's hypothesis, a conclusion's results, a result's step; not terms, references, resources). After a
+substantive change of a page, the signed pages directly built on it wait for their own sign-off, each showing the
+change (a word diff) and your recorded reason; the signed pages further down are *held*: they need no click and
+count again by themselves once the pages above them are signed again unchanged. Never re-sign or edit `approved:`
+to clear this; never present a held branch as signed.
+- **In the plan (at the harvest),** for every plan item that changes a signed page, name its class (minor,
+  substantive or invalidating), why, and what it does below, from `kea impact <id>` (pages that will wait, pages
+  held; what a retirement removes and keeps). The owner decides by pressing Implement; a comment before it changes
+  the class.
+- **Retiring a branch** (`kea drop <id> --apply`): the page and every page that rests only on it get `retired:`;
+  they leave the map, Progress, the sign order and every count, and stay as a record (Map → Retired; links to them
+  still work, marked retired). Premises, decisions, resources, references and terms under it are kept and moved
+  to the replacing page; artefacts a live page uses are kept; scripts and data files are never deleted. A result
+  of the retired branch is not reused by itself: reattaching it to a new hypothesis is a plan item, and then the
+  hypothesis has `fixed_before_results: false` (post hoc) and the result `analysis: exploratory`.
 Signatures made before 1.29 have no `content` and count, unbound; `kea sign --adopt` binds them to today's
 wording (only on the owner's word). `kea sign --list` shows every signature and whether it holds.
 

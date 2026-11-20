@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from kea.config import SETTINGS
-from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, questions, signing, versions
+from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, propagation, questions, signing, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
 from kea.docsite.render import (ABOUT_ORDER, hover_text, tag_inner, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
@@ -655,7 +655,16 @@ class SiteRenderer:
         if signed:              # sign-offs (Approve on the site, or the owner in chat), bound to the wording (signing.py)
             holding = [item for item in signed if signing.holds(item, node)]
             detail = "; ".join(signing.describe(item, node) for item in signed)
-            if holding:
+            if holding and not node.chain_ok:      # its own wording holds, but a page it was built on changed
+                names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
+                above = [self.tree.nodes[key].label for key, _ in node.upstream_changed] or \
+                        [self.tree.nodes[key].label for key in node.held_by]
+                what = "changed since" if node.upstream_changed and not node.held_by else "waits first"
+                above_text = esc(", ".join(above))
+                pills += (f" <span class='pill s-recheck' title='Signed off by {esc(names)}, but {above_text} "
+                          f"{what}: the sign-off does not count until then. {esc(detail)}'>signed by {esc(names)} · "
+                          f"{above_text} {what}</span>")
+            elif holding:
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
                 minor = sum(len(item.get("minor") or []) for item in holding if signing.state(item, node) == "minor")
                 pills += (f" <span class='pill fb-pp-ok' title='Signed off: {esc(detail)}'>✓ approved by {esc(names)}"
@@ -675,6 +684,7 @@ class SiteRenderer:
                  f"{' data-confirmed=1' if confirmed else ''}>",
                  f"<div class='kindrow not-annotatable'><span class='kind k-{esc(node.type)}'>{kind_html}</span>"
                  f"<span class='pills'>{pills}</span></div>"
+                 + propagation.notice_html(self.tree, node, prefix) +
                  # the page as written (title, summary, text): set apart in Kea's typewriter face, indented
                  f"<div class='given'><h1><span class='node-title'>{esc(node.tag_title)}</span></h1>"
                  + ("" if repeats_body(node) else f"<div class='short'>{esc(node.short)}</div>")]
@@ -796,6 +806,24 @@ class SiteRenderer:
         """How many pages lie under `node` in the tree (all depths)."""
         return sum(1 + self.tree_size(child) for child in self.tree.children(node))
 
+    def retired_page(self, node: Node) -> None:
+        """A page retired with kea drop --apply (propagation.py): kept at its address, marked retired, with why and
+        what replaced it; it is in no list, map, route or count."""
+        relative = node.url
+        prefix = prefix_for(relative)
+        stamp = node.header.get("retired") if isinstance(node.header.get("retired"), dict) else {}
+        replaced = self.tree.resolve(str(stamp.get("replaced_by") or ""), node.project) if stamp.get("replaced_by") else None
+        context = LinkContext(self.tree, node.project, prefix, self.code_href, self.data_href, node.key)
+        body = (crumbs([(node.project, f"{prefix}{node.project}/home.html"), ("Map", f"{prefix}{node.project}/map.html"),
+                        (f"{node.title} (retired)", None)], prefix)
+                + f"<div class='retired-notice not-annotatable'><b>Retired {esc(str(stamp.get('date', '')))}.</b> "
+                  f"{esc(str(stamp.get('because', '')))}"
+                + (f" Replaced by {node_link(replaced, prefix)}." if replaced else "")
+                + " This page is kept as a record; it is no longer part of the analysis.</div>"
+                + f"<p class='help'>{esc(full_kind(node))}</p><h1>{esc(node.title)}</h1><div class='short'>{esc(node.short)}</div>"
+                + f"<article>{render_markdown(node.body, context)}</article>")
+        self.write(relative, page(f"{node.title} (retired)", body, prefix, node.project, self.tree), node.key, node.source)
+
     def map_page(self, project: str) -> None:
         relative = f"{project}/map.html"
         prefix = prefix_for(relative)
@@ -846,6 +874,15 @@ class SiteRenderer:
                    + "".join(branch(node, False) for node in rest) + "</ul>" if rest else "")
                 + "".join(group(title, [node for node in children if node.type == kind], hint)
                           for kind, (title, hint) in aside.items()))
+        retired = sorted((node for node in self.tree.retired.values() if node.project == project),
+                         key=lambda node: (str((node.header.get("retired") or {}).get("date", "")), node.id), reverse=True)
+        if retired:      # kea drop --apply: out of the analysis, kept as a record
+            body += (f"<details class='tree map-group'><summary><h2 title='Pages retired with their branch; kept as a record'>"
+                     f"Retired <span class='count'>{len(retired)}</span></h2></summary><ul class='tree not-annotatable'>"
+                     + "".join(f"<li><a href='{prefix}{node.url}'>{esc(full_kind(node))}: {esc(node.title)}</a> "
+                               f"<span class='help'>{esc(str((node.header.get('retired') or {}).get('date', '')))} · "
+                               f"{esc(str((node.header.get('retired') or {}).get('because', '')))}</span></li>"
+                               for node in retired) + "</ul></details>")
         self.write(relative, page(f"Map · {project}", body, prefix, project, self.tree, here="Map"))
 
 
@@ -1175,6 +1212,17 @@ class SiteRenderer:
                        key=order)
         waiting = signing.sign_order(tree)                # top down: the order "Approve & next" walks
         parts.append(f"<h2>Needs your sign-off <span class='count' title='Pages still waiting for a sign-off'>{len(waiting)}</span></h2>")
+        held = sorted((node for node in tree.nodes.values() if node.held_by), key=order)
+        changed_above = [node for node in waiting if node.upstream_changed]
+        if held or changed_above:       # propagation.py: sign-offs that count only with what they were built on
+            parts.append("<div class='upstream-notice not-annotatable'>"
+                         + (f"<p><b>{len(changed_above)} of these were signed before a page they are built on "
+                            "changed</b>; each shows what changed. Approve if it still holds, Revise if not.</p>"
+                            if changed_above else "")
+                         + (f"<p><b>{len(held)} signed page(s) are held</b>: a page above them is no longer signed. They "
+                            "need no click: each counts as signed again once the pages above it are signed again "
+                            "(unless one of those changed; then it shows up in this list).</p>" if held else "")
+                         + "</div>")
         if waiting:
             first = node_href(waiting[0], prefix)
             parts.append("<p class='help'>Top down, one page at a time: read the page, then press <b>✓ Approve &amp; "
@@ -1372,6 +1420,8 @@ class SiteRenderer:
         self.sole_extras = ""
         for node in self.tree.nodes.values():
             self.node_page(node)
+        for node in self.tree.retired.values():
+            self.retired_page(node)
         for project in self.tree.projects:
             self.map_page(project)
             self.relations_page(project)

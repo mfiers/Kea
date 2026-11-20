@@ -131,9 +131,15 @@ def confirmation_holds(node) -> bool:
     return not (isinstance(confirmed, dict) and confirmed.get("content")) or holds(confirmed, node)
 
 
-def approved(node) -> bool:
+def own_approved(node) -> bool:
     """A signature (or confirmed:) that still holds for what the page says now."""
     return confirmation_holds(node) or any(holds(item, node) for item in signatures(node))
+
+
+def approved(node) -> bool:
+    """The page's own sign-off holds, and so does what it was built on (propagation.bind sets node.chain_ok: false
+    when a page it is built on changed since, or no longer counts as signed)."""
+    return own_approved(node) and getattr(node, "chain_ok", True)
 
 
 def ever_signed(node) -> bool:
@@ -337,7 +343,10 @@ def _git(*args: str) -> str:
 def history(path: Path, limit: int = 200):
     """(commit, header, body) of the file at each commit that changed it, newest first."""
     from kea.docsite.nodes import PROJECT_ROOT, split_front_matter
-    relative = path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    try:
+        relative = path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:                      # a page outside the repository: no history
+        return
     for commit in _git("log", f"-n{limit}", "--format=%H", "--", relative).split():
         text = _git("show", f"{commit}:{relative}")
         if not text:
@@ -394,6 +403,13 @@ def write_signatures(source: Path, entries: list[dict]) -> None:
     source.write_text("\n".join(["---"] + kept + rest), encoding="utf-8")
 
 
+def _upstream_field(tree, node) -> dict:
+    """{"upstream": {page: hash}} of what the page is built on now (propagation.py), {} when it is built on nothing."""
+    from kea.docsite import propagation
+    found = propagation.upstream_hashes(tree, node)
+    return {"upstream": found} if found else {}
+
+
 def add_signature(node, entry: dict) -> None:
     """Add (or replace, for the same person) a signature on the page."""
     entries = [item for item in signatures(node) if item.get("by") != entry.get("by")] + [entry]
@@ -419,7 +435,7 @@ def apply_thread(tree, thread, resolve) -> None:
             signed = content(node)
         entry = {"by": thread.author, **({"orcid": thread.author_id} if thread.author_id else {}),
                  "date": thread.created_at[:10], **({"version": version} if version else {}), "how": "site",
-                 "thread": thread.thread_id, "content": signed}
+                 "thread": thread.thread_id, "content": signed, **_upstream_field(tree, node)}
         add_signature(node, entry)
         print(f"{node.label}: signed by {thread.author}" + ("" if signed == content(node) else
                                                               " (an earlier wording: the page waits again)"))
@@ -553,7 +569,8 @@ def main(argv: list[str]) -> int:
     for item in args.ids:
         node = resolve(item)
         entry = {"by": args.by.strip(), **({"orcid": args.orcid} if args.orcid else {}), "date": args.date or today,
-                 "version": identity.version_of(node), "how": "chat", "content": content(node)}
+                 "version": identity.version_of(node), "how": "chat", "content": content(node),
+                 **_upstream_field(tree, node)}
         add_signature(node, entry)
         print(f"{node.label}: signed by {entry['by']} (from the chat)")
     return 0
