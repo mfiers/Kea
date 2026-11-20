@@ -499,7 +499,45 @@
     return (reset) => { if (reset) page = 0; draw(); };
   }
 
+  /* Each button and menu-bar link that has a key gets it in front of its hover text ("g p · Plan of …"), also when
+     the page scripts rewrite the text later (a MutationObserver). The sign-off button sets its own (feedback.js). */
+  const KEY_HINTS = [
+    [".fb-d-comment", "c"], [".fb-d-edit", "a p"], [".fb-d-revise", "a r"], [".fb-d-reject", "a x"], [".fb-d-propose", "a +"],
+    [".fb-d-next", "a w"], [".fb-d-ms", "a m"], [".fb-sn-next", "N"], [".fb-sn-prev", "P"], [".fb-d-tosign", "N"],
+    [".cycle-tool .ct-harvest", "s h"], ["#fb-plan-actions .fb-implement, #fb-plan-actions .fb-secondary[title]", "s h"], [".fb-implement-big", "s i"],
+  ];
+  let hinting = false;
+  function hint(element, key) {
+    if (!element || !key) return;
+    const title = element.getAttribute("title") || "";
+    if (title.startsWith(key + " · ") || title === key) return;
+    element.setAttribute("title", title ? key + " · " + title : key);
+  }
+  function keyHints() {
+    if (hinting) return;
+    hinting = true;
+    for (const [selector, key] of KEY_HINTS) document.querySelectorAll(selector).forEach((element) => hint(element, key));
+    for (const [key, , find] of GO) {
+      if (["e", "u", "a"].includes(key)) continue;
+      const target = find();
+      if (target && target.tagName === "A" && target.closest(".topbar")) hint(target, "g " + key);
+    }
+    document.querySelectorAll(".sep-tabs").forEach((strip) => [...strip.querySelectorAll(".sep-tab:not([hidden])")]
+      .forEach((button, index) => hint(button, index < 9 ? String(index + 1) : "] [")));
+    hinting = false;
+  }
+  function watchHints() {
+    keyHints();
+    let queued = false;
+    new MutationObserver(() => {
+      if (hinting || queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; keyHints(); });
+    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["title"] });
+  }
+
   function start() {
+    watchHints();
     pendingStep();
     for (const strip of document.querySelectorAll(".sep-tabs")) {
       for (const button of strip.querySelectorAll(".sep-tab")) button.tabIndex = button.classList.contains("on") ? 0 : -1;

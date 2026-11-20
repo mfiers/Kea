@@ -504,7 +504,7 @@
     if (asked || signedWith) {
       confirm.textContent = waitingPage ? "✓ Signed · waits for Harvest" : "✓ Keep as is · waits for Harvest";
       confirm.title = signedWith ? "Signed on another page. Claude writes it onto this page at the next Harvest."
-        : (waitingPage ? `Your sign-off is recorded. Claude writes it onto the page ${when}.${then}` : `Recorded: Claude writes your confirmation onto the page ${when} and changes nothing else.`) + " Click to take it back.";
+        : "a d · " + (waitingPage ? `Signed: written onto the page ${when}. Click to take it back.` : `Recorded: written onto the page ${when}, nothing else changes. Click to take it back.`);
     } else if (unasked) {
       confirm.textContent = "✓ Withdrawn · waits for Harvest";
       confirm.title = "Claude removes the confirmation at the next Harvest; click to keep it after all";
@@ -513,9 +513,9 @@
       confirm.title = "This page is confirmed as it is; click to withdraw the confirmation (done at the next Harvest)";
     } else if (waitingPage) {
       confirm.textContent = following ? "✓ Approve & next →" : "✓ Approve";
-      confirm.title = `Sign off on this page only, as you read it${pageVersion() ? " (version " + pageVersion() + ")" : ""}`
-        + (following ? `, then open the next page to sign: ${following.label ? following.label + " " : ""}${following.title}` : "")
-        + `. Claude writes the sign-off onto the page ${when}.${then} If the page changes later (beyond a minor edit), it waits again.`;
+      confirm.title = (following ? "a n · " : "a a · ") + `Sign off on this page${pageVersion() ? " (version " + pageVersion() + ")" : ""}`
+        + (following ? `, then open ${following.label ? following.label + " " : ""}${following.title}` : "")
+        + `. Written onto the page ${when}; nothing starts.` + (following ? " a a: this page only." : "");
     } else {
       confirm.textContent = "✓ " + word;
       confirm.title = "This page is settled. Say it is right as it is: Claude records your confirmation on the page at the next Harvest and changes nothing. Nothing else starts.";
