@@ -194,6 +194,48 @@ def bind(tree) -> None:
             node.chain_ok = True
 
 
+def roots(tree, node) -> list[tuple[str, list[str]]]:
+    """For a held page: the topmost pages above it that need a new look (built on a page that changed, or their own
+    wording changed since signed) and wait on nothing themselves, each with the path from this page up to it."""
+    found: dict[str, list[str]] = {}
+    queue, seen = [[node.key]], {node.key}
+    while queue:
+        path = queue.pop(0)
+        current = tree.nodes[path[-1]]
+        for up in getattr(current, "held_by", None) or []:
+            if up in seen or up not in tree.nodes:
+                continue
+            seen.add(up)
+            above = tree.nodes[up]
+            if not above.held_by:                    # waits on nothing above it: the page to look at
+                found.setdefault(up, path + [up])
+            else:
+                queue.append(path + [up])
+    return list(found.items())
+
+
+def root_reason(tree, key: str) -> str:
+    """Why a root page needs a new look, in a few words."""
+    from kea.docsite import signing
+    node = tree.nodes[key]
+    if node.upstream_changed:
+        return ("built on " + ", ".join(tree.nodes[up].label for up, _ in node.upstream_changed)
+                + ", changed since it was signed")
+    if signing.ever_signed(node) and not signing.own_approved(node):
+        return "its wording changed since it was signed"
+    return "not signed"
+
+
+def recheck_for(tree, node, up_key: str) -> dict:
+    """The agent's recheck of this page against the current wording of ``up_key`` (doc/_checks.yaml), or {}."""
+    from kea.docsite import graph
+    entry = (tree.__dict__.get("ledger") or {}).get(node.key) or {}
+    checked = (entry.get("upstream") or {}).get(up_key)
+    if entry.get("because") and checked and up_key in tree.nodes and checked == graph.fingerprint(tree.nodes[up_key]):
+        return entry
+    return {}
+
+
 # ------------------------------------------------------------------ change records (doc/_checks.yaml, changes:)
 
 def changes_of(ledger: dict, key: str) -> list[dict]:
@@ -393,15 +435,29 @@ def notice_html(tree, node, prefix: str) -> str:
                 before_text = f"{old[0].get('title', '')}\n{old[0].get('short', '')}\n{old[1].strip()}"
                 after_text = f"{upstream.title}\n{upstream.short}\n{upstream.body.strip()}"
                 diff = comments.text_diff_html(before_text, after_text) or "<p class='help'>Only fields changed.</p>"
-            parts.append(f"<p>{node_link(upstream, prefix)} has changed since this page was signed.{why} "
+            check = recheck_for(tree, node, up_key)
+            agent = (f" The agent last rechecked this page on {esc(str(check.get('checked', '')))}, after this change, "
+                     f"and noted: &ldquo;{esc(str(check.get('because', '')))}&rdquo; (the agent's reading, not a sign-off)."
+                     if check else "")
+            parts.append(f"<p>{node_link(upstream, prefix)} has changed since this page was signed.{why}{agent} "
                          "Read this page against it: Approve if it still holds, Revise if not.</p>"
                          f"<details class='page-diff'><summary>What changed on {esc(upstream.label)}</summary>{diff}</details>")
         return ("<div class='upstream-notice not-annotatable'><b>Sign-off needed again: built on a page that changed.</b>"
                 + "".join(parts) + "</div>")
     if node.held_by:
-        links = ", ".join(node_link(tree.nodes[key], prefix) for key in node.held_by)
-        return ("<div class='upstream-notice held not-annotatable'><b>Waits for a page above it.</b> "
-                f"This page was signed, but {links} {'is' if len(node.held_by) == 1 else 'are'} no longer signed (changed "
-                "since, or built on a page that changed). Once signed again, this page counts as signed again by itself, "
-                "unless that page's wording changed; then it asks for its own sign-off, with the change shown.</div>")
+        found = roots(tree, node)
+        items = []
+        here = node.project
+        for key, path in found:
+            route = " ← ".join(node_link(tree.nodes[step], prefix, from_project=here) for step in path)
+            items.append(f"<li>{node_link(tree.nodes[key], prefix, from_project=here)} needs a new look: "
+                         f"{esc(root_reason(tree, key))}. <span class='help'>Path: {route}</span></li>")
+        names = ", ".join(node_link(tree.nodes[key], prefix, from_project=here) for key, _ in found) or "a page above it"
+        return ("<div class='upstream-notice held not-annotatable'><b>Held: still signed, but waits for "
+                f"{names}.</b> "
+                + ("A page it is built on also changed: once the pages above are signed, this page asks for its own "
+                   "sign-off, with the change shown. " if node.upstream_changed else
+                   "Nothing this page is built on changed its wording, so it needs no click of its own. Its sign-off "
+                   f"counts again once {'that page is' if len(found) == 1 else 'those pages are'} signed again.")
+                + (f"<ul>{''.join(items)}</ul>" if items else "") + "</div>")
     return ""

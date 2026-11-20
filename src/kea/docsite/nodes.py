@@ -540,6 +540,11 @@ LIMIT_WORDS = re.compile(r"\b(?:limitations?|caveats?|a weakness|cannot be ruled
                          r"are limited by|should be interpreted with caution|confound(?:s|ed|ing)? (?:by|with))\b", re.I)
 
 
+# an experiment's text stating how far it got: belongs in answer: (Kea 1.32.2)
+PROGRESS_WORDS = re.compile(r"\(written \d{4}-\d\d-\d\d, v\d[^)]*\)|\bNothing (?:has|have) been \w+(?: or \w+)? yet\b|"
+                            r"(?:^|\. )So far\b", re.I | re.M)
+
+
 def prose_words(text: str) -> int:
     """Words a reader reads in a page's text: without code, tables, headings, comments and link markup."""
     text = _without_code(text)
@@ -566,6 +571,12 @@ def _minimal_graph_notes(tree: Tree, where, node: Node, limited: set[str]) -> No
     if budget and words > budget:
         tree.notes.append(f"{where}: text has {words} words (aim for at most {budget} on a {node.type}): cut it, or "
                           "move what is a page of its own (a premise, decision, caveat, term, sub-question) to one")
+    if node.type == "experiment":
+        found = PROGRESS_WORDS.search(node.body)
+        if found:
+            tree.notes.append(f"{where}: the text states progress ({found.group(0)!r}); progress goes in answer: "
+                              "(outside the signed text), or every update holds the questions below it. Move the "
+                              f"sentences word for word, then kea sign {node.key} --minor --because \"progress moved to answer:\"")
     if node.type not in ("caveat", "experiment") and node.key not in limited:
         found = LIMIT_WORDS.search(_without_code(node.body + " " + node.short))
         if found:

@@ -108,6 +108,11 @@ to clear this; never present a held branch as signed.
   substantive or invalidating), why, and what it does below, from `kea impact <id>` (pages that will wait, pages
   held; what a retirement removes and keeps). The owner decides by pressing Implement; a comment before it changes
   the class.
+- **An experiment page's progress** ("so far, three questions are answered", "nothing analysed yet", the
+  written date and version) goes in its `answer:` field, never in its text (Kea 1.32.2). `answer:` is outside the
+  signed text, so updating it holds nothing; the text and scope are what the questions are built on. Moving such
+  sentences word for word from the text into `answer:` is a minor edit: `kea sign <experiment>:home --minor
+  --because "progress moved to answer:"`. `kea build` notes an experiment text that states progress.
 - **Retiring a branch** (`kea drop <id> --apply`): the page and every page that rests only on it get `retired:`;
   they leave the map, Progress, the sign order and every count, and stay as a record (Map → Retired; links to them
   still work, marked retired). Premises, decisions, resources, references and terms under it are kept and moved

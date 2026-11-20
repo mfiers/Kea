@@ -206,10 +206,23 @@ def text_reasons(name: str, old: str, new: str) -> list[str]:
     return reasons
 
 
+def _without_moved(old_text: str, new_text: str, answer: str) -> str:
+    """The signed text without the sentences that left it for the answer: field, word for word (progress moved out
+    of an experiment's text, Kea 1.32.2: what the page says did not change)."""
+    moved = re.sub(r"\s+", " ", answer).strip()
+    if not moved:
+        return old_text
+    sentences = re.split(r"(?<=[.!?])\s+", old_text)
+    kept = [sentence for sentence in sentences if not (sentence.strip() and sentence.strip() in moved
+                                                       and sentence.strip() not in new_text)]
+    return " ".join(kept).strip()
+
+
 def minor_reasons(old_header: dict, old_body: str, new_header: dict, new_body: str) -> list[str]:
     """Why the edit from the signed wording to the new one is not minor ([] when it is)."""
     old, old_text = signed_part(old_header, old_body)
     new, new_text = signed_part(new_header, new_body)
+    old_text = _without_moved(old_text, new_text, str(new_header.get("answer") or ""))
     reasons = []
     for key in sorted(set(old) | set(new)):
         before, after = old.get(key), new.get(key)

@@ -657,13 +657,18 @@ class SiteRenderer:
             detail = "; ".join(signing.describe(item, node) for item in signed)
             if holding and not node.chain_ok:      # its own wording holds, but a page it was built on changed
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
-                above = [self.tree.nodes[key].label for key, _ in node.upstream_changed] or \
-                        [self.tree.nodes[key].label for key in node.held_by]
-                what = "changed since" if node.upstream_changed and not node.held_by else "waits first"
-                above_text = esc(", ".join(above))
-                pills += (f" <span class='pill s-recheck' title='Signed off by {esc(names)}, but {above_text} "
-                          f"{what}: the sign-off does not count until then. {esc(detail)}'>signed by {esc(names)} · "
-                          f"{above_text} {what}</span>")
+                if node.upstream_changed and not node.held_by:
+                    above_text = esc(", ".join(self.tree.nodes[key].label for key, _ in node.upstream_changed))
+                    pills += (f" <span class='pill s-recheck' title='Signed off by {esc(names)}, but {above_text} "
+                              f"changed since: the sign-off does not count until it is given again. {esc(detail)}'>"
+                              f"signed by {esc(names)} · {above_text} changed since</span>")
+                else:
+                    above_text = esc(", ".join(
+                        (f"{self.tree.nodes[key].project} " if self.tree.nodes[key].project != node.project else "")
+                        + self.tree.nodes[key].label for key, _ in propagation.roots(self.tree, node)) or "a page above")
+                    pills += (f" <span class='pill s-recheck' title='Still signed by {esc(names)}, but held: "
+                              f"{above_text} needs a new look first; then this sign-off counts again. {esc(detail)}'>"
+                              f"signed by {esc(names)} · held by {above_text}</span>")
             elif holding:
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
                 minor = sum(len(item.get("minor") or []) for item in holding if signing.state(item, node) == "minor")
@@ -744,12 +749,14 @@ class SiteRenderer:
         parts.append(f"<article>{article}</article></div>")
         colour = TYPE_COLOURS.get(node.type, '#556')
         parts.append("</div>")
-        if node.type == "question" and questions.answer(node):
+        if node.type in ("question", "experiment") and questions.answer(node):
             # the answer: field is a summary of the evidence, not part of the question: under its own rule, so the
-            # question's text above stands alone
-            _, results, conclusions = questions.evidence(self.tree, node)
+            # question's text above stands alone; on an experiment page it is the progress so far (Kea 1.32.2), kept
+            # out of the signed text so that a progress update does not hold the questions below it
+            _, results, conclusions = (questions.evidence(self.tree, node) if node.type == "question" else ([], [], []))
             basis = " ".join(node_link(item, prefix) for item in list(conclusions) + list(results))
-            parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>Answer so far</span></div>"
+            label = "Answer so far" if node.type == "question" else "So far"
+            parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>{label}</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
         tabs = []
@@ -1219,7 +1226,8 @@ class SiteRenderer:
                          + (f"<p><b>{len(changed_above)} of these were signed before a page they are built on "
                             "changed</b>; each shows what changed. Approve if it still holds, Revise if not.</p>"
                             if changed_above else "")
-                         + (f"<p><b>{len(held)} signed page(s) are held</b>: a page above them is no longer signed. They "
+                         + (f"<p><b>{len(held)} signed page(s) are held</b>: still signed, but a page above them "
+                            "needs a new look (it is in the list below). They "
                             "need no click: each counts as signed again once the pages above it are signed again "
                             "(unless one of those changed; then it shows up in this list).</p>" if held else "")
                          + "</div>")

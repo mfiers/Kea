@@ -91,3 +91,31 @@ def test_retiring_a_question_keeps_decisions_and_marks_links(tmp_path):
     assert tree.nodes["p:d-a"].parent == "q-b"
     assert tree.problems == []                                  # supersedes and a text link to a retired page are fine
     assert tree.retired["p:q-a"].header["retired"]["because"] == "asked the wrong unit"
+
+
+def test_a_held_page_names_the_page_that_needs_a_new_look_and_the_path(tmp_path):
+    doc = _guided(tmp_path)
+    path = doc / "p/question/q-a.md"
+    path.write_text(path.read_text().replace("title: Does it?", "title: Does it go down?"))
+    tree = nodes.load_tree(doc)
+    result = tree.nodes["p:r-a"]
+    assert propagation.roots(tree, result) == [("p:q-a", ["p:r-a", "p:s-a", "p:q-a"])]
+    notice = propagation.notice_html(tree, result, "")
+    assert "Held: still signed" in notice and "no longer signed" not in notice
+    assert "Q1" in notice and "needs a new look" in notice and "its wording changed since it was signed" in notice
+
+
+def test_experiment_progress_lives_in_answer_and_moving_it_there_is_minor(tmp_path):
+    old_body = ("The experiment describes the data. Nothing has been described yet (written 2026-11-18, v0.1.0).\n\n"
+                "## Scope\n\n- The data.")
+    new_body = "The experiment describes the data.\n\n## Scope\n\n- The data."
+    moved = {"title": "E", "answer": "Nothing has been described yet (written 2026-11-18, v0.1.0)."}
+    assert signing.minor_reasons({"title": "E"}, old_body, moved, new_body) == []
+    # dropped rather than moved: not minor (numbers gone)
+    assert signing.minor_reasons({"title": "E"}, old_body, {"title": "E"}, new_body)
+    # answer: is outside the signed text: a progress update keeps every signature
+    assert signing.content_of(moved, new_body) == signing.content_of({**moved, "answer": "Q1 is answered."}, new_body)
+    doc = _guided(tmp_path)
+    home = doc / "p/experiment/home.md" if (doc / "p/experiment/home.md").exists() else next(doc.glob("p/**/home.md"))
+    home.write_text(home.read_text().rstrip() + "\n\nSo far, nothing is answered.\n")
+    assert any("states progress" in note for note in nodes.load_tree(doc).notes)
