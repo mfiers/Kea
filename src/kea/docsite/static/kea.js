@@ -108,7 +108,8 @@
     const [list, status] = await Promise.all([loadOrder(), statusReady()]);
     const order = status ? ((status.build || {}).sign_order || []).filter((item) => item.href) : [];
     const signed = new Set(status ? status.signing || [] : []), attention = new Set(order.map((item) => item.key));
-    const items = kind === "attention" ? order : list;
+    const group = kind === "sibling" ? await siblings() : null;
+    const items = kind === "attention" ? order : group ? group.same : list;
     const here = hereIn(items);
     if (here < 0 || !items.length) return;
     const key = items[here].key, state = (item) => signed.has(item.key) ? "ok" : attention.has(item.key) ? "open" : "";
@@ -127,6 +128,7 @@
     const mine = signed.has(key) ? "approved this round" : attention.has(key) ? "needs attention" : "";
     const words = kind === "attention"
       ? `Needs attention · ${here + 1} of ${items.length} · ${open} open, ${done} approved this round`
+      : group ? `${group.many} of this experiment · ${items[here].label} · ${here + 1} of ${items.length}`
       : `Reading order · ${here + 1} of ${items.length}` + (order.length ? ` · ${open} need attention` : "");
     const label = document.createElement("div");
     label.className = "kea-stepbar-label";
@@ -159,34 +161,36 @@
     document.body.append(note);
     setTimeout(() => note.remove(), 1800);
   }
-  /* g, places on the site: capital letters (g P Plan, g M Map), in the menu bar's order. */
+  /* g, places on the site: small letters, in the menu bar's order (g p Plan, g m Map). */
   const GO = [
-    ["S", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
-    ["A", "The first page that needs attention", () => window.keaAttention ? { go: () => attentionStep(1) } : null],
-    ["R", "Progress: what waits for whom", topLink("progress.html")],
-    ["P", "Plan of the current round", topLink("plan.html")],
-    ["C", "Current comments", topLink("comments.html")],
-    ["M", "Map", topLink("map.html")],
-    ["L", "Relations: the graph of links", topLink("relations.html")],
-    ["O", "Objects: every page by type", topLink("objects.html")],
-    ["T", "Terms", topLink("objects.html#type=term")],
-    ["B", "References (bibliography)", topLink("objects.html#type=reference")],
-    ["D", "Data files", topLink("data.html")],
-    ["K", "Code", topLink("code/index.html")],
-    ["W", "What changed, per working session", topLink("changes/index.html")],
-    ["H", "History: the review cycles", topLink("history.html")],
-    ["F", "The PDF", () => document.querySelector(".topbar a[href$='.pdf']")],
+    ["s", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
+    ["e", "The experiment's front page", topLink("/home.html")],
+    ["u", "Up: the page above this one", () => { const links = document.querySelectorAll("nav.crumbs a"); return document.querySelector(".node-content") ? links[links.length - 1] : null; }],
+    ["a", "The first page that needs attention", () => window.keaAttention ? { go: () => attentionStep(1) } : null],
+    ["r", "Progress: what waits for whom", topLink("progress.html")],
+    ["p", "Plan of the current round", topLink("plan.html")],
+    ["c", "Current comments", topLink("comments.html")],
+    ["m", "Map", topLink("map.html")],
+    ["l", "Relations: the graph of links", topLink("relations.html")],
+    ["o", "Objects: every page by type", topLink("objects.html")],
+    ["t", "Terms", topLink("objects.html#type=term")],
+    ["b", "References (bibliography)", topLink("objects.html#type=reference")],
+    ["d", "Data files", topLink("data.html")],
+    ["k", "Code", topLink("code/index.html")],
+    ["w", "What changed, per working session", topLink("changes/index.html")],
+    ["h", "History: the review cycles", topLink("history.html")],
+    ["f", "The PDF", () => document.querySelector(".topbar a[href$='.pdf']")],
     ["?", "Help", topLink("help.html")],
   ];
-  /* g, this page's neighbours: small letters, the letter of their number (g q its question, g r its results, g w its
-     caveats). The pages linked in the page's relations (its About part, both directions, provenance included) and
+  /* g, the pages linked to this one: capitals, the letter of their number as the page shows it (g Q its question,
+     g R its results, g W its caveats). The pages linked in the page's relations (its About part, both directions, provenance included) and
      then in its text; one page opens at once, several open a numbered choice. */
   const NEAR_TYPES = [
-    ["q", "question", "Question", "Questions"], ["p", "premise", "Premise", "Premises"],
-    ["h", "hypothesis", "Hypothesis", "Hypotheses"], ["s", "step", "Step", "Steps"], ["r", "result", "Result", "Results"],
-    ["f", "figure", "Figure", "Figures"], ["c", "conclusion", "Conclusion", "Conclusions"], ["w", "caveat", "Caveat", "Caveats"],
-    ["d", "decision", "Decision", "Decisions"], ["a", "artefact", "Artefact", "Artefacts"],
-    ["o", "resource", "Resource", "Resources"], ["t", "term", "Term", "Terms"], ["b", "reference", "Reference", "References"],
+    ["Q", "question", "Question", "Questions"], ["P", "premise", "Premise", "Premises"],
+    ["H", "hypothesis", "Hypothesis", "Hypotheses"], ["S", "step", "Step", "Steps"], ["R", "result", "Result", "Results"],
+    ["F", "figure", "Figure", "Figures"], ["C", "conclusion", "Conclusion", "Conclusions"], ["W", "caveat", "Caveat", "Caveats"],
+    ["D", "decision", "Decision", "Decisions"], ["A", "artefact", "Artefact", "Artefacts"],
+    ["O", "resource", "Resource", "Resources"], ["T", "term", "Term", "Terms"], ["B", "reference", "Reference", "References"],
   ];
   const escHtml = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const folderOf = (path) => path.split("/").slice(-2, -1)[0] || "";
@@ -229,10 +233,6 @@
   }
   function nearRows() {
     const rows = [], pages = nearPages();
-    const home = topLink("/home.html")();
-    if (home && new URL(home.href).pathname !== location.pathname) rows.push(["e", "The experiment's front page", () => home]);
-    const crumbs = document.querySelectorAll("nav.crumbs a"), up = crumbs[crumbs.length - 1];
-    if (up && document.querySelector(".node-content")) rows.push(["u", "Up: " + escHtml(up.textContent.trim()), () => up]);
     for (const [key, type, one, many] of NEAR_TYPES) {
       const mine = pages.filter((page) => page.type === type);
       if (mine.length === 1) rows.push([key, `${one}: ${nearLine(mine[0])}`, () => ({ href: mine[0].href })]);
@@ -241,7 +241,80 @@
     }
     return rows;
   }
-  const NEAR_HELP = NEAR_TYPES.map(([key, , one]) => [key, "Linked " + one.toLowerCase() + " (several: pick one)",
+  /* Pages of the same kind in the same experiment, by number (Q1, Q2, Q3): ← / → the previous and next one, g then
+     a number that one (g 3: Q3 on a question; on the experiment's front page, its questions). From _order.json. */
+  const numberOf = (item) => Number((/^[A-Z](\d+)$/.exec(item.label || "") || [0, 0])[1]);
+  async function siblings() {
+    const list = await loadOrder(), here = hereIn(list);
+    if (here < 0) return null;
+    const mine = list[here], project = mine.key.split(":")[0];
+    const match = /^([A-Z])\d+$/.exec(mine.label || "");
+    const letter = match ? match[1] : mine.key.endsWith(":home") ? "Q" : "";
+    if (!letter) return null;
+    const same = list.filter((item) => item.key.split(":")[0] === project && new RegExp("^" + letter + "\\d+$").test(item.label || ""))
+      .sort((one, two) => numberOf(one) - numberOf(two));
+    const kind = NEAR_TYPES.find(([key]) => key === letter);
+    return { letter, same, here: same.findIndex((item) => item.key === mine.key), one: kind ? kind[2] : letter, many: kind ? kind[3] : letter };
+  }
+  async function siblingStep(step) {
+    const group = await siblings(), root = siteRoot();
+    if (!group || group.here < 0) { flash("This page has no numbered kind (Q1, R2 …) to step through."); return; }
+    const next = group.same[group.here + step];
+    if (!next) { flash(`This is the ${step > 0 ? "last" : "first"} ${group.one.toLowerCase()} of the experiment.`); return; }
+    markStep("sibling");
+    location.href = new URL(next.href, root).href;
+  }
+  async function siblingNumber(number) {
+    const group = await siblings(), root = siteRoot();
+    const target = group && group.same.find((item) => numberOf(item) === number);
+    if (!target) { flash(group ? `No ${group.letter}${number} in this experiment.` : "Numbers go to pages of this page's kind (g 3: Q3 on a question)."); return; }
+    if (group.here >= 0 && group.same[group.here] === target) { flash(`This is ${target.label}.`); return; }
+    location.href = new URL(target.href, root).href;
+  }
+  let digits = "", digitTimer = null;          // g 1 2: a number of more than one digit, typed within 0.7 s
+  function typeDigit(digit) {
+    digits += digit;
+    clearTimeout(digitTimer);
+    digitTimer = setTimeout(() => { const number = Number(digits); digits = ""; siblingNumber(number); }, 700);
+  }
+  async function siblingRows() {
+    const group = await siblings();
+    if (!group || !group.same.length) return [];
+    const show = (item) => `<b>${escHtml(item.label)}</b> ${escHtml(item.title)}`;
+    const before = group.here > 0 ? group.same[group.here - 1] : null, after = group.here >= 0 ? group.same[group.here + 1] : null;
+    const rows = [];
+    if (group.here >= 0) {
+      rows.push(["←", "Previous " + group.one.toLowerCase() + (before ? ": " + show(before) : ""), () => before ? { go: () => siblingStep(-1) } : null]);
+      rows.push(["→", "Next " + group.one.toLowerCase() + (after ? ": " + show(after) : ""), () => after ? { go: () => siblingStep(1) } : null]);
+    }
+    const last = numberOf(group.same[group.same.length - 1]);
+    rows.push([`1–${last}`, `${group.many} ${group.letter}1 to ${group.letter}${last} of this experiment, by number (also on any page: ← →)`, () => ({ go: () => flash("Press g, then the number.") })]);
+    return rows;
+  }
+  /* A confirmation that the keyboard answers: Enter or y does it, Esc or n does not. */
+  window.keaConfirm = function (title, text, okLabel, onOk) {
+    closeKeys();
+    const box = document.createElement("div");
+    box.id = "kea-keys";
+    box.dataset.kind = "confirm";
+    box.className = "kea-keys kea-keys-confirm not-annotatable";
+    box.setAttribute("role", "alertdialog");
+    box.innerHTML = `<h2>${escHtml(title)}</h2><p>${escHtml(text)}</p><div class='kea-confirm-actions'>`
+      + `<button type='button' class='kea-ok'>${escHtml(okLabel)} <kbd>Enter</kbd></button>`
+      + `<button type='button' class='kea-no'>Cancel <kbd>Esc</kbd></button></div>`;
+    box.keaOk = () => { closeKeys(); onOk(); };
+    box.querySelector(".kea-ok").addEventListener("click", box.keaOk);
+    box.querySelector(".kea-no").addEventListener("click", closeKeys);
+    document.body.append(box);
+  };
+  const siteRows = () => (window.keaSiteActions ? window.keaSiteActions() : [])
+    .map(([head, rows]) => [head, rows.map(([key, text, can, run]) => [key, text, () => (can ? { run } : null)])]);
+  const siteMenu = () => {
+    const sections = siteRows();
+    if (!sections.length) { flash("Site actions need the comment server."); return; }
+    keyBox("site", "This site …", sections, "Press a key, or Esc. Each asks first; Enter (or y) confirms.");
+  };
+  const NEAR_HELP = NEAR_TYPES.map(([key, , one]) => [key, "The linked " + one.toLowerCase() + " (several: pick one)",
     () => { const row = nearRows().find(([rowKey]) => rowKey === key); return row ? row[2]() : null; }]);
   function tabStep(step) {
     const strip = document.querySelector(".sep-tabs");
@@ -259,7 +332,9 @@
     window.scrollTo({ top: Math.max(0, strip.getBoundingClientRect().top + window.scrollY - below - 8), behavior: "smooth" });
   }
   const PAGE_KEYS = [
-    ["g", "Go to … (this page's neighbours by their letter, places on the site by capitals)", () => true],
+    ["g", "Go to … (places by small letters, linked pages by capitals: g Q its question; g 3 the third of this kind)", () => true],
+    ["s", "This site … (Harvest; Implement on the plan page; cancel a request), each confirmed with Enter", () => !!window.keaSiteActions],
+    ["← →", "Previous / next page of the same kind in this experiment (Q2 ← Q3 → Q4)", () => true],
     ["a", "Act on this page … (approve, edit, revise, propose …)", () => !!(window.keaPageActions && window.keaPageActions().length)],
     ["c", "Comments on this page: opens with the cursor in the comment box (Esc closes)", () => visible(".fb-d-comment")],
     ["n", "Next page, in the reading order (always the same)", () => true],
@@ -310,10 +385,15 @@
     });
     document.body.append(box);
   }
-  const goMenu = () => {
-    const near = nearRows();
-    keyBox("go", "Go to …", (near.length ? [["This page's neighbours", near]] : []).concat([["Places on the site (capitals)", GO]]),
-      "Press a key, or Esc. Small letters: pages linked to this one, by the letter of their number (q question, r result, w caveat …); capitals: places on the site.");
+  let goOpening = false, goQueued = null;      // a key typed after g before the menu is up (it reads _order.json)
+  const goMenu = async () => {
+    goOpening = true;
+    const near = nearRows(), same = await siblingRows().catch(() => []);
+    goOpening = false;
+    keyBox("go", "Go to …", [["Places on the site", GO]].concat(near.length ? [["Linked to this page (capitals: the letter of their number)", near]] : [])
+      .concat(same.length ? [["Same kind, by number", same]] : []),
+      "Press a key, or Esc. Small letters: places; capitals: the pages linked to this one (Q question, R result, W caveat …); a number: that page of this kind.");
+    if (goQueued) { const key = goQueued; goQueued = null; if (key === "Escape") closeKeys(); else secondKey(document.getElementById("kea-keys"), key); }
   };
   const actMenu = () => {
     const sections = actionRows();
@@ -321,35 +401,56 @@
     keyBox("act", "This page …", sections, "Press a key, or Esc. Nothing starts: like a click, a sign-off or request waits for the Harvest.");
   };
   const keyList = () => keyBox("all", "Keyboard shortcuts",
-    [["On any page", PAGE_KEYS], ["After g: this page's neighbours", [["e", "The experiment's front page", topLink("/home.html")], ["u", "Up: the page above this one", () => document.querySelector("nav.crumbs a")], ...NEAR_HELP]], ["After g: places on the site", GO], ...actionRows().map(([head, rows]) => ["After a: " + head.toLowerCase(), rows])],
+    [["On any page", PAGE_KEYS], ["After g: places on the site", GO], ["After g: linked to this page", NEAR_HELP],
+     ["After g: same kind", [["1–99", "That number of this page's kind (g 3: Q3 on a question)", () => null]]], ...siteRows().map(([head, rows]) => ["After s: " + head.toLowerCase(), rows]), ...actionRows().map(([head, rows]) => ["After a: " + head.toLowerCase(), rows])],
     "Outside a text field. In a comment: Ctrl+Enter (⌘+Enter) sends, Esc cancels.");
+  /* The key after g, a or s (or in a numbered choice). */
+  function secondKey(open, key) {
+    const kind = open.dataset.kind, keys = open.keaKeys;
+    closeKeys();
+    if (kind === "go" && /^[0-9]$/.test(key)) typeDigit(key);
+    else if (kind === "go" && (key === "ArrowLeft" || key === "ArrowRight")) siblingStep(key === "ArrowRight" ? 1 : -1);
+    else if (kind === "site") {
+      const link = keys && keys.get(key);
+      if (link) link.run(); else flash("Not now (or not for you): the greyed-out entries say why.");
+    } else if (kind !== "act") {
+      const link = keys && keys.get(key);
+      if (link && link.go) link.go(); else if (link) location.href = link.href;
+      else if (kind === "go" && /^[A-Z]$/.test(key)) flash("No such page linked to this one.");
+    } else {
+      for (const [, rows] of window.keaPageActions ? window.keaPageActions() : []) {
+        const entry = rows.find(([rowKey]) => rowKey === key);
+        if (entry) { if (entry[2]) entry[3](); else flash("Not on this page."); break; }
+      }
+    }
+  }
   document.addEventListener("keydown", (event) => {
     const open = document.getElementById("kea-keys");
-    if (event.key === "Escape") { if (open) { closeKeys(); event.preventDefault(); } return; }
+    if (event.key === "Escape") { if (goOpening) goQueued = "Escape"; if (open) { closeKeys(); event.preventDefault(); } return; }
     if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
     const target = event.target;
     if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
     if (["Shift", "CapsLock"].includes(event.key)) return;
-    if (open && ["go", "pick", "act"].includes(open.dataset.kind)) {     // the key after g or a, or a pick
-      const kind = open.dataset.kind, keys = open.keaKeys;
-      closeKeys();
+    if (open && open.dataset.kind === "confirm") {           // Enter or y confirms; n cancels; other keys wait
       event.preventDefault();
-      if (kind !== "act") {
-        const link = keys && keys.get(event.key);
-        if (link && link.go) link.go(); else if (link) location.href = link.href;
-        else if (kind === "go" && /^[a-z]$/.test(event.key)) flash("No such page linked to this one. Places on the site are capitals now: g P Plan, g M Map.");
-      } else {
-        for (const [, rows] of window.keaPageActions ? window.keaPageActions() : []) {
-          const entry = rows.find(([key]) => key === event.key);
-          if (entry) { if (entry[2]) entry[3](); else flash("Not on this page."); break; }
-        }
-      }
+      if (event.key === "Enter" || event.key === "y") open.keaOk();
+      else if (event.key === "n") closeKeys();
+      return;
+    }
+    if (digits && /^[0-9]$/.test(event.key)) { event.preventDefault(); typeDigit(event.key); return; }
+    if (goOpening) { goQueued = event.key; event.preventDefault(); return; }
+    if (open && ["go", "pick", "act", "site"].includes(open.dataset.kind)) {     // the key after g, a or s, or a pick
+      event.preventDefault();
+      secondKey(open, event.key);
       return;
     }
     let hit = null;
     const key = event.key;
     if (key === "g") { goMenu(); hit = true; }
     else if (key === "a") { actMenu(); hit = true; }
+    else if (key === "s") { siteMenu(); hit = true; }
+    else if ((key === "ArrowLeft" || key === "ArrowRight") && !event.shiftKey && (target === document.body || target === document.documentElement)
+      && document.querySelector(".node-content, [data-page-type]")) { siblingStep(key === "ArrowRight" ? 1 : -1); hit = true; }
     else if (key === "?") { keyList(); hit = true; }
     else if (key === "n" || key === "p") { readingStep(key === "n" ? 1 : -1); hit = true; }
     else if (key === "N" || key === "P") { attentionStep(key === "N" ? 1 : -1); hit = true; }

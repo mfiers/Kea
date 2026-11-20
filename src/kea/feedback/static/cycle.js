@@ -481,6 +481,40 @@
     }
   }
 
+  /* s, the site's actions by key (kea.js siteMenu): the same requests as the buttons, each confirmed first (Enter or y).
+     Harvest where the menu bar offers it; Implement only on the plan page, after its plan (as its button: whoever
+     starts Claude has the plan in front of them); cancel a harvest or implement request that has not started. */
+  function confirmThen(title, text, okLabel, action) {
+    if (window.keaConfirm) window.keaConfirm(title, text, okLabel, () => post(action));
+    else if (confirm(title + "\n\n" + text)) post(action);
+  }
+  window.keaSiteActions = function () {
+    const status = window.keaStatus;
+    if (!status || !status.cycle) return [];
+    const cycle = status.cycle, state = cycle.state, steer = !!status.can_steer, waiting = status.unplanned || 0;
+    const planBox = document.getElementById("fb-plan-actions");
+    const known = status.build && status.build.plan_items;
+    const items = planBox ? Number(planBox.dataset.items || 0) : known ? Number(known[String(cycle.cycle)] || 0) : 0;
+    const canHarvest = steer && (state === "collecting" || state === "harvested");
+    const canImplement = steer && state === "harvested" && !!planBox && items > 0;
+    const pending = state === "harvest-requested" || state === "implement-requested";
+    const why = !steer ? " (a PI only)" : "";
+    const harvestText = state === "harvested"
+      ? (waiting ? `Harvest again: take the ${plural(waiting, "comment")} and sign-offs made since the plan into it` : "Harvest again (nothing new waits)")
+      : (waiting ? `Harvest: ${plural(waiting, "comment")} and sign-offs into the plan` : "Harvest (nothing waits)");
+    return [["Review round", [
+      ["h", harvestText + why, canHarvest, () => confirmThen(state === "harvested" ? "Harvest again?" : "Harvest now?",
+        "Claude records the sign-offs and folds the comments into the plan. It runs nothing: Implement comes after you read the plan."
+          + (status.watcher && ["watching", "working"].includes(status.watcher.state) ? "" : " No Claude session is watching now: the harvest waits for the next one."),
+        "Harvest", "harvest")],
+      ["i", planBox ? `Implement the plan (${plural(items, "item")})` + why : "Implement: on the plan page, after the plan (g p)", canImplement,
+        () => confirmThen("Implement the plan now?", `Claude does the ${plural(items, "item")} of the plan, and nothing more. Comments are paused until the new version is released.`
+          + (waiting ? ` ${plural(waiting, "comment")} made after the harvest are not in this plan; they stay for the next round.` : ""), "Implement", "implement")],
+      ["x", state === "implement-requested" ? "Cancel the implement request" : "Cancel the harvest request", pending,
+        () => confirmThen("Cancel the request?", `Asked by ${cycle.by || "someone"} (${when(cycle.since)}); Claude has not finished it.`, "Cancel the request", "cancel")],
+    ]]];
+  };
+
   async function poll() {
     try {
       const response = await fetch(BASE + "api/status", { credentials: "same-origin", cache: "no-store" });
