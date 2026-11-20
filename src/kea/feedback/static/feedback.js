@@ -543,8 +543,9 @@
       const signed = signedOnSite(), open = order.filter(item => item.href && !signed.has(item.key));
       toSign.hidden = !!waitingPage || !open.length || readOnly;
       if (!toSign.hidden) {
-        toSign.textContent = `✓ Next to sign (${open.length}) →`;
-        toSign.title = `${open.length} page${open.length === 1 ? "" : "s"} wait${open.length === 1 ? "s" : ""} for your sign-off, top down through the tree. `
+        toSign.textContent = `Needs attention (${open.length}) →`;
+        toSign.title = `${open.length} page${open.length === 1 ? " needs" : "s need"} your attention: a sign-off, or a new look because a page `
+          + `${open.length === 1 ? "it is" : "they are"} built on changed. Top down through the tree. `
           + `Open the first: ${open[0].label ? open[0].label + " " : ""}${open[0].title}`;
         toSign.onclick = () => goTo(open[0]);
       }

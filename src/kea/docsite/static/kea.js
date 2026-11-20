@@ -92,8 +92,8 @@
   const PAGE_KEYS = [
     ["g", "Go to … (a menu of places)", () => true],
     ["c", "Comments on this page (open or close)", () => visible(".fb-d-comment")],
-    ["n", "Next page to sign (opens it; signing stays a click)", () => visible(".fb-sn-next") || visible(".fb-d-tosign")],
-    ["N", "Previous page to sign", () => visible(".fb-sn-prev")],
+    ["n", "Next page that needs attention (opens it; signing stays a click)", () => visible(".fb-sn-next") || visible(".fb-d-tosign")],
+    ["N", "Previous page that needs attention", () => visible(".fb-sn-prev")],
     ["]", "Next tab below the text", () => tabStep(1)],
     ["[", "Previous tab", () => tabStep(-1)],
     ["1–9", "Tab 1 to 9", () => tabStep({ index: 0 })],
