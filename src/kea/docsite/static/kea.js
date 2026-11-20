@@ -135,6 +135,14 @@
     const here = buttons.findIndex((item) => item.classList.contains("on"));
     return typeof step === "number" ? buttons[(here + step + buttons.length) % buttons.length] : buttons[step.index] || null;
   }
+  /* After a tab key: the tab strip goes to just under the menu bar (as high as the page's length allows), so the
+     tab's content is in view at once. */
+  function tabToTop(button) {
+    const strip = button.closest(".node-data-sep") || button.parentElement;
+    const bar = document.querySelector(".topbar");
+    const below = bar && getComputedStyle(bar).position !== "static" ? bar.getBoundingClientRect().height : 0;
+    window.scrollTo({ top: Math.max(0, strip.getBoundingClientRect().top + window.scrollY - below - 8), behavior: "smooth" });
+  }
   const PAGE_KEYS = [
     ["g", "Go to … (a menu of places)", () => true],
     ["a", "Act on this page … (approve, edit, revise, propose …)", () => !!(window.keaPageActions && window.keaPageActions().length)],
@@ -227,7 +235,7 @@
     else if (/^[1-9]$/.test(key)) hit = tabStep({ index: Number(key) - 1 });
     else if (key === "]" || key === "[") hit = tabStep(key === "]" ? 1 : -1);
     else if (key === "c") hit = visible(".fb-d-comment");
-    if (hit && hit !== true) { hit.click(); if (hit.classList.contains("sep-tab")) hit.scrollIntoView({ block: "nearest" }); }
+    if (hit && hit !== true) { hit.click(); if (hit.classList.contains("sep-tab")) tabToTop(hit); }
     if (hit) event.preventDefault();
   });
 
