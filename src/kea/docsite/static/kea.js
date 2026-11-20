@@ -94,7 +94,10 @@
   /* After n/p or N/P: a thin bar under the menu bar for a moment, one segment per page of the order walked (amber:
      needs attention, green: approved on the site this round, grey: nothing to do), the page you are on raised,
      with where you are in words. The step is remembered across the page load in sessionStorage. */
-  function markStep(kind) { try { sessionStorage.setItem("kea-step", JSON.stringify({ kind, at: Date.now() })); } catch (error) { /* private mode */ } }
+  function markStep(kind) {
+    try { sessionStorage.setItem("kea-step", JSON.stringify({ kind, at: Date.now() })); } catch (error) { /* private mode */ }
+    if (typeof markThumbFrom === "function") markThumbFrom();
+  }
   function statusReady() {
     if (window.keaStatus) return Promise.resolve(window.keaStatus);
     return new Promise((resolve) => {
@@ -335,6 +338,7 @@
     ["g", "Go to … (places by small letters, linked pages by capitals: g Q its question; g 3 the third of this kind)", () => true],
     ["s", "This site … (Harvest; Implement on the plan page; cancel a request), each confirmed with Enter", () => !!window.keaSiteActions],
     ["← →", "Previous / next page of the same kind in this experiment (Q2 ← Q3 → Q4)", () => true],
+    ["m", "The experiment's plan: every question's pages (arrows move, Enter opens, Esc closes)", () => !!where],
     ["a", "Act on this page … (approve, edit, revise, propose …)", () => !!(window.keaPageActions && window.keaPageActions().length)],
     ["c", "Comments on this page: opens with the cursor in the comment box (Esc closes)", () => visible(".fb-d-comment")],
     ["n", "Next page, in the reading order (always the same)", () => true],
@@ -426,10 +430,12 @@
   }
   document.addEventListener("keydown", (event) => {
     const open = document.getElementById("kea-keys");
+    const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
+    if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && minimapKey(event)) { event.preventDefault(); return; }
     if (event.key === "Escape") { if (goOpening) goQueued = "Escape"; if (open) { closeKeys(); event.preventDefault(); } return; }
     if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
     const target = event.target;
-    if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
+    if (typing) return;
     if (["Shift", "CapsLock"].includes(event.key)) return;
     if (open && open.dataset.kind === "confirm") {           // Enter or y confirms; n cancels; other keys wait
       event.preventDefault();
@@ -449,6 +455,7 @@
     if (key === "g") { goMenu(); hit = true; }
     else if (key === "a") { actMenu(); hit = true; }
     else if (key === "s") { siteMenu(); hit = true; }
+    else if (key === "m" && where) { openMinimap(); hit = true; }
     else if ((key === "ArrowLeft" || key === "ArrowRight") && !event.shiftKey && (target === document.body || target === document.documentElement)
       && document.querySelector(".node-content, [data-page-type]")) { siblingStep(key === "ArrowRight" ? 1 : -1); hit = true; }
     else if (key === "?") { keyList(); hit = true; }
@@ -536,8 +543,200 @@
     }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["title"] });
   }
 
+  /* Where am I (whereami.py writes <experiment>/_where.json): a small fixed plan of the experiment in the top right
+     corner, one column per question, one row per stage of the route (hypotheses, steps, results, figures,
+     conclusions), one dot per page: filled signed, outlined not, amber needs a look this round, a yellow ring for
+     this page (it slides from the page you came from). Where the margin is too narrow it sits at the end of the
+     question strip. A dot opens its page; the rest of it, or m, opens the minimap: the same plan with the pages'
+     tags, arrows move, Enter opens, Esc or m closes. */
+  const TYPE_COLOUR = { question: "#1f77b4", hypothesis: "#a23c9e", step: "#2a7f62", result: "#8c564b", figure: "#17818a",
+    conclusion: "#c0392b", caveat: "#c64f00", decision: "#757575", premise: "#6a4c93" };
+  const STAGE_NAME = { hypothesis: "Hypotheses", step: "Steps", result: "Results", figure: "Figures", conclusion: "Conclusions" };
+  let where = null, whereHere = null;
+  function loadWhere() {
+    if (where) return Promise.resolve(where);
+    const root = siteRoot(), node = document.querySelector(".node-content, [data-page-type]");
+    if (!root || !node) return Promise.resolve(null);
+    const relative = decodeURIComponent(location.pathname).slice(decodeURIComponent(root.pathname).length);
+    const project = relative.includes("/") ? relative.split("/")[0] : "";
+    if (!project) return Promise.resolve(null);
+    return fetch(new URL(project + "/_where.json", root)).then((response) => response.ok ? response.json() : null).catch(() => null)
+      .then((data) => {
+        where = data;
+        if (data) for (const [key, page] of Object.entries(data.pages)) if (new URL(page.href, root).pathname === location.pathname) whereHere = key;
+        return data;
+      });
+  }
+  function needsLook() {
+    const status = window.keaStatus;
+    if (!status) return new Set();
+    const signed = new Set(status.signing || []);
+    return new Set(((status.build || {}).sign_order || []).map((item) => item.key).filter((key) => !signed.has(key)));
+  }
+  function myQuestion() {
+    const strip = document.querySelector(".qstrip");
+    return strip ? strip.dataset.question : (whereHere && where.pages[whereHere] ? where.pages[whereHere].home : null);
+  }
+  function drawThumb() {
+    const old = document.querySelector(".kea-thumb");
+    if (old) old.remove();
+    if (!where || !where.questions.length) return;
+    const root = siteRoot(), amber = needsLook(), mine = myQuestion(), here = whereHere;
+    const thumb = document.createElement("div");
+    thumb.className = "kea-thumb not-annotatable";
+    thumb.setAttribute("role", "navigation");
+    thumb.setAttribute("aria-label", "Plan of the experiment (m opens it)");
+    thumb.title = "The experiment's plan: one column per question. Click (or m) for the full plan.";
+    for (const question of where.questions) {
+      const col = document.createElement("div");
+      col.className = "tcol" + (question.key === mine ? " mine" : "");
+      const cap = document.createElement("div");
+      cap.className = "tcap";
+      cap.textContent = question.label;
+      cap.title = question.label + " · " + question.title;
+      cap.dataset.href = new URL(question.href, root).href;
+      col.append(cap);
+      for (const stage of where.rows) {
+        const row = document.createElement("div");
+        row.className = "trow";
+        for (const key of question.cells[stage] || []) {
+          const page = where.pages[key];
+          if (!page) continue;
+          const dot = document.createElement("span");
+          dot.className = "dot" + (page.signed ? "" : " open") + (amber.has(key) ? " amber" : "");
+          dot.style.cssText = `background:${TYPE_COLOUR[page.type] || "#556"};--dc:${TYPE_COLOUR[page.type] || "#556"}`;
+          dot.title = `${page.label} · ${page.title} · ${amber.has(key) ? "needs your look" : page.signed ? "signed" : "not signed"}`;
+          dot.dataset.href = new URL(page.href, root).href;
+          dot.dataset.key = key;
+          row.append(dot);
+        }
+        col.append(row);
+      }
+      if (question.key === mine && here && here !== mine && !Object.values(question.cells).some((keys) => keys.includes(here))) {
+        const bar = document.createElement("div");
+        bar.className = "beside";
+        bar.title = "This page sits beside " + question.label;
+        col.append(bar);
+      }
+      thumb.append(col);
+    }
+    thumb.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-href]");
+      if (target) { markThumbFrom(); location.href = target.dataset.href; } else openMinimap();
+    });
+    placeThumb(thumb);
+    ringThumb(thumb);
+  }
+  function placeThumb(thumb) {
+    const main = document.querySelector("main"), bar = document.querySelector(".topbar"), strip = document.querySelector(".qstrip");
+    thumb.classList.remove("corner", "inline");
+    thumb.style.top = "";
+    document.body.append(thumb);
+    thumb.classList.add("corner");
+    const room = main ? window.innerWidth - main.getBoundingClientRect().right : 0;
+    if (room >= thumb.offsetWidth + 20 || !strip) {
+      if (room < thumb.offsetWidth + 20) { thumb.remove(); return; }
+      thumb.style.top = ((bar ? bar.getBoundingClientRect().bottom : 0) + 10) + "px";
+    } else {
+      thumb.classList.replace("corner", "inline");
+      strip.append(thumb);
+    }
+  }
+  function markThumbFrom() { try { sessionStorage.setItem("kea-thumb-from", JSON.stringify({ key: whereHere, at: Date.now() })); } catch (error) { /* private mode */ } }
+  function ringThumb(thumb) {
+    const dot = whereHere && thumb.querySelector(`.dot[data-key='${CSS.escape(whereHere)}']`);
+    if (!dot) return;
+    const ring = document.createElement("span");
+    ring.className = "ring";
+    const at = (element) => [element.getBoundingClientRect().left - thumb.getBoundingClientRect().left, element.getBoundingClientRect().top - thumb.getBoundingClientRect().top];
+    let from = null;
+    try { from = JSON.parse(sessionStorage.getItem("kea-thumb-from") || "null"); sessionStorage.removeItem("kea-thumb-from"); } catch (error) { from = null; }
+    const was = from && Date.now() - from.at < 10000 && from.key && thumb.querySelector(`.dot[data-key='${CSS.escape(from.key)}']`);
+    const [left, top] = at(was || dot);
+    ring.style.left = left + "px"; ring.style.top = top + "px";
+    thumb.append(ring);
+    if (was && was !== dot) requestAnimationFrame(() => requestAnimationFrame(() => {
+      const [toLeft, toTop] = at(dot);
+      ring.style.left = toLeft + "px"; ring.style.top = toTop + "px";
+    }));
+  }
+  function openMinimap() {
+    if (closeMinimap()) return;
+    if (!where) return;
+    const root = siteRoot(), amber = needsLook(), mine = myQuestion();
+    const box = document.createElement("div");
+    box.className = "kea-minimap not-annotatable";
+    box.setAttribute("role", "dialog");
+    const project = where.project;
+    let html = `<button type='button' class='kea-keys-close' title='Close (Esc or m)'>×</button><h2>The plan of ${escHtml(project)}</h2>`
+      + "<p>One column per question, the route top down, then what sits beside it. Filled: signed; outlined: not signed; amber line: needs your look this round. Arrows move, Enter opens, Esc or m closes.</p>"
+      + "<table><tr><td class='rh'></td>";
+    for (const question of where.questions)
+      html += `<th class='${question.key === mine ? "mine" : ""}'><a href='${escHtml(new URL(question.href, root).href)}'>${escHtml(question.label)}</a><small title='${escHtml(question.title)}'>${escHtml(question.title)}</small></th>`;
+    html += "</tr>";
+    const cell = (key) => {
+      const page = where.pages[key];
+      if (!page) return "";
+      const colour = TYPE_COLOUR[page.type] || "#556";
+      return `<a class='mm${page.signed ? "" : " open"}${amber.has(key) ? " amber" : ""}${key === whereHere ? " here" : ""}' style='background:${colour};color:${page.signed ? "#fff" : colour}' `
+        + `href='${escHtml(new URL(page.href, root).href)}' title='${escHtml(page.label + " · " + page.title)}'>${escHtml(page.label)}</a>`;
+    };
+    for (const stage of where.rows) {
+      html += `<tr><td class='rh'>${STAGE_NAME[stage] || stage}</td>`;
+      for (const question of where.questions) html += "<td>" + (question.cells[stage] || []).map(cell).join("") + "</td>";
+      html += "</tr>";
+    }
+    if (where.questions.some((question) => (question.beside || []).length)) {
+      html += "<tr><td class='rh'>Beside</td>";
+      for (const question of where.questions) html += "<td>" + (question.beside || []).map(cell).join("") + "</td>";
+      html += "</tr>";
+    }
+    box.innerHTML = html + "</table>";
+    box.querySelector(".kea-keys-close").addEventListener("click", closeMinimap);
+    box.addEventListener("click", (event) => { if (event.target.closest("a.mm")) markThumbFrom(); });
+    document.body.append(box);
+    const start = box.querySelector("a.mm.here") || box.querySelector("a.mm");
+    if (start) start.classList.add("cursor");
+  }
+  function closeMinimap() {
+    const box = document.querySelector(".kea-minimap");
+    if (box) { box.remove(); return true; }
+    return false;
+  }
+  function minimapKey(event) {
+    const box = document.querySelector(".kea-minimap");
+    if (!box) return false;
+    const links = [...box.querySelectorAll("a.mm")], cursor = box.querySelector("a.mm.cursor") || links[0];
+    const key = event.key;
+    if (key === "Escape" || key === "m") { closeMinimap(); return true; }
+    if (key === "Enter" && cursor) { markThumbFrom(); location.href = cursor.href; return true; }
+    if (!cursor || !key.startsWith("Arrow")) return ["ArrowLeft", "ArrowRight"].includes(key);
+    const rect = (link) => link.getBoundingClientRect(), mine = rect(cursor);
+    let next = null;
+    if (key === "ArrowLeft" || key === "ArrowRight") {
+      const row = [...cursor.closest("tr").querySelectorAll("a.mm")], index = row.indexOf(cursor);
+      next = row[index + (key === "ArrowRight" ? 1 : -1)];
+    } else {
+      const rows = [...box.querySelectorAll("tr")].filter((row) => row.querySelector("a.mm"));
+      const index = rows.indexOf(cursor.closest("tr"));
+      const target = rows[index + (key === "ArrowDown" ? 1 : -1)];
+      if (target) next = [...target.querySelectorAll("a.mm")].sort((one, two) =>
+        Math.abs(rect(one).left - mine.left) - Math.abs(rect(two).left - mine.left))[0];
+    }
+    if (next) { cursor.classList.remove("cursor"); next.classList.add("cursor"); next.scrollIntoView({ block: "nearest" }); }
+    return true;
+  }
+  async function startWhere() {
+    if (!(await loadWhere())) return;
+    drawThumb();
+    let timer = null;
+    window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(drawThumb, 150); });
+    window.addEventListener("kea-status", () => drawThumb());
+  }
+
   function start() {
     watchHints();
+    startWhere();
     pendingStep();
     for (const strip of document.querySelectorAll(".sep-tabs")) {
       for (const button of strip.querySelectorAll(".sep-tab")) button.tabIndex = button.classList.contains("on") ? 0 : -1;

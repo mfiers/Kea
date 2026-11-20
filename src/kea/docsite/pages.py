@@ -16,6 +16,7 @@ from kea.config import SETTINGS
 from kea.docsite import artefacts, changes, codepages, comments, graph, history, mode, propagation, questions, signing, versions
 from kea.docsite.nodes import PROJECT_ROOT, TYPE_LABELS, TYPE_PLURALS, Node, Tree
 from kea.docsite.nodes import natural  # noqa: E402
+from kea.docsite import whereami
 from kea.docsite.render import (ABOUT_ORDER, hover_text, tag_inner, TYPE_COLOURS, LinkContext, linked_kinds, crumbs, esc, full_kind, fullname_inner, fullname_link, node_link, page,
                             prefix_for, render_markdown, detail_pills, node_href, status_pill, status_row_class, tagline, type_badge)
 from kea.docsite import icons, render
@@ -233,7 +234,12 @@ class SiteRenderer:
                  if not (render.SOLE_PROJECT and item.id == "home")]     # one experiment: Start is its page
         if node.id == "home":
             return [] if render.SOLE_PROJECT else [(node.project, None)]
-        return trail + [(f"{node.number} {node.title}" if node.number else node.title, None)]
+        if node.type != "question" and not any(item.type == "question" for item in chain):
+            question = whereami.home_question(self.tree, node)      # its question from the graph (whereami.py)
+            if question is not None:
+                trail.append((f"{question.number} {question.title}", f"{prefix}{question.url}"))
+        # this page by its tag only: its title is the heading right below
+        return trail + [(node.tag or node.title, None)]
 
     # ------------------------------------------------------------------ node pages
     def figure_image(self, node: Node) -> str | None:
@@ -681,7 +687,7 @@ class SiteRenderer:
         kind_html = (f"{icons.svg(node.type)}Experiment" if node.type == "experiment" else fullname_inner(node))
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
-        parts = [crumbs(self.trail(node, prefix), prefix),
+        parts = [crumbs(self.trail(node, prefix), prefix), whereami.strip_html(self.tree, node, prefix),
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"

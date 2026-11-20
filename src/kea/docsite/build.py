@@ -98,6 +98,12 @@ def build_site(tree: Tree, site: Path, build_mode: str = "review", with_changelo
     (site / "_order.json").write_text(json.dumps(
         [{"key": node.key, "href": hrefs[node.key], "label": node.label or "", "title": node.title}
          for node in signing.reading_order(tree) if hrefs.get(node.key)], ensure_ascii=False))
+    # per experiment: its questions, the pages of each question by stage, every page's question (kea.js: the corner
+    # thumbnail and the m minimap; whereami.py)
+    from kea.docsite import whereami
+    for project in tree.projects:
+        if (site / project).is_dir():
+            (site / project / "_where.json").write_text(json.dumps(whereami.plan(tree, project, hrefs), ensure_ascii=False))
     (site / "_build.json").write_text(json.dumps({"build_id": build_id, "commit": commit, "mode": build_mode,
                                                   "plan_items": plan_items, "sign_order": sign_order,
                                                   "previews_marked": True,      # kea publish relies on this
