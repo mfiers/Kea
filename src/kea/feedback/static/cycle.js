@@ -213,35 +213,38 @@
     const cycle = status.cycle, waiting = status.unplanned || 0, steer = !!status.can_steer;
     const known = status.build && status.build.plan_items;
     const items = known ? Number(known[String(cycle.cycle)] || 0) : null;      // null: a build before 1.29.3
-    const button = (cls, label, title, onclick) => el("button", { class: cls, title, onclick }, label);
+    // three lengths of each label: the menu bar shows the shorter ones only when it does not fit (render.TOPBAR_JS:
+    // ct-short, then ct-tiny, after the menu has folded and the project and experiment names have gone)
+    const button = (cls, labels, title, onclick) => el("button", { class: cls, title, onclick, "aria-label": labels[0] },
+      el("span", { class: "ct-l" }, labels[0]), el("span", { class: "ct-s" }, labels[1]), el("span", { class: "ct-t" }, labels[2]));
     const toProgress = () => { location.href = PREFIX + "progress.html"; };
     const toPlan = () => { location.href = PREFIX + "plan.html"; };
     let content = null;
     if (cycle.state === "collecting") {
-      if (waiting && steer) content = button("ct-harvest", `⇣ Harvest · ${waiting}`, `Review round: ${waiting} comment(s) and sign-off(s) wait. `
+      if (waiting && steer) content = button("ct-harvest", [`⇣ Harvest · ${waiting}`, `⇣ Harvest · ${waiting}`, `⇣ ${waiting}`], `Review round: ${waiting} comment(s) and sign-off(s) wait. `
         + "Harvest: Claude records the sign-offs and writes the plan; nothing runs until Implement", () => post("harvest"));
-      else if (waiting) content = button("ct-busy", `Review · ${waiting} for the plan`, "Review round: Claude does nothing until a PI presses Harvest", toProgress);
+      else if (waiting) content = button("ct-busy", [`Review · ${waiting} for the plan`, `Review · ${waiting}`, `✎ ${waiting}`], "Review round: Claude does nothing until a PI presses Harvest", toProgress);
     } else if (cycle.state === "harvest-requested") {
-      content = button("ct-busy", "⟳ Claude is writing the plan", `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude records the sign-offs and folds the comments into the plan. It runs nothing.`, toPlan);
+      content = button("ct-busy", ["⟳ Claude is writing the plan", "⟳ Planning", "⟳"], `Harvest asked by ${cycle.by} (${when(cycle.since)}); Claude records the sign-offs and folds the comments into the plan. It runs nothing.`, toPlan);
     } else if (cycle.state === "harvested") {
       const planned = items === null || items > 0;
       // comments made after the plan: the round is back in Review; Harvest again takes them in (it rewrites the plan)
-      const again = steer && waiting ? button("ct-harvest", `⇣ Harvest again · ${waiting}`, `${waiting} comment(s) or sign-off(s) came in after the plan `
+      const again = steer && waiting ? button("ct-harvest", [`⇣ Harvest again · ${waiting}`, `⇣ Again · ${waiting}`, `⇣ ${waiting}`], `${waiting} comment(s) or sign-off(s) came in after the plan `
         + "was written. Harvest again: Claude takes them into the plan too; nothing runs until Implement", () => post("harvest")) : null;
       // no Implement in the menu bar: it sits at the end of the plan, so whoever starts Claude has read what it will do
       const count = items ? ` · ${plural(items, "item")}` : "";
-      const read = planned ? button(steer ? (again ? "ct-implement ct-minor" : "ct-implement") : "ct-busy", `📖 Read the plan${count} →`,
+      const read = planned ? button(steer ? (again ? "ct-implement ct-minor" : "ct-implement") : "ct-busy", [`📖 Read the plan${count} →`, "📖 Plan →", "📖"],
         "Claude has written the plan. Read it: " + (steer ? "the Implement button is at its end" : "a PI implements it")
           + (waiting ? `; the ${waiting} comment(s) made after the harvest are not in it` : ""), toPlan) : null;
       if (again || read) content = [again, read].filter(Boolean);
-      else if (waiting) content = button("ct-busy", `Review · ${waiting} since the plan`, "Comments came in after the plan; a PI can harvest again", toProgress);
+      else if (waiting) content = button("ct-busy", [`Review · ${waiting} since the plan`, `Review · ${waiting}`, `✎ ${waiting}`], "Comments came in after the plan; a PI can harvest again", toProgress);
     } else if (cycle.state === "implement-requested") {
-      content = button("ct-busy", "▶ Implement asked", `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
+      content = button("ct-busy", ["▶ Implement asked", "▶ Asked", "▶"], `Asked by ${cycle.by} (${when(cycle.since)}); Claude has not started yet`, toPlan);
     } else if (cycle.state === "implementing") {
-      content = button("ct-busy", "⟳ Claude is working", `Claude is implementing the plan (since ${when(cycle.since)}); comments pause until the release`, toPlan);
+      content = button("ct-busy", ["⟳ Claude is working", "⟳ Working", "⟳"], `Claude is implementing the plan (since ${when(cycle.since)}); comments pause until the release`, toPlan);
     }
     const shown = content ? [].concat(content) : [];
-    const label = shown.map(node => node.textContent + "|" + node.title).join("||");
+    const label = shown.map(node => node.getAttribute("aria-label") + "|" + node.title).join("||");
     if (slot.dataset.label === label) return;          // unchanged: keep the buttons (and any focus on them)
     slot.dataset.label = label;
     slot.replaceChildren(...shown);
