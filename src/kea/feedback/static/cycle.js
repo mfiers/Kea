@@ -515,6 +515,7 @@
     ]]];
   };
 
+  window.keaPollStatus = () => poll();     // the graph view asks for a fresh status when the reader leaves a page
   async function poll() {
     try {
       const response = await fetch(BASE + "api/status", { credentials: "same-origin", cache: "no-store" });

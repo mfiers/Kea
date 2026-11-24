@@ -167,6 +167,7 @@
   /* g, places on the site: small letters, in the menu bar's order (g p Plan, g m Map). */
   const GO = [
     ["s", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
+    ["g", "Graph: every page as one tree, at this page", () => document.querySelector(".topbar a.graph-link")],
     ["e", "The experiment's front page", topLink("/home.html")],
     ["u", "Up: the page above this one", () => { const links = document.querySelectorAll("nav.crumbs a"); return document.querySelector(".node-content") ? links[links.length - 1] : null; }],
     ["a", "The first page that needs attention", () => window.keaAttention ? { go: () => attentionStep(1) } : null],
@@ -428,6 +429,29 @@
       }
     }
   }
+  /* Inside the graph view's zoom (explore.js; render.page marks the page kea-embed): the page's own actions keep their
+     keys (a, c, ?, tabs), the keys that leave the page (g, s, m, n, p, arrows) belong to the graph, and Esc goes back
+     to the graph unless something smaller is open: a field (it cancels itself), a menu, the comment window, the
+     selection bar. An unsent comment needs a second Esc. Capture phase on window: read before others close things. */
+  const EMBED = document.documentElement.classList.contains("kea-embed");
+  let discardArmed = 0;
+  if (EMBED) {
+    window.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
+      if (document.getElementById("kea-keys") || document.documentElement.classList.contains("fb-panel-open")) return;
+      if ([...document.querySelectorAll(".fb-select-bar, dialog[open], .kea-minimap")].some((item) => !item.hidden && item.offsetParent !== null)) return;
+      const draft = [...document.querySelectorAll("textarea")].some((field) => field.value.trim());
+      if (draft && Date.now() - discardArmed > 3000) {
+        discardArmed = Date.now();
+        flash("An unsent comment: Esc again within 3 s to discard it and go back to the graph.");
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault(); event.stopImmediatePropagation();
+      try { parent.keaExplore.close(); } catch (error) { /* not in the graph view after all */ }
+    }, true);
+  }
   document.addEventListener("keydown", (event) => {
     const open = document.getElementById("kea-keys");
     const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
@@ -452,6 +476,7 @@
     }
     let hit = null;
     const key = event.key;
+    if (EMBED && ["g", "s", "m", "n", "p", "N", "P", "ArrowLeft", "ArrowRight"].includes(key)) return;   // the graph's keys
     if (key === "g") { goMenu(); hit = true; }
     else if (key === "a") { actMenu(); hit = true; }
     else if (key === "s") { siteMenu(); hit = true; }

@@ -1399,6 +1399,7 @@
     } catch (error) {
       return;  // no comment server: keep the static copy
     }
+    if (document.getElementById("xg")) return;   // the graph view (explore.js): comments live on the pages it opens
     if (typeof RecogitoJS === "undefined" || !build()) return;
     for (const node of document.querySelectorAll(".fb-static")) node.hidden = true;
     if (window.keaDropTab) window.keaDropTab("comments");   // live comments: the panel, not the build-time tab

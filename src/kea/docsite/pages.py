@@ -1458,6 +1458,19 @@ class SiteRenderer:
             self.comments_page()
             self.history_page()
         self.data_page()
+        self.explore_page()
+
+    def explore_page(self) -> None:
+        """The graph view: every page as one tree (explore.py writes the data, explore.js draws and walks it)."""
+        from kea.docsite import explore
+        hrefs = {key: relative for relative, (key, _) in self.pages.items() if ":" in key}
+        (self.site / "_graph.json").write_text(json.dumps(explore.graph(self.tree, hrefs), ensure_ascii=False))
+        body = (f"<style>{explore.CSS}</style>"
+                "<div id='xg' class='xg not-annotatable' role='application' aria-label='Graph of every page. Arrow keys "
+                "or W A S D move, Space opens a page, Esc goes back, question mark lists the keys.'>"
+                "<noscript><p>The graph needs JavaScript. Every page is also on the <a href='index.html'>front page</a>."
+                "</p></noscript></div><script defer src='_assets/explore.js'></script>")
+        self.write("explore.html", page("Graph", body, "", None, self.tree, here="Graph"))
 
     def data_page(self) -> None:
         """Every artefact and every data file the documentation refers to, with size, checksum and download."""

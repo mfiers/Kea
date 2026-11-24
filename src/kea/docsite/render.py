@@ -217,6 +217,9 @@ h2 .count{font:600 12px system-ui,sans-serif;color:var(--muted);background:var(-
 .pid-line{display:flex;justify-content:flex-end;margin:0 0 4px}.pid-line .pid{font:400 11.5px/1.3 system-ui,sans-serif;color:#7a8394;margin:0}.pid-line .pid a{color:#7a8394;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:copy}.pid-line .pid a:hover{color:var(--accent);text-decoration:underline}.pid-line .pid a.copied{color:#1e6e3e}@media (max-width:640px){.node-data-sep .sep-tab{letter-spacing:.05em;padding:3px 8px 4px}.node-data-sep .sep-tab.on{padding-bottom:7px}}.tab-sep{margin-bottom:0}.tab-panel>.fb-static{margin-top:0;padding-top:0;border-top:0}.tab-panels{margin:12px 0 0}.js .tab-panel:not(.on){display:none}
 .tab-panel>section.about:first-child h2,.tab-panel>section:first-child>h2:first-child{margin-top:6px}
 .js table.nodes tr.pg-off{display:none!important}.kind-filter{margin:8px 0 2px}
+/* a page shown inside the graph view's zoom (explore.js): only the page, no menu bar, crumbs, strips or corner plan */
+.kea-embed .topbar,.kea-embed .kindbar,.kea-embed nav.crumbs,.kea-embed .qstrip,.kea-embed .kea-thumb,.kea-embed .kea-stepbar{display:none!important}
+.kea-embed body.has-kindbar{padding-left:0}.kea-embed main{padding-top:18px}.kea-embed{scroll-padding-top:12px}
 @media print{.js .tab-panel:not(.on){display:block}.sep-tab:not(.on){display:none}.tab-panel:not(.on)::before{content:attr(data-label);display:block;font:700 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;border-top:3px solid var(--kc,#556);margin-top:24px;padding-top:4px}.obj-pager,.kind-filter{display:none}.js table.nodes tr.pg-off{display:table-row!important}}
 """
 
@@ -446,6 +449,10 @@ def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, no
     def listed(kind: str, label: str, title: str) -> str:
         return link(label, f"{target}/objects.html#type={kind}" if target else None, title)
 
+    # Graph: the whole site as one tree to walk with the keyboard (explore.html, explore.js), opened at this page
+    graph_at = f"#{node.key}" if node is not None else (f"#{tree.projects[project].key}" if project and tree and project in tree.projects else "")
+    right.append(f"<a class='graph-link' href='{prefix}explore.html{esc(graph_at)}' title='g g · Every page as one graph, "
+                 "walked with the arrow keys; Space opens a page, Esc goes back'>Graph</a>")
     right.append(group(link("Map", f"{target}/map.html" if target else None, "The experiment as a tree"), [
         link("Relations", f"{target}/relations.html" if target else None, "The graph of relations"),
         link("Objects", f"{target}/objects.html" if target else None, "Every page of the experiment, by type"),
@@ -582,7 +589,7 @@ def page(title: str, body: str, prefix: str, project: str | None = None, tree: T
             f"<meta name='viewport' content='width=device-width,initial-scale=1'><title>{esc(title)}</title>"
             f"<link rel='icon' href='{prefix}_assets/kea-badge.ico'>"
             f"<style>{font_faces(prefix)}{CSS}</style><script defer src='{prefix}_assets/kea.js'></script>"
-            f"<script>document.documentElement.classList.add('js')</script></head><body{' class=has-kindbar' if kindbar else ''}>{kindbar}"
+            f"<script>document.documentElement.classList.add('js');try{{if(parent!==window&&parent.keaExplore)document.documentElement.classList.add('kea-embed')}}catch(e){{}}</script></head><body{' class=has-kindbar' if kindbar else ''}>{kindbar}"
             f"{topbar(prefix, project, tree, node, here)}{main}{body}</main></body></html>")
 
 
