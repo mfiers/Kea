@@ -68,3 +68,15 @@ def test_page_shell_marks_embedded_pages_and_links_the_graph(tmp_path):
     assert "parent.keaExplore" in html and "kea-embed" in html          # inside the graph's zoom: no menu bar
     assert "explore.html#p:r-a" in html and "class='graph-link'" in html  # the menu bar's Graph opens at this page
     assert ".kea-embed .topbar" in render.CSS
+
+
+def test_a_question_that_names_itself_as_parent_still_hangs_from_the_experiment(tmp_path):
+    doc = _doc(tmp_path)
+    question = doc / "p/question/q-a.md"
+    question.write_text(question.read_text().replace("parent: home", "parent: q-a"))
+    hypothesis = doc / "p/hypothesis/h-a.md"
+    hypothesis.write_text(hypothesis.read_text().replace("fixed_before_results: true", "fixed_before_results: 'yes'"))
+    tree = nodes.load_tree(doc)
+    by_key = {node["key"]: node for node in explore.graph(tree, {key: "x.html" for key in tree.nodes})["nodes"]}
+    assert by_key["p:q-a"]["parent"] == "p:home"
+    assert by_key["p:h-a"]["fixed"] is None                     # not a yes/no: shown as neither

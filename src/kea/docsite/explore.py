@@ -72,7 +72,7 @@ def tree_parent(tree: Tree, node: Node) -> tuple[str | None, bool]:
         return home_key, True
     if node.type == "question":
         parent = whereami._parent_question(tree, node)
-        return (parent.key if parent is not None else home_key), False
+        return (parent.key if parent is not None and parent.key != node.key else home_key), False
     rank = RANK.get(node.type)
 
     def lower(candidates: list[Node]) -> list[Node]:
@@ -126,7 +126,7 @@ def graph(tree: Tree, hrefs: dict[str, str]) -> dict:
         if not hrefs.get(node.key):
             continue
         parent, beside = tree_parent(tree, node)
-        if parent is not None and not hrefs.get(parent):
+        if parent is not None and (not hrefs.get(parent) or parent == node.key):
             parent = None
         question = node if node.type == "question" else whereami.home_question(tree, node)
         nodes.append({
@@ -136,7 +136,8 @@ def graph(tree: Tree, hrefs: dict[str, str]) -> dict:
             "question": question.key if question is not None else None,
             # the scientific state shown on the box: a hypothesis fixed before its test, an exploratory analysis, how
             # sure a conclusion is, and a sign-off that no longer counts because a page it rests on changed
-            "fixed": node.header.get("fixed_before_results") if node.type == "hypothesis" else None,
+            "fixed": ({True: True, False: False}.get(node.header.get("fixed_before_results"))
+                      if node.type == "hypothesis" and isinstance(node.header.get("fixed_before_results"), bool) else None),
             "analysis": str(node.header.get("analysis") or ""), "certainty": str(node.header.get("certainty") or ""),
             "held": bool(node.held_by) or not node.chain_ok or bool(node.upstream_changed),
             "up": sorted(key for key in depends.get(node.key, ()) if hrefs.get(key)),

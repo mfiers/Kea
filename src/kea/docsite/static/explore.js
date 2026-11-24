@@ -57,13 +57,17 @@
     return node;
   }
   const words = (text) => String(text || "").replace(/_/g, " ");
-  const tagOf = (node) => node.pseudo ? node.tag : (node.tag && node.tag.length <= 4 ? node.tag : LETTER[node.type] || "?");
+  const tagOf = (node) => {
+    if (node.pseudo || (node.tag && node.tag.length <= 4)) return node.tag || LETTER[node.type] || "?";
+    const year = node.type === "reference" && /(\d{2})[a-z]?$/.exec(node.tag || "");      // Akiyama et al. 1994: Aki94
+    return year ? node.tag.replace(/[^A-Za-z]/g, "").slice(0, 3) + year[1] : LETTER[node.type] || "?";
+  };
   const label = (node) => (node.tag ? node.tag + " " : "") + node.title;
 
   /* ------------------------------------------------------------------ data */
   async function start() {
     placeBelowBar();
-    window.addEventListener("resize", () => { placeBelowBar(); drawMini(); });
+    window.addEventListener("resize", () => { placeBelowBar(); if (fitted && world) { refit(); redraw(); } else drawMini(); });
     try {
       const response = await fetch("_graph.json", { cache: "no-store", credentials: "same-origin" });
       data = await response.json();
@@ -93,7 +97,12 @@
     if (openIt && selected) openZoom(selected);
     window.addEventListener("kea-status", (event) => { live(event.detail); placeBelowBar(); });
     if (window.keaStatus) live(window.keaStatus);
-    window.addEventListener("hashchange", () => { const [key, open] = fromHash(); if (key && byKey[key] && key !== selected) { select(key, { center: true }); if (open) openZoom(key); } });
+    window.addEventListener("hashchange", () => {
+      const [key, open] = fromHash();
+      if (!key || !byKey[key]) return;
+      if (key !== selected) select(key, { center: true });
+      if (open && !(zoom && zoom.key === key)) openZoom(key);
+    });
   }
 
   /* What a page rests on: the pages its relations depend on (graph.upstream) and the page it grows from, so that the
@@ -144,12 +153,14 @@
       const nodes = data.nodes.filter((node) => node.project === project && node.key !== projectKey);
       const questions = nodes.filter((node) => node.type === "question");
       const ordered = [];
-      const visit = (question, depth) => {
-        question.depth = depth;
-        ordered.push(question);
-        questions.filter((other) => other.parent === question.key).forEach((other) => visit(other, depth + 1));
+      const seen = new Set();
+      const visitOnce = (question, depth) => {
+        if (seen.has(question.key)) return;
+        seen.add(question.key); question.depth = depth; ordered.push(question);
+        questions.filter((other) => other.parent === question.key && other.key !== question.key).forEach((other) => visitOnce(other, depth + 1));
       };
-      questions.filter((question) => !questions.some((other) => other.key === question.parent)).forEach((question) => visit(question, 0));
+      questions.filter((question) => !questions.some((other) => other.key === question.parent && other.key !== question.key)).forEach((question) => visitOnce(question, 0));
+      questions.forEach((question) => visitOnce(question, 0));     // a loop of parents: still every question, once
       const add = (band) => { band.project = project; band.experiment = projectKey; bands.push(band); };
       for (const question of ordered) {
         add({ id: question.key, kind: "question", lead: question,
@@ -159,6 +170,10 @@
       if (across.length) {
         add({ id: project + "#across", kind: "across", nodes: across,
           lead: pseudo(project + "#across", "All", "Across questions", "Pages that serve the whole experiment, not one question") });
+      }
+      if (!bands.some((band) => band.experiment === projectKey) && !nodes.some((node) => LIBRARY.has(node.type))) {
+        add({ id: project + "#empty", kind: "across", nodes: [],
+          lead: pseudo(project + "#empty", "—", "No pages yet", "The experiment has no questions or other pages yet") });
       }
       const library = nodes.filter((node) => LIBRARY.has(node.type));
       if (library.length) {
@@ -457,7 +472,8 @@
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
   function fromHash() {
-    const raw = decodeURIComponent(location.hash.slice(1));
+    let raw = "";
+    try { raw = decodeURIComponent(location.hash.slice(1)); } catch (error) { raw = ""; }   // a malformed link
     if (!raw) return [null, false];
     const open = raw.endsWith("/open");
     return [open ? raw.slice(0, -5) : raw, open];
@@ -535,7 +551,7 @@
   }
   function stepLeft() {
     const node = byKey[selected], place = pos[selected];
-    if (!node || place.exp) return null;
+    if (!node || !place || place.exp) return null;
     if (place.col === 0) return (node.band && node.band.experiment) || null;
     if (node.type === "conclusion") {
       const evidence = supportsOf(node).map(([key]) => key).filter((key) => nodeEls[key] && pos[key].band === place.band);
@@ -549,7 +565,7 @@
   }
   function stepRight() {
     const node = byKey[selected], place = pos[selected];
-    if (!node) return null;
+    if (!node || !place) return null;
     if (place.exp) {
       const band = bands.find((item) => item.experiment === selected);
       return band ? band.lead.key : null;
@@ -609,11 +625,15 @@
   }
 
   /* ------------------------------------------------------------------ folding and fitting */
+  function refit() {                                   // in fit mode, after folding or a resize: fit again
+    if (!fitted) return;
+    scale = Math.max(0.2, Math.min(1, (root.clientWidth - 24) / worldW, (root.clientHeight - 24) / worldH));
+  }
   function unfold(band) {
     folded.delete(band.id);
     unfoldedOnce.add(band.id);
     save("kea-xg-folded", [...folded]); save("kea-xg-unfolded", [...unfoldedOnce]);
-    layout(); redraw();
+    layout(); refit(); redraw();
   }
   function toggleFold(band) {
     if (!band) return;
@@ -621,7 +641,7 @@
     else {
       folded.add(band.id);
       save("kea-xg-folded", [...folded]);
-      layout(); redraw();
+      layout(); refit(); redraw();
       select(band.lead.key, { instant: true });
     }
   }
@@ -634,7 +654,7 @@
       if (othersOpen) folded.add(band.id); else { folded.delete(band.id); unfoldedOnce.add(band.id); }
     }
     save("kea-xg-folded", [...folded]); save("kea-xg-unfolded", [...unfoldedOnce]);
-    layout(); redraw();
+    layout(); refit(); redraw();
     if (selected) reveal(selected, { instant: true, center: true });
     flash(othersOpen ? "Only this question open: O opens all again." : "Every band open.");
   }
@@ -712,19 +732,22 @@
     if (!zoom || zoom.frame !== frame) return;
     let path = "", title = "";
     try { path = frame.contentWindow.location.pathname; title = frame.contentDocument.title; } catch (error) { /* another origin */ }
-    const key = byPath[path];
-    if (key && key !== zoom.key) {                    // Approve & next, or a link to another page: the graph follows
-      zoom.key = key;
+    const key = byPath[path] || byPath[path.replace(/\/$/, "/index.html")];
+    if (key) {                                        // Approve & next, or a link to another page: the graph follows
+      if (key !== zoom.key) { zoom.key = key; select(key, { instant: true }); setHash(key, true); }
       fillHeader(byKey[key]);
-      select(key, { instant: true });
-      setHash(key, true);
-    } else if (!key && title) {
-      zoom.header.querySelector(".ttl").textContent = title;
+    } else {                                          // a place that is not a page of the graph (Plan, a data file)
+      zoom.header.querySelector(".ttl").textContent = title || path.split("/").pop() || "…";
       zoom.header.querySelector(".tg").hidden = true;
+      const open = zoom.header.querySelector("a");
+      if (open) open.href = path || open.href;
     }
     waiting.hidden = true;
     frame.classList.add("ready");
-    try { frame.contentWindow.focus(); } catch (error) { /* another origin */ }
+    let ours = false;                                  // a site page has kea.js and sends its Esc here; anything else
+    try { ours = !!frame.contentDocument.querySelector("script[src*='kea.js']"); } catch (error) { ours = false; }
+    if (ours) { try { frame.contentWindow.focus(); } catch (error) { /* another origin */ } }
+    else zoom.header.querySelector("button.back").focus({ preventScroll: true });
   }
   function closeZoom() {
     if (!zoom) return;
@@ -747,7 +770,13 @@
     if (item) item.focus({ preventScroll: true });
     if (window.keaPollStatus) window.keaPollStatus();
   }
-  window.keaExplore = { close: closeZoom, select: (key) => select(key), open: (key) => { select(key); openZoom(key); } };
+  window.keaExplore = { close: closeZoom, select: (key) => select(key), open: (key) => { select(key); openZoom(key); },
+    signStep: (direction) => {                         // n / p inside the zoomed page: the next page to sign, same panel
+      const key = nextToSign(direction);
+      if (!key) return;
+      select(key, { instant: true });
+      if (zoom) zoom.load(key); else openZoom(key);
+    } };
 
   /* ------------------------------------------------------------------ live sign-offs (cycle.js status) */
   function live(status) {
@@ -759,12 +788,13 @@
   }
 
   /* ------------------------------------------------------------------ find and help */
-  let finder = null, help = null;
+  let finder = null, help = null, goPending = 0;
   function openFind() {
     const input = el("input", { type: "search", placeholder: "Find a page: its tag (R3) or words of its title", "aria-label": "Find a page" });
     const list = el("ol");
     finder = el("div", { class: "xg-find", role: "dialog" }, input, list);
     document.body.append(finder);
+    finder.addEventListener("focusout", () => setTimeout(() => { if (finder && !finder.contains(document.activeElement)) closeFind(); }, 0));
     let hits = [], at = 0;
     const draw = () => {
       list.replaceChildren(...hits.map((key, index) => {
@@ -789,7 +819,11 @@
     });
     input.focus();
   }
-  function closeFind() { if (finder) { finder.remove(); finder = null; } if (selected && nodeEls[selected]) nodeEls[selected].focus({ preventScroll: true }); }
+  function closeFind() {
+    if (!finder) return;
+    finder.remove(); finder = null;
+    if (selected && nodeEls[selected] && !zoom) nodeEls[selected].focus({ preventScroll: true });
+  }
   function toggleHelp() {
     if (help) { help.remove(); help = null; return; }
     const row = (keys, text) => el("tr", {}, el("td", {}, ...keys.map((key) => el("kbd", {}, key))), el("td", {}, text));
@@ -823,16 +857,23 @@
   /* ------------------------------------------------------------------ keys */
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (finder) return;                                // the find box handles its own keys
+    if (finder && finder.contains(event.target)) return;   // the find box handles its own keys
     const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
     if (typing) return;
     if (document.getElementById("kea-keys")) return;   // kea.js has a menu open (g …): its keys
+    if (event.key === "g") { goPending = Date.now(); return; }      // kea.js: g, then a place
+    if (Date.now() - goPending < 1500) { goPending = 0; return; }   // the key after g belongs to kea.js's menu
     const stop = () => { event.preventDefault(); event.stopImmediatePropagation(); };
     if (zoom) {                                         // the page has the keys while it is open; here only Esc
       if (event.key === "Escape") { stop(); closeZoom(); }
+      else if (zoom.panel.contains(event.target) && ["Enter", " ", "Tab", "Shift"].includes(event.key)) return;   // its buttons and links
       else if (!["Tab", "Shift"].includes(event.key)) stop();
       return;
     }
+    if (finder) closeFind();
+    // the graph's keys only when the graph (or nothing in particular) has the focus, not a link in the menu bar
+    const onGraph = event.target === document.body || event.target === document.documentElement || root.contains(event.target);
+    if (!onGraph && !help) return;
     if (help) { if (event.key === "Escape" || event.key === "?") { stop(); toggleHelp(); } return; }
     if (!data || !selected) return;
     let target = null, handled = true;

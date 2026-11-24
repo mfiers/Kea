@@ -28,7 +28,8 @@
 
   /* #tab=changes opens that tab; #<id> inside a closed panel opens the panel holding it */
   function followHash() {
-    const hash = decodeURIComponent(location.hash.slice(1));
+    let hash = "";
+    try { hash = decodeURIComponent(location.hash.slice(1)); } catch (error) { return; }   // a malformed link
     if (!hash) return;
     const wanted = hash.match(/^tab=([\w-]+)$/);
     if (wanted) {
@@ -429,10 +430,11 @@
       }
     }
   }
-  /* Inside the graph view's zoom (explore.js; render.page marks the page kea-embed): the page's own actions keep their
-     keys (a, c, ?, tabs), the keys that leave the page (g, s, m, n, p, arrows) belong to the graph, and Esc goes back
-     to the graph unless something smaller is open: a field (it cancels itself), a menu, the comment window, the
-     selection bar. An unsent comment needs a second Esc. Capture phase on window: read before others close things. */
+  /* Inside the graph view's zoom (explore.js; render.page marks the page kea-embed): the page's own keys stay (a, c, g,
+     s, ?, tabs); n / p go to the next or previous page to sign in the same panel; m and ← → are the graph's. Esc goes
+     back to the graph unless something smaller is open: a field (it cancels itself), a menu, the dock's menu, the
+     editor, a dialog, the comment window, the selection bar. A changed, unsent text needs a second Esc. Capture phase
+     on window: read before others close things. */
   const EMBED = document.documentElement.classList.contains("kea-embed");
   let discardArmed = 0;
   if (EMBED) {
@@ -440,8 +442,11 @@
       if (event.key !== "Escape" || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
       if (document.getElementById("kea-keys") || document.documentElement.classList.contains("fb-panel-open")) return;
-      if ([...document.querySelectorAll(".fb-select-bar, dialog[open], .kea-minimap")].some((item) => !item.hidden && item.offsetParent !== null)) return;
-      const draft = [...document.querySelectorAll("textarea")].some((field) => field.value.trim());
+      const shown = (item) => !item.hidden && item.getClientRects().length > 0;      // also position:fixed ones
+      const group = [...document.querySelectorAll(".fb-dgroup-items")].find(shown);  // the dock's Change ▸ or More ▸
+      if (group) { event.preventDefault(); event.stopImmediatePropagation(); (group.closest(".fb-dgroup") || group.parentElement).querySelector(".fb-dgroup-head").click(); return; }
+      if ([...document.querySelectorAll(".fb-select-bar, .fb-dock-pop, .fb-editor, dialog[open], .kea-minimap")].some(shown)) return;
+      const draft = [...document.querySelectorAll("textarea")].some((field) => shown(field) && field.value.trim() && field.value !== field.defaultValue);
       if (draft && Date.now() - discardArmed > 3000) {
         discardArmed = Date.now();
         flash("An unsent comment: Esc again within 3 s to discard it and go back to the graph.");
@@ -450,6 +455,16 @@
       }
       event.preventDefault(); event.stopImmediatePropagation();
       try { parent.keaExplore.close(); } catch (error) { /* not in the graph view after all */ }
+    }, true);
+    /* n p N P: the next or previous page that waits for a sign-off, opened in the same panel (the graph walks the
+       list), so a review goes page after page without leaving the zoom */
+    window.addEventListener("keydown", (event) => {
+      if (!["n", "p", "N", "P"].includes(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return;
+      if (document.getElementById("kea-keys") || document.documentElement.classList.contains("fb-panel-open")) return;
+      if (document.querySelector(".fb-select-bar:not([hidden])")) return;      // the selection popup's own keys
+      event.preventDefault(); event.stopImmediatePropagation();
+      try { parent.keaExplore.signStep(event.key === "n" || event.key === "N" ? 1 : -1); } catch (error) { /* no graph */ }
     }, true);
   }
   document.addEventListener("keydown", (event) => {
@@ -476,7 +491,7 @@
     }
     let hit = null;
     const key = event.key;
-    if (EMBED && ["g", "s", "m", "n", "p", "N", "P", "ArrowLeft", "ArrowRight"].includes(key)) return;   // the graph's keys
+    if (EMBED && ["m", "ArrowLeft", "ArrowRight"].includes(key)) return;   // in the graph's zoom: the graph has the plan and the walking
     if (key === "g") { goMenu(); hit = true; }
     else if (key === "a") { actMenu(); hit = true; }
     else if (key === "s") { siteMenu(); hit = true; }
