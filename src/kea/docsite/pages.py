@@ -1065,14 +1065,18 @@ class SiteRenderer:
         return html
 
     def home_page(self, runs: list[changes.Run]) -> None:
+        # The site opens on the graph: index.html sends readers to explore.html (with the #page they asked for).
+        # Written outside self.pages: it is no page of its own, so it holds no comments and no key.
+        target = "explore.html"
+        (self.site / "index.html").write_text(
+            "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            f"<meta http-equiv='refresh' content='0; url={target}'><link rel='canonical' href='{target}'>"
+            f"<title>{esc(SETTINGS['title'])}</title><script>location.replace('{target}' + location.hash)"
+            f"</script></head><body><p><a href='{target}'>{esc(SETTINGS['title'])}</a></p></body></html>",
+            encoding="utf-8")
         if render.SOLE_PROJECT:
-            # one experiment: the site starts at its page; index.html sends readers there (comments and permanent
-            # ids belong to the experiment page, so it is not drawn twice)
-            target = f"{render.SOLE_PROJECT}/home.html"
-            self.write("index.html", "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-                       f"<meta http-equiv='refresh' content='0; url={target}'><link rel='canonical' href='{target}'>"
-                       f"<title>{esc(SETTINGS['title'])}</title><script>location.replace('{target}' + location.hash)"
-                       f"</script></head><body><p><a href='{target}'>{esc(SETTINGS['title'])}</a></p></body></html>")
+            # one experiment: its page is the start page (comments and permanent ids belong to it, so the project
+            # front page is not drawn twice)
             return
         experiments = self.node_table(list(self.tree.projects.values()), "",
                                       extra=lambda home: self.review_pill(home.project, ""))
@@ -1104,7 +1108,9 @@ class SiteRenderer:
         summary_file = PROJECT_ROOT / "doc" / "_summary.md"
         summary_source = summary_file if summary_file.exists() else \
             next(iter(self.tree.projects.values())).source if len(self.tree.projects) == 1 and summary else None
-        self.write("index.html", page(SETTINGS["title"], body, "", None, self.tree), source=summary_source)
+        # start.html keeps the thread key "index.html": comments made when the front page was index.html stay on it
+        self.write("start.html", page(SETTINGS["title"], body, "", None, self.tree), key="index.html",
+                   source=summary_source)
 
     def help_page(self) -> None:
         """help.html: the reader's help (kea/help/*.md, the same text as on GitHub, the hub and in the PDF), with the
@@ -1465,11 +1471,12 @@ class SiteRenderer:
         from kea.docsite import explore
         hrefs = {key: relative for relative, (key, _) in self.pages.items() if ":" in key}
         (self.site / "_graph.json").write_text(json.dumps(explore.graph(self.tree, hrefs), ensure_ascii=False))
+        start = render.home_href("")
         body = (f"<style>{explore.CSS}</style>"
-                "<div id='xg' class='xg not-annotatable' role='application' aria-label='Graph of every page. Arrow keys "
+                f"<div id='xg' class='xg not-annotatable' data-start='{start}' role='application' aria-label='Graph of every page. Arrow keys "
                 "or W A S D move, Space opens a page, Esc goes back, question mark lists the keys.'>"
-                "<noscript><p>The graph needs JavaScript. Every page is also on the <a href='index.html'>front page</a>."
-                "</p></noscript></div><script defer src='_assets/explore.js'></script>")
+                f"<noscript><p>The graph needs JavaScript. Every page is also reachable from the <a href='{start}'>start "
+                "page</a>.</p></noscript></div><script defer src='_assets/explore.js'></script>")
         self.write("explore.html", page("Graph", body, "", None, self.tree, here="Graph"))
 
     def data_page(self) -> None:

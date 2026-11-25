@@ -167,7 +167,7 @@
   }
   /* g, places on the site: small letters, in the menu bar's order (g p Plan, g m Map). */
   const GO = [
-    ["s", "Start, the site's front page", () => document.querySelector(".topbar a.home")],
+    ["s", "Start, the site's front page", () => document.querySelector(".topbar a.project")],
     ["g", "Graph: every page as one tree, at this page", () => document.querySelector(".topbar a.graph-link")],
     ["e", "The experiment's front page", topLink("/home.html")],
     ["u", "Up: the page above this one", () => { const links = document.querySelectorAll("nav.crumbs a"); return document.querySelector(".node-content") ? links[links.length - 1] : null; }],

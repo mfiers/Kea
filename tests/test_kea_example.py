@@ -180,3 +180,29 @@ def test_experiment_lists_questions_then_answers_and_has_no_files(tmp_path):
     artefact.write_text("---\nid: a-table\ntype: artefact\ntitle: T\nshort: A table.\nparent: home\npath: data/t.tsv\n---\n")
     checked = run(["check"], project)
     assert checked.returncode != 0 and "artefact directly under the experiment" in checked.stdout
+
+
+def test_the_site_opens_on_the_graph(tmp_path):
+    """index.html sends readers to the graph; the kea head links the graph; the front page moved to start.html
+    and keeps the thread key index.html, so comments made on the old front page stay on it."""
+    project = tmp_path / "example"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    run(["init", "--title", "Example", "--experiment", "first"], project)
+    second = project / "doc" / "second" / "experiment"
+    second.mkdir(parents=True)
+    (second / "home.md").write_text((project / "doc/first/experiment/home.md").read_text())
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "start"], cwd=project,
+                   check=True)
+    built = run(["build"], project)
+    assert built.returncode == 0, built.stdout + built.stderr
+    site = project / "report" / "site"
+    index = (site / "index.html").read_text()
+    assert "location.replace('explore.html' + location.hash)" in index and "<main" not in index
+    start = (site / "start.html").read_text()
+    assert "<h2>Experiments</h2>" in start and "data-page='index.html'" in start   # the old front page, old thread key
+    page = (site / "first" / "home.html").read_text()
+    assert "class='home' href='../explore.html'" in page                 # the kea head: the graph
+    assert "class='project' href='../start.html'" in page                # the project name: the start page
+    assert "data-start='start.html'" in (site / "explore.html").read_text()

@@ -72,8 +72,8 @@
       const response = await fetch("_graph.json", { cache: "no-store", credentials: "same-origin" });
       data = await response.json();
     } catch (error) {
-      root.append(el("p", { style: "padding:24px" }, "The graph could not be loaded (_graph.json). Every page is also on the ",
-        el("a", { href: "index.html" }, "front page"), "."));
+      root.append(el("p", { style: "padding:24px" }, "The graph could not be loaded (_graph.json). Every page is also reachable from the ",
+        el("a", { href: root.dataset.start || "start.html" }, "start page"), "."));
       return;
     }
     try {

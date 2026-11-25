@@ -403,12 +403,12 @@ PDF: dict | None = None          # the PDF of all pages ({"file", "version", "co
 
 def topbar(prefix: str, project: str | None = None, tree: Tree | None = None, node: Node | None = None,
            here: str | None = None) -> str:
-    """Menu bar. Left: the kea head (home) / project / experiment / [tag] page title. Right: the menu, the page
+    """Menu bar. Left: the kea head (home: the graph) / project (the start page) / experiment / [tag] page title. Right: the menu, the page
     tools, then after a bar the reader: "Help" on a static site; the signed-in name with a small menu (my comments,
     help, sign out) when the comment server knows the reader (filled in by cycle.js). When space runs out
     (TOPBAR_JS), in this order: the menu folds into a menu button, the project name goes, the experiment goes, and
     finally the page title is cut from the right; the page title is what stays longest."""
-    segments = [f"<a class='home' href='{home_href(prefix)}' title='Home of this site'><img src='{prefix}_assets/kea-head-64.png' "
+    segments = [f"<a class='home' href='{prefix}explore.html' title='Home: the graph of every page'><img src='{prefix}_assets/kea-head-64.png' "
                 f"srcset='{prefix}_assets/kea-head-128.png 2x' alt='Home' width='24' height='24'></a>",
                 f"<span class='seg project'><span class='sep'>/</span><a class='project' href='{home_href(prefix)}'>"
                 f"{esc(SITE_TITLE)}</a></span>"]
@@ -551,8 +551,10 @@ SOLE_PROJECT = ""      # the experiment, when the project has only one: the site
 
 
 def home_href(prefix: str) -> str:
-    """The site's start: the project page, or with one experiment that experiment's page."""
-    return f"{prefix}{SOLE_PROJECT}/home.html" if SOLE_PROJECT else f"{prefix}index.html"
+    """The site's start page (Start in the crumbs, the project name in the menu bar): the project's front page
+    (start.html), or with one experiment that experiment's page. The site itself opens on the graph (index.html
+    sends readers to explore.html; the kea head links there)."""
+    return f"{prefix}{SOLE_PROJECT}/home.html" if SOLE_PROJECT else f"{prefix}start.html"
 
 
 def crumbs(trail: list[tuple[str, str | None]], prefix: str) -> str:
