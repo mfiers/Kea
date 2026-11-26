@@ -36,8 +36,10 @@ When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start
 5. **Watch.** Start `kea watch --deadline 3d` in the background at once, and respond when it exits (see Review
    cycle). Tell the user it is running, and until when.
 
-Then **stop**: ask the owner to read the questions and premises on the site and approve them (see "Pace"). Do not
-write hypotheses, plan steps or analyse anything yet.
+Then **stop** (see "Pace"). Under `pace: design` (the default) step 2 is the design round: from the owner's brief,
+the experiment page (the brief word for word under `## Brief`), its questions and premises, and for each question
+its hypotheses and planned steps; ask the owner to sign the design on the site, page by page. Under `pace: guided`
+write only the questions and premises and ask the owner to approve them. Either way, analyse nothing yet.
 
 ## One experiment, or more
 
@@ -46,17 +48,53 @@ bar; the project's title stays). `doc/_summary.md` is optional then, shown above
 it says more than the experiment's own summary. To add an experiment (when the owner asks, or approves a reader's
 "Propose ▸ an experiment"): `kea new experiment <name> --title "…"`, write its summary and scope, and in the same
 step `doc/_summary.md`, the project's summary across the experiments (`kea check` requires it from two
-experiments on); the site's start becomes the project page again, and no existing address changes. Under
-`pace: guided` a new experiment waits for approval (`approved:` on its home page) before questions go under it;
-when the owner gave the outline for the first experiment in chat, record that approval on its home page.
+experiments on); the site's start page lists the experiments again, and no existing address changes. Under
+`pace: design` a new experiment is designed whole from its brief (below); under `pace: guided` it waits for
+approval (`approved:` on its home page) before questions go under it; when the owner gave the outline for the first
+experiment in chat, record that approval on its home page.
 
-## Pace: one step along the route, then stop
+## Pace: brief, design, sign, execute, review (`pace: design`, Kea 1.33)
 
-Kea's route: experiment → questions (and premises) → hypotheses and planned steps → results → conclusions. Unless
-the owner explicitly asks you in this conversation to go further ("go ahead and run it", "do the whole question"),
-do **only the next step** for the page you are working from, write it as pages, build and publish the site, and
-**stop**: tell the owner which pages to read and what to approve, with the links. Never plan ahead or run ahead
-because the next step seems obvious; the owner reading each step is the point.
+Kea's route: experiment → questions (and premises) → hypotheses and planned steps → results → conclusions. Under
+`pace: design` (`kea.yaml`; the default of `kea init` since 1.33) one experiment takes two rounds of yours and two
+reviews of the owner's:
+
+1. **Brief (the owner).** In plain words, what the experiment is for and which questions they want answered: in
+   this conversation, or on the site (Propose ▸ an experiment, or a comment on the experiment page). Without a
+   brief, ask for one; do not invent the aim.
+2. **Design round (you, one round).** Put the brief word for word under `## Brief` on the experiment page (who
+   gave it, the date, where: chat or the thread), above it the experiment's summary and below it `## Scope`. Then
+   write the whole design: every question, the premises, the decisions of method, and for each question its
+   hypotheses (`prediction:`, `criterion:`, `fixed_before_results: true`; none for an exploratory question, which
+   says so) and planned steps (status `planned`, `tests:`, `relies_on:`, the script or Makefile target they will
+   run). Each formal page should trace back to the brief; say in the run entry where you went beyond it. While
+   designing, read the data's description, structure and size (columns, groups, n per group), never its outcomes:
+   no effect sizes, no plots of the response, no tests. **Commit the design**, build, publish and **stop**: ask
+   the owner to sign the design on the site, page by page, top down (Approve & next, or `n` on the graph).
+3. **Sign-off (the owner).** One Approve per page; the harvest writes them on the pages (`kea sign --pending`) and
+   puts "Next step: run the design of Q…" in the plan for every question whose design is now signed.
+4. **Execution round (you, at Implement).** Run every planned step whose design is signed (`kea context` says
+   which: the step, its question, the hypotheses it tests, what they rely on, and the experiment), reproducibly,
+   then write the results, figures and caveats, and **draft** the conclusions, the hypotheses' outcomes and the
+   answers in the same round. A step that fails, or has to deviate from its signed plan, stops its question only:
+   leave its results unwritten, record why (a decision page, or `kea change` on the step) and let the owner sign
+   the change; carry on with the other questions. A step that relies on a conclusion nobody has reviewed yet waits
+   for that review. Release, build, publish and **stop**.
+5. **Review (the owner).** Results first, then the conclusions built on them, page by page. This review holds back
+   only the pages that rely on what is reviewed (a step of another question that relies on a conclusion); the rest
+   goes on. Revise and Drop become plan items as usual.
+
+| Round | Write | Do not |
+| --- | --- | --- |
+| design | the brief verbatim, questions, premises, decisions, hypotheses fixed before results, planned steps, for the whole experiment | look at outcomes, run tests, write results or code beyond a sketch on the step page |
+| execution | results, figures, caveats, draft conclusions, outcomes, answers, for every question whose design is signed | run a step whose design is not signed; change a signed plan without saying so; start a question the brief did not ask |
+
+Never go further than the round you are in because the next one seems obvious, unless the owner says so in this
+conversation. A new question that comes up during execution is proposed (a question page, status open), not run:
+it goes through its own design sign-off.
+
+**`pace: guided`** (the default before 1.33; set it in `kea.yaml` when the owner wants it): one step along the
+route at a time, each reviewed before the next builds on it.
 
 | You are at | Do | Do not |
 | --- | --- | --- |
@@ -122,18 +160,28 @@ to clear this; never present a held branch as signed.
 Signatures made before 1.29 have no `content` and count, unbound; `kea sign --adopt` binds them to today's
 wording (only on the owner's word). `kea sign --list` shows every signature and whether it holds.
 
-With `pace: guided` in `kea.yaml` (the default of `kea init`) `kea check` enforces this: hypotheses or steps under an
-unapproved question, a step in progress or done without approval, and conclusions from unreviewed results are
-problems; premises, decisions and conclusions also wait for a sign-off (in the stage bundles, so a question costs
-about four clicks: question, plan, results, conclusions); a page changed after its sign-off waits again (a note). `kea context` starts with "Next step on the route": what to do now, or what waits for the owner.
-`pace: free` turns the gate off (only when the owner asks for it); even then, stop between steps unless told not to.
+`kea check` enforces the pace. Under `pace: design`: a step in progress whose design is not signed is a problem.
+The design of a step is the step, every page above it up to the experiment, the hypotheses it and its results test
+and every other live hypothesis of its question, the premises and decisions of the experiment, of its question and
+of the pages above it, the decisions applied in it, and what any of these relies on (for a conclusion, also its
+evidence). A step that is done is held to what it names itself and to the rest of its design as committed before
+its first result. A result made by no step, or by a step still planned or not signed, is a problem too. Unreviewed
+conclusions show as "draft · not reviewed", and an answer resting on them as a draft answer. Under `pace: guided`:
+hypotheses or steps under an unapproved question, a step in progress or done without approval, and conclusions
+from unreviewed results are problems. Under both, every page of these kinds waits for its own sign-off, and a page
+changed after its sign-off waits again (a note). Under every pace, a hypothesis with `fixed_before_results: true`
+must be committed before any result that tests it (same commit is not before): a problem under design, a note
+otherwise; if it was not, set `fixed_before_results: false` and label what rests on it exploratory. `kea context`
+starts with "Next step on the route": what to do now, or what waits for the owner. `pace: free` turns the gate off
+(only when the owner asks for it); even then, stop between rounds unless told not to.
 
 ## Working on a question (each analysis run)
 
 The tree holds what earlier runs established. Read it before adding to it. The steps below are the whole route
-for one question; under the pace rule (above) one run does only the step that is next, then stops for review:
-step 3 (with the step pages of step 4) is one stop, running the steps and writing results (4–5) the next, and
-concluding (6–8) the one after.
+for one question. Under `pace: design` the design round does steps 1–3 (with the step pages of step 4) for every
+question of the experiment, and the execution round does 4–8 (conclusions as drafts for the owner's review).
+Under `pace: guided` one run does only the step that is next: step 3 (with the step pages of step 4) is one stop,
+running the steps and writing results (4–5) the next, and concluding (6–8) the one after.
 
 1. **Choose.** `kea context <experiment>` lists every question with its state, the open caveats, the decisions in
    force, open comments and gaps. If the user did not name a question, propose one from this list.
@@ -424,7 +472,9 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
      answers, the kind of change and the proposed version (front matter `version:`).
    - Add the next step on the route as an item for every stage that is now signed and whose next step is yours
      (`kea context <question>` and Progress → Claude's next steps name them): "Next step: plan the steps for Q1",
-     "Next step: run the plan of Q2 (S1–S3), then its results". One step per question, as in the pace table.
+     "Next step: run the plan of Q2 (S1–S3), then its results". Under `pace: design`: one item for the design round
+     after a brief, one item per question whose design is now signed ("Next step: run the design of Q2: S1–S3,
+     results, draft conclusions"); under `pace: guided`, one step per question, as in its table.
      Pages with an older open `go` thread (Approve & go, 1.28-1.30) count as a request for that step.
    - Reply to each thread with its item (`kea reply <thread> "…" --status planned`), commit, run `kea cycle
      plan-updated --commit <sha>` (always, also when nothing was new: it ends the harvest), `make site` (and
@@ -433,7 +483,7 @@ answers a comment; write `doc/_changes/<id>.md` (asked, found, changed, correcti
 3. **Implement (exit 20):** a PI pressed Implement (only possible after a harvest); comments made after the
    harvest are not in the plan and stay for the next cycle. Exit 20: run `kea cycle start` and `make site`, then implement every item. Suggested edits:
    `kea apply-suggestion <thread>`, then check every number against its source and commit with the reader as
-   co-author. A next-step item: do that one step, as in the pace table; tell readers what you are doing as you go
+   co-author. A next-step item: do that round or step, as in the pace tables; tell readers what you are doing as you go
    (`kea progress "running S2: 3 of 8 donors"`; it shows on Progress and the plan page). After the changes, work
    through `kea recheck --list` (see "The graph as a whole") before the release. Never implement before Implement
    unless the owner asks in chat; do nothing the plan does not list.

@@ -772,10 +772,10 @@
     const signing = new Set((window.keaStatus && window.keaStatus.signing) || []);
     for (const pill of document.querySelectorAll(".pill.s-waiting[data-key], .pill.s-signing[data-key]")) {
       const signed = signing.has(pill.dataset.key);
-      if (!pill.dataset.built) pill.dataset.built = pill.title;
+      if (!pill.dataset.built) { pill.dataset.built = pill.title; pill.dataset.builtText = pill.textContent; }
       pill.classList.toggle("s-waiting", !signed);
       pill.classList.toggle("s-signing", signed);
-      pill.textContent = signed ? "signed · waits for Harvest" : "waiting for approval";
+      pill.textContent = signed ? "signed · waits for Harvest" : pill.dataset.builtText;
       pill.title = signed ? "Approved on the site; Claude writes the sign-off onto the page at the next Harvest" : pill.dataset.built;
     }
     for (const chip of document.querySelectorAll(".qstrip a.st[data-key]")) chip.classList.toggle("st-signing", signing.has(chip.dataset.key));

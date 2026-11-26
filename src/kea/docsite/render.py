@@ -260,7 +260,12 @@ def status_pill(node: Node) -> str:
         html += (" " if html else "") + ("<span class='pill s-exploratory' title='Exploratory: the analysis was chosen "
                                          "after earlier results were seen; it suggests, and needs new data to confirm'>"
                                          "exploratory</span>")
-    if node.waiting:                 # pace: guided, the owner has not approved it yet (graph.py)
+    if node.waiting and node.type == "conclusion" and not node.header.get("approved"):
+        # never reviewed: a draft, written with its results (pace: design) or after them; no claim yet
+        html += (" " if html else "") + (f"<span class='pill s-waiting s-draft' data-key='{esc(node.key)}' title='A draft "
+                                         "conclusion: not yet reviewed by the owner. It is no claim of this analysis "
+                                         "until it is signed; read its results first'>draft · not reviewed</span>")
+    elif node.waiting:               # pace: design or guided, the owner has not approved it yet (graph.py)
         html += (" " if html else "") + (f"<span class='pill s-waiting' data-key='{esc(node.key)}' title='Waiting for approval: the next step "
                                          "builds on this page only after the owner approves it (Approve in the page "
                                          "menu)'>waiting for approval</span>")      # kea.js: live when approved

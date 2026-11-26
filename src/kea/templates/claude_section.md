@@ -9,8 +9,12 @@
   (`SITE_PASSWORD` in `.env`, never printed or committed). With a Kea hub (`remote:` in kea.yaml,
   `KEA_REMOTE_KEY` in .env): `kea publish` after every build; data files up to 10 kB go up unless flagged
   (identifiers, opaque formats); ask the owner before larger ones go up (`kea publish --files`).
-- Pace: one step along the route, then stop for the owner's review (experiment → questions → hypotheses and
-  planned steps → results → conclusions); go further only when the owner says so in chat or the step is an item of the plan being implemented.
+- Pace (`pace: design`): the owner's brief → the design round (the brief verbatim under `## Brief` on the experiment
+  page, then every question, premise, decision, hypothesis fixed before results and planned step; outcomes unseen;
+  committed) → stop for the owner's sign-off, page by page → the execution round at Implement (every step whose design
+  is signed; results, figures, caveats, draft conclusions) → stop for the owner's review, which holds back only what
+  relies on it. A failed or changed step stops its question only. Under `pace: guided`: one step along the route,
+  then stop. Go further only when the owner says so in chat or the step is an item of the plan being implemented.
   Sign-offs go on the page with `kea sign` (never by hand): bound to the wording signed; minor edits with `kea sign <id> --minor --because …`; `kea context` names the next step.
 - Before working on a question: `kea context <question>` (premises, decisions in force, caveats, evidence so far,
   open comments, gaps); fix hypotheses (`fixed_before_results: true`) and commit them before the test runs; after

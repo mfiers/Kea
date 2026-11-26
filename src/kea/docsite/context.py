@@ -120,18 +120,25 @@ def gaps_for_question(tree: Tree, question: Node, hypotheses, results, conclusio
     return gaps
 
 
-PACE_NOTE = ("pace: guided — do this one step, then stop: tell the owner what to review on the site and wait. "
-             "Go further only when the owner says so in this conversation.")
+PACE_NOTE = {
+    "guided": "pace: guided — do this one step, then stop: tell the owner what to review on the site and wait. "
+              "Go further only when the owner says so in this conversation.",
+    "design": "pace: design — two rounds, each ending in a stop: the design round writes the whole experiment from "
+              "the owner's brief (questions, premises, decisions, hypotheses, planned steps) and stops for the "
+              "sign-off; the execution round runs every step whose design is signed and writes results, figures, "
+              "caveats and draft conclusions, then stops for review. The owner's review of results and conclusions "
+              "holds back only the pages that rely on them. Go further only when the owner says so in this "
+              "conversation or the step is an item of the plan being implemented."}
 
 
 def pace_lines(tree: Tree, project: str, question_number: str = "") -> list[str]:
     from kea.docsite import graph
-    if tree.pace != "guided":
+    if not graph.signs(tree):
         return []
     found = graph.next_steps(tree, project)
     if question_number:
         found = [item for item in found if item.startswith(question_number + ":")] or found
-    return [f"- {item}" for item in found] + ["", PACE_NOTE]
+    return [f"- {item}" for item in found] + ["", PACE_NOTE[tree.pace]]
 
 
 def question_context(tree: Tree, question: Node) -> str:
@@ -158,7 +165,7 @@ def question_context(tree: Tree, question: Node) -> str:
         ("Open reader comments on these pages", open_threads(keys | {node.key for node in caveats})),
         ("Gaps", [f"- {gap}" for gap in gaps_for_question(tree, question, hypotheses, results, conclusions)]),
     ]
-    if tree.pace == "guided":
+    if pace_lines(tree, question.project):
         sections.insert(0, ("Next step on the route", pace_lines(tree, question.project, question.number)))
     for heading, lines in sections:
         out += [f"## {heading}", ""] + (lines or ["- none"]) + [""]
@@ -191,7 +198,7 @@ def experiment_context(tree: Tree, project: str) -> str:
                              if key in keys]),
                            ("Open reader comments", open_threads(keys)),
                            ("Gaps", [f"- {gap}" for gap in gaps]),
-                           *([("Next step on the route", pace_lines(tree, project))] if tree.pace == "guided" else [])]:
+                           *([("Next step on the route", pace_lines(tree, project))] if pace_lines(tree, project) else [])]:
         out += ["", f"## {heading}", ""] + (lines or ["- none"])
     return "\n".join(out) + "\n"
 

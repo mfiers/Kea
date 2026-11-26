@@ -59,7 +59,8 @@ def new_experiment(argv: list[str]) -> int:
     if others and not (doc / "_summary.md").exists():
         print("The project now has more than one experiment: write doc/_summary.md (the project's summary, across "
               "the experiments); the site's start becomes the project page again.")
-    print("Write its summary and scope; with pace: guided it waits for the owner's approval before questions go under it.")
+    print("Write its summary and scope (under pace: design, from the owner's brief, with the whole design in the same "
+          "round; under pace: guided it waits for the owner's approval before questions go under it).")
     return 0
 
 
@@ -78,8 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     author_line = f"author: {args.author}\n" if args.author else "# author: Your Name   # title page of the PDF\n"
     _write_new(root / "kea.yaml", f"title: {title}\nheading: {title}\n{author_line}port: {args.port}\nhost: 127.0.0.1\n"
                                   "site_dir: report/site\nfeedback_dir: data/feedback\n"
-                                  "pace: guided   # one step along the route at a time, each reviewed before the next; "
-                                  "free = no gate\n", done)
+                                  "pace: design   # brief -> design (signed) -> execution -> review; guided = one step at a "
+                                  "time, each reviewed before the next; free = no gate\n", done)
     _write_new(root / "doc" / "_schema.yaml", (TEMPLATES / "_schema.yaml").read_text(), done)
     for folder in ("_changes", "_cycles"):
         (root / "doc" / folder).mkdir(parents=True, exist_ok=True)

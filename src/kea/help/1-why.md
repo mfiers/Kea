@@ -2,7 +2,7 @@
 
 Break a data analysis into small, linked nodes: questions, hypotheses, steps, results, conclusions. You and your AI agent work through them one at a time, reviewing each before moving on.
 
-The agent reads the nodes that bear on a question, takes one step along the route, writes it back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.
+From the owner's brief the agent designs the experiment as pages (questions, hypotheses, planned steps) and stops; once the owner has signed the design, it runs it, writes the results and draft conclusions back as pages and stops for review. People read the pages as a website, comment on any sentence and approve or revise each step; the agent folds the comments in, release by release. The pages are Markdown files in the project's git repository; the site is static HTML, and a PDF of the same version is built beside it.
 
 ## Why
 
@@ -26,7 +26,7 @@ A page is also the right unit for an agent and for a reader. The agent works, is
 
 Claims linked to their evidence are not new: micropublications, discourse graphs, Octopus and nanopublications model them, and agent systems such as Kosmos keep a structured state of an analysis (see [Related work](https://github.com/mfiers/Kea/blob/main/doc/_site/related-work.md)). We found none of the following, combined, in those systems:
 
-- a person's approval at each step of the route before the agent builds on it (`pace: guided`);
+- a person's sign-off on the design (questions, hypotheses fixed before results, planned steps) before anything runs, and on the results and conclusions after (`pace: design`; or at each step, `pace: guided`);
 - hypotheses fixed before their test, recorded in the graph with the commit time as the record;
 - recheck flags that run downstream when a page upstream changes;
 - the agent's runs, change logs and review cycles tied to semantic versions of the whole graph;

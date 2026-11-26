@@ -63,7 +63,7 @@ Kea keeps its own word where no standard one fits: *premise* (no model above has
 
 We found none of the following, combined, in the systems above:
 
-- a person's approval at each step of the route before the agent builds on it (`pace: guided`);
+- a person's sign-off on the design (questions, hypotheses fixed before results, planned steps) before anything runs, and on the results and conclusions after (`pace: design`; or at each step, `pace: guided`);
 - hypotheses fixed before their test, recorded in the graph with the commit time as the record;
 - recheck flags that run downstream when a page upstream changes;
 - the agent's runs, change logs and review cycles tied to semantic versions of the whole graph;

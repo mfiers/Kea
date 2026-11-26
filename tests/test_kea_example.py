@@ -20,6 +20,10 @@ def test_init_and_build_example_project(tmp_path):
     for created in ("kea.yaml", "doc/_schema.yaml", "doc/first/experiment/home.md", ".env", "CLAUDE.md", "Makefile"):
         assert (project / created).exists(), created
     assert "SITE_PASSWORD=" in (project / ".env").read_text()
+    settings = (project / "kea.yaml").read_text()
+    assert "pace: design" in settings                                     # the default since 1.33
+    # a result without a step is refused under pace: design; this example exercises a signing pace's pages
+    (project / "kea.yaml").write_text(settings.replace("pace: design", "pace: guided"))
     again = run(["init", "--title", "Example"], project)                   # idempotent, never overwrites
     assert "kept" in again.stdout and (project / "CLAUDE.md").read_text().count("kea:start") == 1
     (project / "doc" / "first" / "result").mkdir()

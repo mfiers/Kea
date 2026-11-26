@@ -762,6 +762,11 @@ class SiteRenderer:
             _, results, conclusions = (questions.evidence(self.tree, node) if node.type == "question" else ([], [], []))
             basis = " ".join(node_link(item, prefix) for item in list(conclusions) + list(results))
             label = "Answer so far" if node.type == "question" else "So far"
+            drafts = [item for item in conclusions if item.waiting and not item.header.get("approved")]
+            if drafts:                    # the answer rests on conclusions nobody has reviewed yet: a draft too
+                label = "Draft answer"
+                basis += (f" <span class='pill s-waiting s-draft' title='Rests on conclusion(s) not yet reviewed by the "
+                          f"owner'>draft · {len(drafts)} conclusion(s) not reviewed</span>")
             parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>{label}</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
@@ -1223,9 +1228,14 @@ class SiteRenderer:
                  f"<div id='progress-live' class='progress-live not-annotatable' data-pages='{esc(json.dumps(hrefs))}'>"
                  "<p class='help'>The current step and Claude's session show here when the site is served with "
                  "comments.</p></div>"]
-        if tree.pace != "guided":
+        if not graph.signs(tree):
             parts.append("<p class='help not-annotatable'>This project runs with <code>pace: free</code>: no page waits "
                          "for a sign-off; Approve records a signature only.</p>")
+        elif tree.pace == "design":
+            parts.append("<p class='help not-annotatable'>Two rounds per experiment: Claude writes the whole design "
+                         "from your brief (questions, hypotheses, planned steps) and you sign it page by page; then "
+                         "Claude runs every step whose design is signed and writes the results and draft conclusions, "
+                         "which you review. Your review holds back only the pages that rely on them.</p>")
         order = lambda node: (node.project, self.ROUTE_ORDER.get(node.type, 9), natural(node.number or node.id))  # noqa: E731
         ready = sorted((node for node in tree.nodes.values() if not node.waiting and graph.go_action(tree, node)),
                        key=order)
@@ -1292,7 +1302,7 @@ class SiteRenderer:
             if not found:
                 parts.append("<p class='help'>No questions yet.</p>")
                 continue
-            free = tree.pace != "guided"
+            free = not graph.signs(tree)
             head = "".join(f"<th>{esc(label)}</th>" for index, (_, label) in enumerate(graph.STAGES) if not (free and index == 0))
             rows = []
             for question in found:

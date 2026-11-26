@@ -94,7 +94,7 @@ class Node:
     reasons: dict[str, str] = field(default_factory=dict)           # target key -> why the link holds (because:)
     incoming: dict[str, list[str]] = field(default_factory=dict)    # relation -> keys of nodes pointing here
     recheck: list[str] = field(default_factory=list)                # why to recheck it (graph.py), [] if not
-    waiting: bool = False                                           # waits for the owner's approval (pace: guided)
+    waiting: bool = False                                           # waits for the owner's approval (pace: design, guided)
     held_by: list[str] = field(default_factory=list)                # signed pages above it that no longer count (propagation.py)
     upstream_changed: list = field(default_factory=list)            # [(page key, hash when signed)]: changed since its sign-off
     chain_ok: bool = True                                           # its sign-off counts with what it was built on
@@ -167,7 +167,8 @@ class Tree:
     problems: list[str] = field(default_factory=list)   # errors: broken links, schema violations
     notes: list[str] = field(default_factory=list)      # warnings: links to projects without pages yet
     compromised: dict[str, list[str]] = field(default_factory=dict)   # key -> why to recheck it (graph.py)
-    pace: str = "free"                                   # kea.yaml pace: guided = one step at a time (graph.py)
+    pace: str = "free"                                   # kea.yaml pace: design / guided / free (graph.py)
+    doc_root: Path | None = None                         # the doc/ folder it was loaded from (graph.apply)
     retired: dict = field(default_factory=dict)          # key -> Node: pages with retired: (propagation.py)
 
     def resolve(self, target: str, project: str) -> Node | None:

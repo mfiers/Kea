@@ -49,10 +49,14 @@ def _propose(name: str, types: list[str], label: str, help_text: str, instructio
 # (experiment → question → hypothesis → step → result → conclusion, with premises, caveats and decisions).
 PROPOSALS: list[dict] = [
     _propose("propose-experiment", ["experiment", "project"], "an experiment",
-             "Another experiment for this project: what it would ask, and why it is not a question of this one",
+             "Another experiment for this project, as a brief: in plain words what it is for and which questions it "
+             "should answer",
              "a new experiment for this project (kea new experiment <name> --title …; its summary and scope; with "
-             "the second experiment also doc/_summary.md, the project's own summary). Under pace: guided it waits "
-             "for approval before questions go under it."),
+             "the second experiment also doc/_summary.md, the project's own summary). Under pace: design the "
+             "comment is the brief: copy it word for word under ## Brief on the experiment page (who, date, thread) "
+             "and write the whole design in the same item (questions, premises, decisions, hypotheses fixed before "
+             "results, planned steps), then stop for the sign-off. Under pace: guided it waits for approval before "
+             "questions go under it."),
     _propose("propose-question", ["experiment", "conclusion"], "a question",
              "A question this experiment should ask (or one this conclusion raises)",
              "a question (page type question, under the experiment; from a conclusion, link the conclusion in the text)."),
