@@ -215,7 +215,8 @@
           const text = area.value.trim();
           if (!text) { status.textContent = "Write your proposal first."; area.focus(); return; }
           const thread = await tagThread(selection, [tag.name], text);
-          if (thread) { done(); toast(heading ? "Saved: the revision is asked." : "Proposal saved: it goes into the next plan.", () => retag(thread.thread_id, [])); }
+          if (thread) { done(); toast(tag.name === "revise" ? "Saved: the revision is asked." : tag.name === "brief" ? "Brief saved: Claude reads it at the next Harvest."
+            : "Proposal saved: it goes into the next plan.", () => retag(thread.thread_id, [])); }
         } }, "Send"),
         el("button", { class: "fb-secondary", onclick: () => done() }, "Cancel"), status));
     setTimeout(() => area.focus(), 0);
@@ -301,7 +302,7 @@
       onmousedown: event => event.preventDefault(), onclick: () => quick(tag.name) }, tag.label || tag.name);
     selectBtn.querySelector(".fb-sel-next").replaceChildren(...tagsOf("review").map(chip));
     selectBtn.querySelector(".fb-ms-row").replaceChildren(...tagsOf("manuscript").map(chip));
-    const offered = proposals();
+    const offered = proposals().filter(tag => (tag.scope || "any") !== "page");   // the brief: whole page only
     selectBtn.querySelector(".fb-sel-propose").hidden = !offered.length;
     selectBtn.querySelector(".fb-pr-row").replaceChildren(...offered.map(tag => el("button", {
       class: "fb-qchip fb-tag-propose", title: tag.help || "", onmousedown: event => event.preventDefault(),
@@ -380,6 +381,36 @@
     const proposed = [...new Set(pageLevel().filter(thread => thread.status !== "marked")
       .flatMap(thread => thread.tags).filter(name => tagInfo(name).group === "propose"))];
     for (const name of proposed) add("fb-pp-propose", "proposed: " + tagInfo(name).label, "A reader proposed this; it goes into the next plan");
+  }
+
+  /* An experiment without questions (pages.py start_box): the brief, written in the box itself (tag brief), or the
+     brief already sent, waiting for the harvest. A form being typed in is left alone across reloads. */
+  function renderStart() {
+    const box = container && container.querySelector(".kea-start[data-propose]");
+    const slot = box && box.querySelector(".kea-start-act");
+    const tag = box && vocab.tags.find(item => item.name === box.dataset.propose);
+    if (!slot || !tag) return;
+    if (slot.querySelector(".fb-propose textarea")) return;
+    const sent = openThread(tag.name);
+    if (sent) {
+      slot.replaceChildren(
+        el("p", {}, el("b", {}, "Brief sent"), " by " + sent.author + (sent.created_at ? ", " + shortDate(sent.created_at) : "")
+          + ". Claude reads it at the next Harvest (menu bar) and writes the design when you press Implement."),
+        el("div", { class: "kea-start-sent" }, sent.text || ""),
+        el("p", { class: "fb-help" }, "To change or add to it: ",
+          el("a", { href: "#fb-" + sent.thread_id, onclick: event => { event.preventDefault(); openPanel(sent.thread_id); } },
+            "reply in its comment thread"), "."));
+      return;
+    }
+    if (readOnly) {
+      slot.replaceChildren(el("p", { class: "fb-help" }, "You can read this site but not comment here: ask the owner for the brief."));
+      return;
+    }
+    const label = box.dataset.label || "Write the brief";
+    const go = el("button", { class: "kea-start-go", type: "button", onclick: () => {
+      slot.replaceChildren(proposalForm(tag, null, () => { slot.replaceChildren(); renderStart(); }, label));
+    } }, label);
+    slot.replaceChildren(go);
   }
 
   /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
@@ -1322,6 +1353,7 @@
     if (selectBtn && !selectBtn.dataset.filled) fillSelectionBar();
     renderPageStrip();
     renderDock();
+    renderStart();
     drawHighlights();
     renderPanel();
   }

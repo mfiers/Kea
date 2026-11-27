@@ -673,7 +673,8 @@ def stage_action(tree: Tree, pages: list[Node]) -> str:
     return ""
 
 
-BRIEF_STEP = ("Next (design round): from the owner's brief (said in chat, or a Propose ▸ an experiment comment), "
+BRIEF_STEP = ("Next (design round): from the owner's brief (said in chat, or a comment tagged brief from the "
+              "Start here box on the experiment page, or a Propose ▸ an experiment comment), "
               "put the brief word for word under ## Brief on the experiment page (who, date), then write the design of "
               "the whole experiment: questions, premises, decisions, hypotheses (prediction, criterion, "
               "fixed_before_results: true) and planned steps; read the data's description and structure, never its "

@@ -60,8 +60,9 @@ Kea's route: experiment → questions (and premises) → hypotheses and planned 
 reviews of the owner's:
 
 1. **Brief (the owner).** In plain words, what the experiment is for and which questions they want answered: in
-   this conversation, or on the site (Propose ▸ an experiment, or a comment on the experiment page). Without a
-   brief, ask for one; do not invent the aim.
+   this conversation, or on the site: an experiment without questions shows a "Start here: write the brief" box
+   that sends a comment tagged `brief` (or Propose ▸ an experiment, for a new one). Without a brief, ask for one;
+   do not invent the aim.
 2. **Design round (you, one round).** Put the brief word for word under `## Brief` on the experiment page (who
    gave it, the date, where: chat or the thread), above it the experiment's summary and below it `## Scope`. Then
    write the whole design: every question, the premises, the decisions of method, and for each question its

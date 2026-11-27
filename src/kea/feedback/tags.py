@@ -48,6 +48,19 @@ def _propose(name: str, types: list[str], label: str, help_text: str, instructio
 # What a reader may propose on each page type: the next step along Kea's reasoning route
 # (experiment → question → hypothesis → step → result → conclusion, with premises, caveats and decisions).
 PROPOSALS: list[dict] = [
+    # the brief: the start of an experiment that has no questions yet (the "Start here" box on its page, Kea 1.33.1)
+    {"name": "brief", "group": "propose", "task": True, "types": ["experiment"], "label": "the brief",
+     "scope": "page", "needs_text": True,
+     "help": "In plain words: what this experiment should find out, which questions it asks, and the data if you "
+             "know it",
+     "instruction": "This is the brief for this experiment. Take it into the next plan as one item: copy it word "
+                    "for word under ## Brief on this experiment page (who, date, thread; a later brief is added "
+                    "under the earlier one, which stays). Under pace: design, write the whole design in the same "
+                    "item (questions, premises, decisions, hypotheses with prediction, criterion and "
+                    "fixed_before_results: true, planned steps; read the data's description, never its outcomes), "
+                    "commit, then stop for the sign-off. Under pace: guided, propose the questions and premises and "
+                    "stop for review. Under pace: free, write the questions. Ask in the reply where the brief is "
+                    "unclear rather than guess. Name the reader in the reply."},
     _propose("propose-experiment", ["experiment", "project"], "an experiment",
              "Another experiment for this project, as a brief: in plain words what it is for and which questions it "
              "should answer",

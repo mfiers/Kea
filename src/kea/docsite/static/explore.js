@@ -173,7 +173,7 @@
       }
       if (!bands.some((band) => band.experiment === projectKey) && !nodes.some((node) => LIBRARY.has(node.type))) {
         add({ id: project + "#empty", kind: "across", nodes: [],
-          lead: pseudo(project + "#empty", "—", "No pages yet", "The experiment has no questions or other pages yet") });
+          lead: pseudo(project + "#empty", "▶", "Start here: write the brief", "No questions yet: Space opens the experiment page, where you write the brief") });
       }
       const library = nodes.filter((node) => LIBRARY.has(node.type));
       if (library.length) {
@@ -379,6 +379,7 @@
       if (GONE.has(node.status)) classes.push("gone");
       if (node.depth) classes.push("sub");
       if (node.pseudo) classes.push("fold");
+      if (node.pseudo && node.key.endsWith("#empty")) classes.push("start");
       item = el("button", { class: classes.join(" "), type: "button", "data-key": node.key, tabindex: "-1", "aria-label": aria,
         title: (node.short || node.title) + (state(node) ? "\n" + state(node) : ""),
         style: `left:${place.x}px;top:${place.y}px;width:${place.w}px;height:${place.h}px;--c:${colour}` },
@@ -503,7 +504,8 @@
     const keys = (...list) => list.map((key) => el("span", { class: "k" }, key));
     if (node.type === "experiment" || node.pseudo) {
       tip.replaceChildren(el("b", {}, node.title), node.short ? " · " + node.short : "", el("br"),
-        el("span", { class: "why" }, node.pseudo ? "Space or o folds and opens this band" : "Space opens the experiment page"), " ", ...keys("?"));
+        el("span", { class: "why" }, node.pseudo && node.key.endsWith("#empty") ? "Space opens the experiment page"
+          : node.pseudo ? "Space or o folds and opens this band" : "Space opens the experiment page"), " ", ...keys("?"));
       return;
     }
     tip.replaceChildren(
@@ -620,6 +622,7 @@
   function activate(key) {
     const node = byKey[key];
     if (!node) return;
+    if (node.pseudo && node.key.endsWith("#empty")) { openZoom(node.band.experiment); return; }   // Start here: the brief
     if (node.pseudo) { toggleFold(node.band); return; }
     openZoom(key);
   }

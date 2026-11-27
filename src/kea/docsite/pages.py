@@ -601,6 +601,49 @@ class SiteRenderer:
                          self.questions_html(node.project, prefix, context, heading=False)))
         return tabs
 
+    def start_box(self, node: Node) -> str:
+        """On an experiment page without questions: "Start here", the brief and the route it starts ('' once the
+        experiment has a question). With the comment layer (feedback.js renderStart) the reader writes the brief in
+        the box itself (tag ``brief``, tags.py) or sees the one already sent; without it, the box says to tell Claude
+        in chat. The words follow the pace (kea.yaml)."""
+        if questions.questions(self.tree, node.project):
+            return ""
+        given = bool(re.search(r"^#{2,3}\s+Brief\b", node.body, flags=re.M | re.I))
+        if self.tree.pace == "design":
+            steps = [("Brief", "you say in plain words what this experiment should find out and which questions it "
+                               "asks"),
+                     ("Design", "Claude writes the questions, premises, hypotheses and planned steps, without looking "
+                                "at any outcome"),
+                     ("Sign", "you sign the design, page by page"),
+                     ("Execute", "Claude runs every step whose design is signed"),
+                     ("Review", "you review the results and conclusions")]
+        elif graph.signs(self.tree):
+            steps = [("Brief", "you say in plain words what this experiment should find out"),
+                     ("Questions", "Claude proposes the questions and premises; you sign them"),
+                     ("Plan", "per question, the hypotheses and planned steps; you sign them"),
+                     ("Results", "Claude runs the signed steps; you review the results"),
+                     ("Conclusions", "Claude draws conclusions; you review them")]
+        else:
+            steps = [("Brief", "you say in plain words what this experiment should find out"),
+                     ("Questions", "Claude writes the questions, hypotheses and steps and works through them"),
+                     ("Review", "you read and comment along the way")]
+        route = "".join(f"<li><b>{esc(name)}</b> {esc(text)}</li>" for name, text in steps)
+        if given:
+            heading = "The brief is given: the design comes next"
+            lead = ("The brief is on this page. Claude writes the design from it in the next round: press Harvest in "
+                    "the menu bar, then Implement once the plan is written. To add to the brief, write below.")
+            action = "Add to the brief"
+        else:
+            heading = "Start here: write the brief"
+            lead = ("This experiment has no questions yet. Say in a few sentences, in plain words, what it should find "
+                    "out and which questions it asks; name the data if you know it. Claude keeps your words as they "
+                    "are on this page and builds the rest from them.")
+            action = "Write the brief"
+        return (f"<section class='kea-start not-annotatable' data-propose='brief' data-label='{esc(action)}'>"
+                f"<h2>{esc(heading)}</h2><p>{esc(lead)}</p><ol class='kea-start-route'>{route}</ol>"
+                "<div class='kea-start-act'><p class='help'>On the site with comments (signed in), you write the brief "
+                "right here. Or tell Claude in chat.</p></div></section>")
+
     def questions_html(self, project: str, prefix: str, context: LinkContext, heading: bool = True) -> str:
         """On an experiment page: each question as a heading, its answer, and links to its conclusions (their text
         is on their own pages: the answer already says it)."""
@@ -688,6 +731,8 @@ class SiteRenderer:
         # the page's own content (title, summary, text, its figure) in a frame in the type's colour; what Kea knows
         # about the page (sources, pages below, connections, versions, comments) follows under "Metadata"
         parts = [crumbs(self.trail(node, prefix), prefix), whereami.strip_html(self.tree, node, prefix),
+                 # an experiment without questions: "Start here", the brief, above everything else (start_box)
+                 self.start_box(node) if node.type == "experiment" and node.id == "home" else "",
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"

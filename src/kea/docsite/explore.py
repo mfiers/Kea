@@ -190,6 +190,7 @@ body.xg-zoomed .xg-tip,body.xg-zoomed .xg-mini{display:none}
 .xg-node.gone{opacity:.5}.xg-node.gone .tt{text-decoration:line-through}
 .xg-node.sub .tg{box-shadow:inset 4px 0 0 rgba(255,255,255,.55)}
 .xg-node.fold .tg{background:#5d6475}
+.xg-node.fold.start{background:#e3f4f2;outline:2px solid #4fb3a9;outline-offset:-2px}.xg-node.fold.start .tg{background:#00695c!important}.xg-node.fold.start .tt{color:#00564d;font-weight:700}
 .xg-exp{position:absolute;border:0;border-radius:9px;background:#333;color:#fff;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
 .xg-exp span{writing-mode:vertical-rl;transform:rotate(180deg);font:600 13px/1 system-ui,sans-serif;letter-spacing:.05em;white-space:nowrap;
  overflow:hidden;text-overflow:ellipsis;max-height:calc(100% - 16px)}
