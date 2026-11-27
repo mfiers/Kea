@@ -81,10 +81,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
-from kea.feedback import accounts, agent, cycle, landing, server, store
+from kea.feedback import accounts, agent, cycle, landing, mcp, server, store
 
 LOGO_FILE = Path(__file__).resolve().parent.parent / "docsite" / "static" / "kea-head-128.png"
 
@@ -524,7 +525,7 @@ class HubApp:
             await self.route(scope, receive, watched_send)
         finally:
             method = scope.get("method", "")
-            path = scope.get("path", "")
+            path = re.sub(r"^/mcp/[^/]+", "/mcp/…", scope.get("path", ""))     # a link is a secret: never logged
             if self.log_level == "requests" or (method not in ("GET", "HEAD") and "/hub/" not in path):
                 host = Request(scope).headers.get("host", "").split(":")[0]
                 client = (scope.get("client") or ("?",))[0]
@@ -606,6 +607,9 @@ class HubApp:
                 await waiting(scope, receive, send)
                 return
             await self.site_app(name)(scope, receive, send)
+            return
+        if path.startswith("/mcp/"):
+            await (await self.mcp_api(path[len("/mcp/"):], Request(scope, receive)))(scope, receive, send)
             return
         if path in ("/auth/login", "/auth/orcid/callback", "/auth/check", "/auth/logout"):
             await (await self.apex_auth(path, Request(scope, receive)))(scope, receive, send)
@@ -911,6 +915,31 @@ class HubApp:
                                  "url": f"{self.hub.site_url(name)}/{entry.get('url', '')}"})
         return RedirectResponse(f"{self.hub.site_url(name)}/id/{rest}", status_code=308)
 
+    async def mcp_api(self, token: str, request: Request) -> Response:
+        """<hub>/mcp/<token>: a personal MCP link (kea.feedback.mcp), streamable HTTP, stateless, JSON answers."""
+        link = mcp.Links(self.hub.folder).find(token.strip("/"))
+        if link is None:
+            log.info("MCP link refused (%s)", (request.client.host if request.client else "?"))
+            return JSONResponse({"error": "unknown or expired link"}, status_code=404)
+        if request.method != "POST":
+            return PlainTextResponse("POST JSON-RPC here (MCP streamable HTTP)", status_code=405,
+                                     headers={"Allow": "POST"})
+        try:
+            body = json.loads(await request.body() or b"null")
+        except ValueError:
+            return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}},
+                                status_code=400)
+        version = _version()
+        if isinstance(body, list):
+            answers = [answer for message in body
+                       if (answer := await run_in_threadpool(mcp.handle, self.hub, link, message, version))]
+            return JSONResponse(answers) if answers else Response(status_code=202)
+        answer = await run_in_threadpool(mcp.handle, self.hub, link, body, version)
+        if isinstance(body, dict) and body.get("method") == "tools/call":
+            log.info("MCP %s %s by link %s", (body.get("params") or {}).get("name"),
+                     ((body.get("params") or {}).get("arguments") or {}).get("project", ""), link.get("id"))
+        return JSONResponse(answer) if answer else Response(status_code=202)
+
     # ---- agent API ----
     def authorised(self, name: str, request: Request) -> bool:
         header = request.headers.get("authorization", "")
@@ -1137,6 +1166,15 @@ def main(argv: list[str] | None = None) -> int:
                        help="auditor (reads), reviewer (comments), pi (also harvest, implement), director; the old "
                             "names reader, commenter, steerer, owner still work")
     users.add_argument("--project", default="*", help="a project name, or * for all projects")
+    links = sub.add_parser("mcp", help="personal MCP links (Claude, voice): add, list, revoke")
+    links.add_argument("action", choices=["add", "list", "revoke"])
+    links.add_argument("link_id", nargs="?", default="", help="revoke: the link's id (from list)")
+    links.add_argument("--orcid", default="", help="the ORCID account the link acts for (its roles apply)")
+    links.add_argument("--name", default="", help="without ORCID: the name signatures and comments carry")
+    links.add_argument("--projects", default="", help="without ORCID: comma-separated projects the link opens")
+    links.add_argument("--sign", action="store_true", help="also sign pages and leave comments (default: read only)")
+    links.add_argument("--label", default="", help="a word to recognise the link by (phone, voice)")
+    links.add_argument("--days", type=int, default=90)
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8300)
@@ -1196,6 +1234,30 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error(f"no project {args.project!r}")
             book.approve(args.orcid, args.role, args.project, by=store_author())
         print(json.dumps({args.orcid: book.users()[args.orcid]}, indent=1))
+        return 0
+    if args.command == "mcp":
+        book = mcp.Links(hub.folder)
+        if args.action == "list":
+            for entry in book.all().values():
+                who = entry.get("orcid") or f"{entry.get('name')} on {', '.join(entry.get('projects') or [])}"
+                print(f"{entry['id']}  {entry.get('label', ''):10} {'sign' if entry.get('sign') else 'read'}  {who}  "
+                      f"until {entry.get('expires', '')[:10]}")
+            return 0
+        if args.action == "revoke":
+            print("revoked" if book.revoke(args.link_id) else f"no link {args.link_id!r}")
+            return 0
+        projects = [name.strip() for name in args.projects.split(",") if name.strip()]
+        if bool(args.orcid) == bool(projects):
+            parser.error("give --orcid, or --name with --projects")
+        if projects and not args.name:
+            parser.error("--projects needs --name (what signatures and comments carry)")
+        for name in projects:
+            if hub.config(name) is None:
+                parser.error(f"no project {name!r}")
+        token, entry = book.add(args.label, args.sign, args.days, orcid=args.orcid, name=args.name, projects=projects)
+        print(f"MCP link {entry['id']} ({'signs and comments' if args.sign else 'reads only'}, until "
+              f"{entry['expires'][:10]}); shown once, keep it like a password:\n  {url.rstrip('/')}/mcp/{token}\n"
+              "claude.ai: Settings → Connectors → Add custom connector → paste the link (no OAuth).")
         return 0
     if args.command == "passwords":
         if not (args.site or args.iteration):
