@@ -100,10 +100,11 @@ padding:12px 16px;margin-top:26px;font-size:14px}.waiting .owner code{background
 footer{color:var(--muted);font-size:12.5px;margin-top:36px}
 @media (max-width:640px){
  .hero{flex-direction:column;align-items:flex-start;gap:14px}.hero img{width:84px;height:84px}.hero h1{font-size:25px}
- .topbar .domain{display:none}main{padding:20px 16px 40px}th,td{padding:8px 7px}table{font-size:13.5px}
+ .topbar .domain{display:none}.topbar{gap:8px;padding:8px 12px}.topbar .version{margin-left:0}.topbar .right{gap:10px}.topbar .brand{white-space:nowrap}main{padding:20px 16px 40px}th,td{padding:8px 7px}table{font-size:13.5px}
  td .sub{font-size:12px}th{font-size:11px}
  .orcid-button{display:flex;justify-content:center}
 }
+@media (max-width:400px){.topbar .version{display:none}}
 """
 
 

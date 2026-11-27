@@ -31,7 +31,7 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .topbar{background:#1d2330;color:#fff;padding:7px 18px;font-size:14px;display:flex;gap:14px;flex-wrap:nowrap;
 align-items:center;position:relative}
 .topbar a{color:#dfe6f2}
-.topbar .trail{display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden}
+.topbar .trail{display:flex;align-items:center;gap:7px;min-width:28px;flex:1 1 auto;white-space:nowrap;overflow:hidden}
 .topbar .seg{display:inline-flex;align-items:center;gap:7px;min-width:0;flex:0 0 auto}
 .topbar .seg.here{flex:1 1 auto}
 .topbar .sep{color:#6f7a8e}.topbar .home{font-weight:800;color:#fff;letter-spacing:.02em;flex:0 0 auto}
@@ -747,7 +747,7 @@ def callouts(text: str) -> str:
 
 
 HEADING_LINK = re.compile(r"^(#{2,6})[ \t]+\[\[([^\]|]+)\]\][ \t]*:?[ \t]*$", re.M)
-TAGLINE_ITEM = re.compile(r"<li><a class='tag (t-[\w-]+)' href='([^']*)' title='([^']*)'>(.*?)</a>"
+TAGLINE_ITEM = re.compile(r"<li><a class='tag (t-[\w-]+)' href='([^']*)' title='([^']*)'>((?:(?!</?a\b).)*?)</a>"
                           r"((?:(?!</?(?:a|ul|ol|li|p)\b)[^<]|<(?!/?(?:a|ul|ol|li|p)\b)[^>]*>)*)</li>")
 TAGLINE_MAX = 220      # characters of text after the tag: longer items are summaries, where only the tag links
 
