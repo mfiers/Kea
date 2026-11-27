@@ -218,7 +218,7 @@ h2 .count{font:600 12px system-ui,sans-serif;color:var(--muted);background:var(-
 .tab-panel>section.about:first-child h2,.tab-panel>section:first-child>h2:first-child{margin-top:6px}
 .js table.nodes tr.pg-off{display:none!important}.kind-filter{margin:8px 0 2px}
 /* a page shown inside the graph view's zoom (explore.js): only the page, no menu bar, crumbs, strips or corner plan */
-.kea-embed .topbar,.kea-embed .kindbar,.kea-embed nav.crumbs,.kea-embed .qstrip,.kea-embed .kea-thumb,.kea-embed .kea-stepbar{display:none!important}
+.kea-embed .topbar,.kea-embed .kindbar,.kea-embed nav.crumbs,.kea-embed .qstrip,.kea-embed .kea-thumb,.kea-embed .kea-stepbar,.kea-embed .fb-banner{display:none!important}
 .kea-embed body.has-kindbar{padding-left:0}.kea-embed main{padding-top:18px}.kea-embed{scroll-padding-top:12px}
 @media print{.js .tab-panel:not(.on){display:block}.sep-tab:not(.on){display:none}.tab-panel:not(.on)::before{content:attr(data-label);display:block;font:700 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;border-top:3px solid var(--kc,#556);margin-top:24px;padding-top:4px}.obj-pager,.kind-filter{display:none}.js table.nodes tr.pg-off{display:table-row!important}}
 """
