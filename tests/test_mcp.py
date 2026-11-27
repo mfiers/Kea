@@ -33,7 +33,11 @@ def published(tmp_path):
     client = TestClient(hub.HubApp(the_hub), base_url="https://testserver")
     archive = make_bundle({"site/index.html": "<html></html>", "site/_graph.json": json.dumps(GRAPH),
                            "site/_ids.json": json.dumps(IDS), "meta.json": "{}",
-                           "doc/x/question/q-a.md": "---\nid: q-a\n---\nWe ask whether it works.\n"})
+                           "doc/x/question/q-a.md": "---\nid: q-a\n---\nWe ask whether it works.\n",
+                           "site/x/q-a.html": "<html><section id='design-sign' class='kea-design' data-question='x:q-a' "
+                                              "data-signs='x:p-a@v1p, x:q-a@v1q' data-count='2' "
+                                              "data-label='Sign this design (2 pages)' data-after=''></section></html>",
+                           "site/x/p-a.html": "<html>nothing to sign</html>"})
     headers = {**agent_headers(secrets["key"]), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()}
     assert client.post("/p/demo/hub/lease", headers=agent_headers(secrets["key"]), json={"host": "h"}).status_code == 200
     assert client.post("/p/demo/hub/publish", content=archive, headers=headers).status_code == 200
@@ -131,3 +135,23 @@ def test_a_reviewer_may_propose_but_not_press_harvest(tmp_path):
     text, failed = call(client, token, "start_harvest", project="demo", confirmed=True)
     assert failed and "PI" in text
     assert call(client, token, "sign_page", project="demo", page="Q1", version="v1q", confirmed=True)[1] is True
+
+
+def test_one_questions_design_in_one_go_as_the_site_button(tmp_path):
+    from kea.docsite import signing
+    the_hub, client = published(tmp_path)
+    token, _ = mcp.Links(the_hub.folder).add("phone", True, 30, name="Mark", projects=["demo"])
+    events = the_hub.feedback("demo") / "events.jsonl"
+    assert call(client, token, "sign_question_design", project="demo", page="P1")[1] is True       # not a question
+    text, failed = call(client, token, "sign_question_design", project="demo", page="Q1")
+    assert not failed and "2 pages" in text and "P1 (premise)" in text and store.threads(events) == []
+    check = text.split("design_check=")[1].rstrip(".")
+    assert call(client, token, "sign_question_design", project="demo", page="Q1", confirmed=True,
+                design_check="00000000")[1] is True
+    assert store.threads(events) == []
+    text, failed = call(client, token, "sign_question_design", project="demo", page="Q1", confirmed=True,
+                        design_check=check)
+    assert not failed and "Approved the design" in text
+    thread = store.threads(events)[0]
+    assert thread.page == "x:q-a" and thread.tags == ["approve"]
+    assert signing.parse_signs(thread.text) == [("x:p-a", "v1p"), ("x:q-a", "v1q")]
