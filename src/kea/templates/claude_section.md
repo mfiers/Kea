@@ -11,7 +11,7 @@
   (identifiers, opaque formats); ask the owner before larger ones go up (`kea publish --files`).
 - Pace (`pace: design`): the owner's brief → the design round (the brief verbatim under `## Brief` on the experiment
   page, then every question, premise, decision, hypothesis fixed before results and planned step; outcomes unseen;
-  committed) → stop for the owner's sign-off, page by page → the execution round at Implement (every step whose design
+  committed) → stop for the owner's sign-off (per question with "Sign this design", or page by page) → the execution round at Implement (every step whose design
   is signed; results, figures, caveats, draft conclusions) → stop for the owner's review, which holds back only what
   relies on it. A failed or changed step stops its question only. Under `pace: guided`: one step along the route,
   then stop. Go further only when the owner says so in chat or the step is an item of the plan being implemented.

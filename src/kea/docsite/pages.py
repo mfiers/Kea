@@ -644,6 +644,95 @@ class SiteRenderer:
                 "<div class='kea-start-act'><p class='help'>On the site with comments (signed in), you write the brief "
                 "right here. Or tell Claude in chat.</p></div></section>")
 
+    def design_banner(self, node: Node) -> str:
+        """Atop a question's page under pace: design, while its design waits: how many pages, and a link down to
+        the review ('' otherwise)."""
+        pages = graph.question_design(self.tree, node) if node.type == "question" else []
+        if not pages:
+            return ""
+        return (f"<div class='kea-design-banner not-annotatable'><b>This question's design waits for your signature: "
+                f"{len(pages)} page{'s' if len(pages) != 1 else ''}.</b> <a href='#design-sign'>Review and sign it ↓</a>"
+                "</div>")
+
+    def design_sign_html(self, node: Node, prefix: str, context: LinkContext) -> str:
+        """pace: design, on a question's page: every page of its design that waits (graph.question_design), in full
+        (title, summary, every signed field and link, text), and one button that signs exactly these pages, each
+        bound to the version shown (feedback.js renderDesignSign: an Approve thread on the question with a
+        'Signs: key@version, …' line; kea sign --pending writes each signature with batch: <question>)."""
+        from kea.docsite import identity
+        pages, needed, _ = graph.question_design_parts(self.tree, node)
+        if not pages:
+            return ""
+
+        def page_ref(project: str, key) -> str:
+            other = self.tree.nodes.get(str(key)) or self.tree.nodes.get(f"{project}:{key}")
+            return node_link(other, prefix) if other is not None else esc(str(key))
+
+        def extra(value: dict) -> str:        # what a link says besides its target (because: …): signed, so shown
+            rest = {key: item for key, item in value.items() if key != "id"}
+            return (" — " + "; ".join(f"{esc(key.replace('_', ' '))}: {esc(item if isinstance(item, str) else json.dumps(item, ensure_ascii=False))}"
+                                      for key, item in rest.items())) if rest else ""
+        blocks = []
+        for item in pages:
+            # every field that the signature covers (signing.signed_part), so nothing is signed that is not shown:
+            # title and summary in the heading, the text below, all else here
+            header, _ = signing.signed_part(item.header, item.body)
+            fields = []
+            for name, value in header.items():
+                if name in ("id", "type", "title", "short") or value in (None, "", [], {}):
+                    continue
+                if name == "parent":
+                    shown = f"<p>{page_ref(item.project, value)}</p>"
+                elif name == "relations" and isinstance(value, dict):
+                    for relation, targets in value.items():
+                        entries = [page_ref(item.project, target.get("id")) + extra(target) if isinstance(target, dict)
+                                   else page_ref(item.project, target)
+                                   for target in (targets if isinstance(targets, list) else [targets])]
+                        if entries:
+                            fields.append(f"<dt>{esc(relation.replace('_', ' '))}</dt><dd><p>{'<br>'.join(entries)}</p></dd>")
+                    continue
+                elif isinstance(value, str) and len(value) > 40:
+                    shown = render_markdown(value, context)
+                else:
+                    shown = f"<p>{esc(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))}</p>"
+                fields.append(f"<dt>{esc(name.replace('_', ' '))}</dt><dd>{shown}</dd>")
+            shared = graph.owner_question(self.tree, item) is None
+            blocks.append(
+                f"<article class='ds-page' data-key='{esc(item.key)}' style='--kc:{TYPE_COLOURS.get(item.type, '#556')}'>"
+                f"<h3>{tagline(item, prefix)} {status_pill(item)}"
+                + (" <span class='pill' title='A page of the whole experiment: every question rests on it'>whole "
+                   "experiment</span>" if shared else "")
+                + f"</h3><p class='ds-short'>{esc(item.short)}</p>"
+                + (f"<dl class='ds-fields'>{''.join(fields)}</dl>" if fields else "")
+                + (f"<div class='ds-body'>{render_markdown(item.body, context)}</div>" if item.body.strip() else "")
+                + "</article>")
+        if needed:
+            def where(other: Node) -> str:
+                owner = graph.owner_question(self.tree, other)
+                return (f" (on {owner.number or owner.label}'s page)" if owner is not None and owner is not node
+                        else " (its review)" if other.type in ("result", "conclusion")
+                        else " (not signable here: see its page)")
+            after = ("After this, the steps of this question still wait for: "
+                     + ", ".join(f"{node_link(other, prefix)}{esc(where(other))}" for other in needed) + ".")
+            after_text = ("the steps still wait for " + ", ".join(other.number or other.label for other in needed)
+                          + " (signed elsewhere)")
+        else:
+            after, after_text = "", ""
+        signs = ", ".join(f"{item.key}@{identity.version_of(item)}" for item in pages)
+        label = f"Sign this design ({len(pages)} page{'s' if len(pages) != 1 else ''})"
+        return (f"<section id='design-sign' class='kea-design not-annotatable' data-question='{esc(node.key)}' "
+                f"data-signs='{esc(signs)}' data-count='{len(pages)}' data-label='{esc(label)}' "
+                f"data-after='{esc(after_text)}'>"
+                f"<h2>Sign this question's design</h2><p class='help'>Every page below waits for your signature. Read "
+                f"them here; the button signs exactly these {len(pages)} page(s), each as shown, and marks each "
+                "signature as signed with this design. A page changed after this view waits again. Results and "
+                "conclusions are reviewed one page at a time, later. Pages of another question are signed on that "
+                "question's page. Signing one page alone: open it and Approve.</p>"
+                + "".join(blocks)
+                + (f"<p class='kea-design-after'>{after}</p>" if after else "")
+                + "<div class='kea-design-act'><p class='help'>On the site with comments (signed in), the button to sign "
+                  "is here. Or say in chat which design you sign.</p></div></section>")
+
     def questions_html(self, project: str, prefix: str, context: LinkContext, heading: bool = True) -> str:
         """On an experiment page: each question as a heading, its answer, and links to its conclusions (their text
         is on their own pages: the answer already says it)."""
@@ -703,7 +792,7 @@ class SiteRenderer:
         signed = graph.signatures(node)
         if signed:              # sign-offs (Approve on the site, or the owner in chat), bound to the wording (signing.py)
             holding = [item for item in signed if signing.holds(item, node)]
-            detail = "; ".join(signing.describe(item, node) for item in signed)
+            detail = "; ".join(signing.describe(item, node, self.tree) for item in signed)
             if holding and not node.chain_ok:      # its own wording holds, but a page it was built on changed
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
                 if node.upstream_changed and not node.held_by:
@@ -721,7 +810,9 @@ class SiteRenderer:
             elif holding:
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in holding))
                 minor = sum(len(item.get("minor") or []) for item in holding if signing.state(item, node) == "minor")
+                batches = list(dict.fromkeys(signing.batch_label(item, self.tree) for item in holding if item.get("batch")))
                 pills += (f" <span class='pill fb-pp-ok' title='Signed off: {esc(detail)}'>✓ approved by {esc(names)}"
+                          + (f" · batch: with {esc(', '.join(batches))}'s design" if batches else "")
                           + (f" · {minor} minor edit{'s' if minor > 1 else ''} since" if minor else "") + "</span>")
             else:
                 names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in signed))
@@ -733,6 +824,7 @@ class SiteRenderer:
         parts = [crumbs(self.trail(node, prefix), prefix), whereami.strip_html(self.tree, node, prefix),
                  # an experiment without questions: "Start here", the brief, above everything else (start_box)
                  self.start_box(node) if node.type == "experiment" and node.id == "home" else "",
+                 self.design_banner(node),
                  f"<div class='node-content' data-type='{esc(node.type)}'"
                  f"{' data-waiting=1' if node.waiting else ''} data-drop='{esc(self.drop_labels(node))}'"
                  f" data-go='{esc(graph.go_action(self.tree, node))}' data-version='{esc(self.page_version(node))}'"
@@ -815,6 +907,8 @@ class SiteRenderer:
             parts.append(f"<div class='node-data-sep not-annotatable' style='--kc:{colour}'><span class='sep-label'>{label}</span></div>"
                          f"<div class='answer answer-summary'>{render_markdown(questions.answer(node), context)}"
                          + (f"<p class='answer-basis not-annotatable'>From {basis}</p>" if basis else "") + "</div>")
+        if node.type == "question":
+            parts.append(self.design_sign_html(node, prefix, context))
         tabs = []
         if node.type == "experiment" and node.id == "home":
             tabs = self.experiment_tabs(node, prefix, context)
@@ -1374,7 +1468,7 @@ class SiteRenderer:
             state_text = {"current": "holds", "minor": "holds, minor edits since", "legacy": "before 1.29, unbound",
                           "changed": "page changed since: no longer holds"}
             rows = [f"<tr><td>{link(node)}</td><td>{esc(str(item.get('by') or '?'))}</td>"
-                    f"<td title='{esc(signing.describe(item, node))}'>{state_text[signing.state(item, node)]}</td>"
+                    f"<td title='{esc(signing.describe(item, node, self.tree))}'>{state_text[signing.state(item, node)]}</td>"
                     f"<td>{esc(str(item.get('version') or ''))}</td><td class='nowrap'>{esc(str(item.get('date') or ''))}</td>"
                     f"<td>{'in chat (recorded by the agent)' if item.get('how') == 'chat' else 'on the site' if item.get('how') == 'site' else esc(str(item.get('how') or ''))}</td></tr>"
                     for item, node in signed[:60]]

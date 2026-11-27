@@ -413,6 +413,66 @@
     slot.replaceChildren(go);
   }
 
+  /* pace: design, on a question's page (pages.py design_sign_html): one button signs the question's whole design,
+     exactly the pages listed, each bound to the version shown: an Approve thread on the question with a
+     "Signs: key@version, …" line (signing.parse_signs; the hub lists those pages as signed at once, kea sign --pending
+     writes each signature with batch: <question>). Before sending, the page is fetched again: when the design changed
+     since it was opened, nothing is signed and the reader is asked to reload. */
+  const isBatch = thread => /^Signs:/m.test(thread.text || "");
+  function renderDesignSign() {
+    const box = container && container.querySelector(".kea-design[data-signs]");
+    const slot = box && box.querySelector(".kea-design-act");
+    if (!slot) return;
+    // a design signed already, as shown now (an older sign-off, of other pages or versions, does not count here)
+    const signsOf = thread => ((thread.text || "").match(/^Signs:\s*(.+)$/m) || ["", ""])[1].trim();
+    const me = accountName || getName();
+    const sent = pageLevel().filter(thread => thread.tags.includes("approve") && isBatch(thread) && thread.author === me
+      && ["open", "planned"].includes(thread.status) && signsOf(thread) === box.dataset.signs).slice(-1)[0];
+    if (sent) {
+      slot.replaceChildren(
+        el("p", {}, el("b", {}, "✓ Design signed"), " by " + sent.author + (sent.created_at ? ", " + shortDate(sent.created_at) : "")
+          + " (" + ((count) => count + (count === 1 ? " page" : " pages"))(signsOf(sent).split(",").filter(Boolean).length) + "). "
+          + "Claude writes the signatures onto the pages at the next Harvest; "
+          + (box.dataset.after ? box.dataset.after + "." : "the steps run at Implement.")),
+        el("button", { class: "fb-secondary", type: "button", onclick: async () => {
+          await withdraw(sent, "design sign-off taken back"); } }, "Take it back"));
+      return;
+    }
+    if (readOnly) {
+      slot.replaceChildren(el("p", { class: "fb-help" }, "You can read this site but not sign here."));
+      return;
+    }
+    const status = el("span", { class: "fb-help" });
+    const go = el("button", { class: "kea-design-go", type: "button", onclick: async () => {
+      go.disabled = true; status.textContent = "";
+      const shown = box.dataset.signs;
+      let now = shown;
+      try {
+        const fresh = await fetch(location.pathname, { cache: "no-store", credentials: "same-origin" });
+        if (!fresh.ok) {
+          status.textContent = "Not signed: the page could not be read again (" + fresh.status + "). Reload it and try again.";
+          go.disabled = false;
+          return;
+        }
+        const found = new DOMParser().parseFromString(await fresh.text(), "text/html").querySelector(".kea-design[data-signs]");
+        now = found ? found.dataset.signs : "";
+      } catch (error) { /* offline: sign what is shown; kea sign binds each signature to the version seen */ }
+      if (now !== shown) {
+        const before = new Set(shown.split(", ")), after = new Set((now || "").split(", ").filter(Boolean));
+        const changed = [...before].filter(item => !after.has(item)).map(item => item.split("@")[0].split(":").pop());
+        status.textContent = "Not signed: the design changed since you opened this page (" + (changed.join(", ") || "pages added")
+          + "). Reload the page and read it again.";
+        go.disabled = false;
+        return;
+      }
+      const text = (box.dataset.label || "Sign this design") + "\nSigns: " + shown;
+      const made = await tagThread(null, ["approve"], text);
+      go.disabled = false;
+      if (made) toast("Design signed: Claude writes the signatures at the next Harvest.", () => withdraw(made, "design sign-off taken back"));
+    } }, box.dataset.label || "Sign this design");
+    slot.replaceChildren(go, " ", status);
+  }
+
   /* The dock: a column of pill buttons, bottom right, under a small kea head that folds it open and shut (remembered
      across the site). Comment · Edit | Approve (pages that wait) · Revise ▸ · Drop · Propose ▸ | Next run ▸ · Manuscript ▸. The verdicts are definitive
      requests for the next plan; they stay highlighted while pending, and Confirm stays on once the page records it. */
@@ -420,7 +480,9 @@
   function dockOpen() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch (error) { return true; } }
   function setDockOpen(open) { try { localStorage.setItem(DOCK_KEY, open ? "1" : "0"); } catch (error) { /* private window */ } }
   function openThread(name) {
-    return pageLevel().filter(thread => thread.tags.includes(name) && ["open", "planned"].includes(thread.status)).slice(-1)[0];
+    // a design signed on a question's page (renderDesignSign) is not this page's own Approve: the dock leaves it alone
+    return pageLevel().filter(thread => thread.tags.includes(name) && ["open", "planned"].includes(thread.status)
+      && !(name === "approve" && isBatch(thread))).slice(-1)[0];
   }
   function withdraw(thread, note) {
     return sendQuiet(() => api("POST", API + "/" + thread.thread_id + "/status", { status: "resolved", note }));
@@ -1354,6 +1416,7 @@
     renderPageStrip();
     renderDock();
     renderStart();
+    renderDesignSign();
     drawHighlights();
     renderPanel();
   }

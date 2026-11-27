@@ -38,7 +38,7 @@ When Kea is not yet set up here (no `kea.yaml`), do these in order; do not start
 
 Then **stop** (see "Pace"). Under `pace: design` (the default) step 2 is the design round: from the owner's brief,
 the experiment page (the brief word for word under `## Brief`), its questions and premises, and for each question
-its hypotheses and planned steps; ask the owner to sign the design on the site, page by page. Under `pace: guided`
+its hypotheses and planned steps; ask the owner to sign the design on the site (per question, or page by page). Under `pace: guided`
 write only the questions and premises and ask the owner to approve them. Either way, analyse nothing yet.
 
 ## One experiment, or more
@@ -71,8 +71,12 @@ reviews of the owner's:
    run). Each formal page should trace back to the brief; say in the run entry where you went beyond it. While
    designing, read the data's description, structure and size (columns, groups, n per group), never its outcomes:
    no effect sizes, no plots of the response, no tests. **Commit the design**, build, publish and **stop**: ask
-   the owner to sign the design on the site, page by page, top down (Approve & next, or `n` on the graph).
-3. **Sign-off (the owner).** One Approve per page; the harvest writes them on the pages (`kea sign --pending`) and
+   the owner to sign the design on the site: per question with "Sign this design" on the question's page, or page
+   by page, top down (Approve & next, or `n` on the graph).
+3. **Sign-off (the owner).** "Sign this design (N pages)" on a question's page signs every page of that question's
+   design still waiting (the question, its hypotheses and planned steps, the premises, decisions and experiment page
+   it rests on), each bound to the version shown and marked `batch: <question>`; or one Approve per page. Results and
+   conclusions are never signed in a batch. The harvest writes them on the pages (`kea sign --pending`) and
    puts "Next step: run the design of Q…" in the plan for every question whose design is now signed.
 4. **Execution round (you, at Implement).** Run every planned step whose design is signed (`kea context` says
    which: the step, its question, the hypotheses it tests, what they rely on, and the experiment), reproducibly,

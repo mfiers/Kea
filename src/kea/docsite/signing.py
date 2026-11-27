@@ -155,13 +155,23 @@ def stale(node) -> list[dict]:
     return [item for item in items if not holds(item, node)]
 
 
-def describe(signature: dict, node) -> str:
-    """One line for a tooltip or a table: who, which version, when, how, and its state."""
+def batch_label(signature: dict, tree=None) -> str:
+    """The page whose design a batch signature came with ("Q1" with the tree, else its id), from its key."""
+    key = str(signature.get("batch") or "")
+    other = tree.nodes.get(key) if tree is not None else None
+    return (other.number or other.label) if other is not None else key.split(":")[-1]
+
+
+def describe(signature: dict, node, tree=None) -> str:
+    """One line for a tooltip or a table: who, which version, when, how (alone or with a question's design), and its
+    state."""
     how = {"chat": "recorded by the agent from the chat", "site": "on the site"}.get(str(signature.get("how") or ""), "")
     parts = [str(signature.get("by") or "?")]
     parts += [f"version {signature['version']}"] if signature.get("version") else []
     parts += [str(signature["date"])] if signature.get("date") else []
     parts += [how] if how else []
+    if signature.get("batch"):
+        parts.append(f"signed in one go with the design of {batch_label(signature, tree)}")
     which = state(signature, node)
     if which == "minor":
         edits = [edit for edit in signature.get("minor") or [] if isinstance(edit, dict)]
@@ -322,6 +332,11 @@ def problems_and_notes(tree, events_path: Path | None = None) -> tuple[list[str]
                         or (thread.page != node.key and node.key not in _signed_labels(thread)):
                     problems.append(f"{node.key}: signature of {signature.get('by')} does not match thread "
                                     f"{thread_id} (by {thread.author} on {thread.page}, tags {thread.tags})")
+                elif signature.get("batch") and (not _signed_labels(thread) or signature.get("batch") != thread.page):
+                    problems.append(f"{node.key}: signature of {signature.get('by')} says batch: "
+                                    f"{signature.get('batch')}, but thread {thread_id} "
+                                    + ("signed this page alone" if not _signed_labels(thread) else
+                                       f"signed a design on {thread.page}") + " (kea sign --thread writes it)")
         gone = stale(node)
         if gone:
             names = ", ".join(dict.fromkeys(str(item.get("by") or "?") for item in gone))
@@ -432,34 +447,65 @@ def _upstream_field(tree, node) -> dict:
 
 
 def add_signature(node, entry: dict) -> None:
-    """Add (or replace, for the same person) a signature on the page."""
+    """Add (or replace, for the same person) a signature on the page, and on the node in memory, so a second
+    sign-off of the same page in one run (two readers, or a page in two designs) keeps the first."""
     entries = [item for item in signatures(node) if item.get("by") != entry.get("by")] + [entry]
     write_signatures(node.source, entries)
+    node.header["approved"] = entries
 
 
 # ------------------------------------------------------------------ kea sign
 
-def apply_thread(tree, thread, resolve) -> None:
+def apply_thread(tree, thread, resolve) -> int:
     """Write the signatures of one site sign-off (an Approve, or an Approve & go): every page on its 'Signs:' line,
-    else the thread's page, each bound to the version the reader saw (from git when the page changed since)."""
-    from kea.docsite import identity
-    items = parse_signs(thread.text) or [(thread.page, thread.page_version)]
+    else the thread's page, each bound to the version the reader saw (from git when the page changed since).
+    A 'Signs:' line ("Sign this design" on a question's page since 1.33.2; the stage bundles of 1.29-1.31.0) marks
+    every signature batch: <the page it was given on>, and signs only what a batch may: never a result or a
+    conclusion, and from a question's page only the pages of that question's design (graph.question_design_parts);
+    a page the same reader has signed already, as it is now, is kept as it was (a page signed alone stays unmarked).
+    Prints what it signed and what it did not; returns the number of pages not signed."""
+    from kea.docsite import graph, identity
+    listed = parse_signs(thread.text)
+    items = listed or [(thread.page, thread.page_version)]
+    batch = {"batch": thread.page} if listed else {}
+    owner = tree.nodes.get(thread.page)
+    allowed = (graph.question_design_parts(tree, owner)[2] if listed and tree.pace == "design" and owner is not None
+               and owner.type == "question" else None)     # a stage bundle of 1.29-1.31.0: the pages it names
+    refused = []
     for label, version in items:
         node = tree.nodes.get(label) or resolve(label)
+        if listed and node.type in ("result", "conclusion"):
+            refused.append(f"{node.label}: a {node.type} is reviewed one page at a time, never in a batch")
+            continue
+        if allowed is not None and node.key not in allowed:
+            refused.append(f"{node.label}: not a page of the design of {owner.number or owner.label}")
+            continue
         if version and identity.version_of(node) != version:
             old = find_wording(node, version=version)
             if old is None:
-                print(f"{node.label}: the version {version} the reader saw is not in git; not signed (ask again)")
+                refused.append(f"{node.label}: the version {version} the reader saw is not in git")
                 continue
             signed = content_of(*old)
         else:
             signed = content(node)
+        upstream = _upstream_field(tree, node)
+        if listed and any(item.get("by") == thread.author and holds(item, node) and item.get("content") == signed
+                          and item.get("upstream") == upstream.get("upstream") for item in signatures(node)):
+            print(f"{node.label}: signed by {thread.author} already, as it is (kept)")
+            continue
         entry = {"by": thread.author, **({"orcid": thread.author_id} if thread.author_id else {}),
                  "date": thread.created_at[:10], **({"version": version} if version else {}), "how": "site",
-                 "thread": thread.thread_id, "content": signed, **_upstream_field(tree, node)}
+                 "thread": thread.thread_id, **batch, "content": signed, **upstream}
         add_signature(node, entry)
-        print(f"{node.label}: signed by {thread.author}" + ("" if signed == content(node) else
-                                                              " (an earlier wording: the page waits again)"))
+        print(f"{node.label}: signed by {thread.author}"
+              + (f" (in one go with the design of {batch_label(batch, tree)})" if batch else "")
+              + ("" if signed == content(node) else " (an earlier wording: the page waits again)"))
+    for reason in refused:
+        print(f"{reason}: NOT signed")
+    if refused:
+        print(f"NOT SIGNED: {len(refused)} of {len(items)} page(s) of thread {thread.thread_id}; say so in the reply "
+              "and ask the reader to sign them again (one page at a time where a batch may not)")
+    return len(refused)
 
 
 def main(argv: list[str]) -> int:
@@ -501,7 +547,7 @@ def main(argv: list[str]) -> int:
     if args.list:
         for node in sorted(tree.nodes.values(), key=lambda item: (item.project, item.label)):
             for signature in signatures(node):
-                print(f"{node.key}  {node.label}  {state(signature, node):8}  {describe(signature, node)}")
+                print(f"{node.key}  {node.label}  {state(signature, node):8}  {describe(signature, node, tree)}")
         return 0
 
     if args.adopt:

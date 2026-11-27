@@ -324,6 +324,58 @@ def design_ready(tree: Tree, step: Node) -> bool:
     return all(approved(item) for item in design_of(tree, step))
 
 
+BATCH_TYPES = ("experiment", "question", "premise", "decision", "hypothesis", "step")
+
+
+def owner_question(tree: Tree, node: Node) -> Node | None:
+    """The question a page belongs to: itself for a question, else the nearest question above it (None for the
+    experiment and the pages directly under it, which every question shares)."""
+    seen: set[str] = set()
+    while node is not None and node.key not in seen:
+        if node.type == "question":
+            return node
+        seen.add(node.key)
+        node = tree.nodes.get(f"{node.project}:{node.parent}") if node.parent else None
+    return None
+
+
+def question_design_parts(tree: Tree, question: Node) -> tuple[list[Node], list[Node], set[str]]:
+    """(to sign, still needed, allowed) for "Sign this design" on a question's page (pace: design, Kea 1.33.2):
+    - to sign: the pages of the question's design that still wait for a sign-off and belong to this question or
+      to the whole experiment (the experiment page and its premises and decisions), top down; never results or
+      conclusions (reviewed one page at a time) and never a page of another question (a parent question, or one
+      whose step or decision this design relies on: that question's own button);
+    - still needed: the other pages its steps wait for (another question's pages, a questioned premise, a page
+      held by a change above it), so the page can say what else must be signed before the steps run;
+    - allowed: every page a sign-off of this question's design may sign (kea sign refuses the rest).
+    The design: :func:`design_of` of the question and of each of its own steps."""
+    from kea.docsite import questions, signing
+    if tree.pace != "design" or question.type != "question" or question.status in GONE:
+        return [], [], set()
+    hypotheses = questions.evidence(tree, question)[0]
+    steps = [step for step in question_steps(tree, question, hypotheses)
+             if step.status not in GONE and owner_question(tree, step) is question]
+    found: dict[str, Node] = {node.key: node for node in design_of(tree, question)}
+    for step in steps:
+        found.update((node.key, node) for node in design_of(tree, step))
+    allowed = {node.key for node in found.values() if node.type in BATCH_TYPES and node.status not in GONE
+               and owner_question(tree, node) in (question, None)}
+    order = {node.key: index for index, node in enumerate(signing.sign_order(tree))}
+    ranked = lambda nodes: sorted(nodes, key=lambda node: (order.get(node.key, len(order)), node.key))
+    # the whole experiment's pages first, then the question, then its own pages, each part in the sign order
+    to_sign = sorted(ranked(found[key] for key in allowed if getattr(found[key], "waiting", False)),
+                     key=lambda node: (owner_question(tree, node) is not None, node is not question))
+    signing_now = {node.key for node in to_sign}
+    needed = ranked(node for node in found.values() if node.key not in signing_now and node.status not in GONE
+                    and node.type in WAITING_TYPES and not approved(node))
+    return to_sign, needed, allowed
+
+
+def question_design(tree: Tree, question: Node) -> list[Node]:
+    """The pages one "Sign this design" on a question's page signs (:func:`question_design_parts`)."""
+    return question_design_parts(tree, question)[0]
+
+
 _HISTORY: dict[tuple, dict] = {}
 
 
@@ -689,7 +741,8 @@ def design_next_steps(tree: Tree, project: str) -> list[str]:
                 and node.type in ("experiment", "premise", "decision")]
     if standing:
         names = ", ".join(f"{node.number or node.label or node.id} ({node.type})" for node in standing)
-        lines.append(f"Waiting for the owner to sign the design: {names} (Approve on the site, or in chat).")
+        lines.append(f"Waiting for the owner to sign the design: {names} (Sign this design on a question's page, "
+                     "Approve page by page, or in chat).")
     found = questions.questions(tree, project)
     if not found:
         return lines + [BRIEF_STEP]
@@ -717,8 +770,9 @@ def design_next_steps(tree: Tree, project: str) -> list[str]:
                          "fixed_before_results: true) and planned steps with the rest of the design; commit; then stop "
                          "for the owner's sign-off. Do not look at outcome data or run anything.")
         elif unsigned_design:
-            lines.append(f"{label}: waiting for the owner to sign the design: {names(unsigned_design)} (Approve on the "
-                         "site, or in chat). A step runs only once its whole design is signed.")
+            lines.append(f"{label}: waiting for the owner to sign the design: {names(unsigned_design)} (Sign this "
+                         "design on the question's page, Approve page by page, or in chat). A step runs only once its "
+                         "whole design is signed.")
         elif ready:
             lines.append(f"{label}: next (execution round, at Implement), run step(s) {names(ready)} reproducibly and "
                          "write the results, figures and caveats, then draft the conclusions, the hypotheses' outcomes "

@@ -160,8 +160,10 @@ DEFAULT_TAGS: list[dict] = [
                     "in the next plan."},
     {"name": "approve", "group": "verdict", "task": True, "scope": "page", "label": "approve",
      "help": "Sign off on this version of the page: it may be built on",
-     "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill); a thread "
-                    "from 1.29-1.31.0 may carry a `Signs:` line naming more pages. It waits for the harvest like every "
+     "instruction": "The reader signs off on this page (a page that waits for approval; pace in the skill). A thread "
+                    "with a `Signs:` line signs every page it names: \"Sign this design\" on a question's page "
+                    "(pace: design, 1.33.2: the question's whole design, each signature marked batch:) or a stage "
+                    "bundle from 1.29-1.31.0. It waits for the harvest like every "
                     "comment. At the harvest, apply every open sign-off with `kea sign --pending`: it records each "
                     "signature bound to the version the reader saw (never edit `approved:` by hand), keeps earlier "
                     "signatures and changes nothing else; commit, and answer the thread with the commit "
