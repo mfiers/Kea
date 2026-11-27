@@ -31,6 +31,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from kea.feedback import accounts, cycle, store, tags
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
@@ -149,6 +151,43 @@ class Project:
         if node.get("waiting"):
             return "waits for a sign-off"
         return "signed" if node.get("signed") else "not signed"
+
+    def front(self, node: dict) -> dict:
+        """The page's front matter from its published source ({} when the source is not on the hub)."""
+        source = node.get("source")
+        path = (self.current / source).resolve() if source else None
+        if path is None or not str(path).startswith(str(self.current.resolve())) or not path.is_file():
+            return {}
+        raw = path.read_text(errors="replace")
+        if not raw.startswith("---") or "\n---\n" not in raw:
+            return {}
+        try:
+            header = yaml.safe_load(raw[3:].split("\n---\n", 1)[0])
+        except yaml.YAMLError:
+            return {}
+        return header if isinstance(header, dict) else {}
+
+    def summary(self, key: str) -> str:
+        """One page for a spoken review: number, type, title, summary line, and what is signed with it (a
+        hypothesis's prediction and criterion, what a page tests and relies on)."""
+        node = self.nodes.get(key, {"key": key})
+        name = self.name_of(node)
+        parts = [name if name.endswith(("?", ".", "!")) else name + "."]
+        if node.get("short"):
+            parts.append(str(node["short"]).strip())
+        header = self.front(node)
+        for field, word in (("prediction", "Prediction"), ("criterion", "Criterion")):    # doc/_schema.yaml
+            value = header.get(field)
+            if isinstance(value, str) and value.strip():
+                parts.append(f"{word}: {value.strip()}")
+        links: dict[str, list[str]] = {}
+        for relation, target in node.get("edges", []):
+            other = self.nodes.get(target, {"key": target})
+            links.setdefault(relation.replace("_", " "), []).append(other.get("tag") or target.split(":", 1)[-1])
+        if links:
+            parts.append("; ".join(f"{relation.capitalize()} {', '.join(names)}" for relation, names in links.items())
+                         + ".")
+        return "- " + " ".join(parts)
 
     def text(self, node: dict) -> str:
         source = node.get("source")
@@ -498,13 +537,17 @@ class Server:
         signs = html.unescape(attributes.get("signs", ""))
         keys = [part.strip().partition("@")[0] for part in signs.split(",") if part.strip()]
         check = hashlib.sha256(signs.encode()).hexdigest()[:8]
-        names = "; ".join(project.name_of(key) for key in keys)
         after = html.unescape(attributes.get("after", ""))
         if not args.get("confirmed"):
+            pages = "\n".join(project.summary(key) for key in keys)
+            if len(pages) > PLAN_LIMIT:
+                pages = pages[:PLAN_LIMIT] + " … (cut; open the pages for the rest)"
             return (f"About to sign the design of {project.name_of(node)} in one go, as {self.author()}: "
-                    f"{len(keys)} pages: {names}." + (f" Still needed after this: {after}." if after else "")
-                    + f" Each signature is marked as signed with this design. Read the list back, ask for a yes, then "
-                    f"call again with confirmed=true and design_check={check}.")
+                    f"{len(keys)} pages:\n{pages}\n" + (f"Still needed after this: {after}.\n" if after else "")
+                    + "Each signature is marked as signed with this design. Give the person a short spoken summary "
+                    "of the design from these lines (what is asked, what is predicted and how it is judged, what is "
+                    "run), offer to open any page in full (get_page), and after a yes call again with "
+                    f"confirmed=true and design_check={check}.")
         if str(args.get("design_check") or "") != check:
             raise ToolError("Not signed: the design changed since it was read back (or design_check is missing). "
                             "Call again without confirmed and read the new list back.")

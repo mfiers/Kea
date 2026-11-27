@@ -37,7 +37,8 @@ def published(tmp_path):
                            "site/x/q-a.html": "<html><section id='design-sign' class='kea-design' data-question='x:q-a' "
                                               "data-signs='x:p-a@v1p, x:q-a@v1q' data-count='2' "
                                               "data-label='Sign this design (2 pages)' data-after=''></section></html>",
-                           "site/x/p-a.html": "<html>nothing to sign</html>"})
+                           "site/x/p-a.html": "<html>nothing to sign</html>",
+                           "doc/x/premise/p-a.md": "---\nid: p-a\nprediction: counted once\n---\nText.\n"})
     headers = {**agent_headers(secrets["key"]), "X-Kea-Sha256": hashlib.sha256(archive).hexdigest()}
     assert client.post("/p/demo/hub/lease", headers=agent_headers(secrets["key"]), json={"host": "h"}).status_code == 200
     assert client.post("/p/demo/hub/publish", content=archive, headers=headers).status_code == 200
@@ -145,6 +146,8 @@ def test_one_questions_design_in_one_go_as_the_site_button(tmp_path):
     assert call(client, token, "sign_question_design", project="demo", page="P1")[1] is True       # not a question
     text, failed = call(client, token, "sign_question_design", project="demo", page="Q1")
     assert not failed and "2 pages" in text and "P1 (premise)" in text and store.threads(events) == []
+    assert "- Q1 (question): Does it work? One thing. Relies on P1." in text            # summary and links
+    assert "Assumed. Prediction: counted once" in text                         # from the source
     check = text.split("design_check=")[1].rstrip(".")
     assert call(client, token, "sign_question_design", project="demo", page="Q1", confirmed=True,
                 design_check="00000000")[1] is True
