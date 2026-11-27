@@ -91,3 +91,43 @@ def test_a_read_link_cannot_sign_and_the_token_is_not_kept(tmp_path):
     assert failed and "reads only" in text
     assert mcp.Links(the_hub.folder).revoke(entry["id"])
     assert rpc(client, token, "tools/list").status_code == 404
+
+
+def test_propose_discuss_the_plan_harvest_and_implement(tmp_path):
+    from kea.feedback import cycle
+    the_hub, client = published(tmp_path)
+    token, _ = mcp.Links(the_hub.folder).add("phone", True, 30, name="Mark", projects=["demo"])
+    events = the_hub.feedback("demo") / "events.jsonl"
+    cycle_path = the_hub.feedback("demo") / "cycle.jsonl"
+    text, failed = call(client, token, "propose", project="demo", page="P1", kind="hypothesis", text="It works.")
+    assert failed and "question" in text and "Q1" in text            # a hypothesis goes on a question
+    text, failed = call(client, token, "propose", project="demo", page="Q1", kind="hypothesis", text="It works.")
+    assert not failed
+    text, failed = call(client, token, "propose", project="demo", page="home", kind="question", text="Why?")
+    assert not failed
+    assert sorted(tag for thread in store.threads(events) for tag in thread.tags) == ["propose-hypothesis",
+                                                                                     "propose-question"]
+    text, _ = call(client, token, "get_plan", project="demo")
+    assert "collecting comments" in text and "Open comments" in text
+    assert call(client, token, "start_implementation", project="demo", confirmed=True)[1] is True   # not harvested
+    text, _ = call(client, token, "start_harvest", project="demo")
+    assert "About to" in text and cycle.state(cycle_path).state == "collecting"
+    call(client, token, "start_harvest", project="demo", confirmed=True)
+    assert cycle.state(cycle_path).state == "harvest-requested"
+    cycle.append("plan-updated", "claude", cycle_path)
+    text, failed = call(client, token, "comment", project="demo", page="plan", text="Do item 2 first.")
+    assert not failed and any(thread.page.startswith("plan/cycle-") for thread in store.threads(events))
+    call(client, token, "start_implementation", project="demo", confirmed=True)
+    assert cycle.state(cycle_path).state == "implement-requested"
+    assert call(client, token, "comment", project="demo", page="Q1", text="late")[1] is True       # paused
+
+
+def test_a_reviewer_may_propose_but_not_press_harvest(tmp_path):
+    from kea.feedback import accounts
+    the_hub, client = published(tmp_path)
+    accounts.Accounts(the_hub.folder).approve("0000-0002-1825-0097", "reviewer", "demo")
+    token, _ = mcp.Links(the_hub.folder).add("", True, 30, orcid="0000-0002-1825-0097")
+    assert call(client, token, "propose", project="demo", page="Q1", kind="step", text="Run it.")[1] is False
+    text, failed = call(client, token, "start_harvest", project="demo", confirmed=True)
+    assert failed and "PI" in text
+    assert call(client, token, "sign_page", project="demo", page="Q1", version="v1q", confirmed=True)[1] is True
